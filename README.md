@@ -1,6 +1,4 @@
-Since your models will be reading data frequently throughout the integration loop, optimizing the **Input (Read) Path** is just as critical as optimizing the output path. Frequent disk reads can easily starve your compute threads if the model has to stall every time a new forcing or boundary file needs to be pulled.
-Because AMIO implements asynchronous prefetching, it handles this continuous ingestion seamlessly. However, continuous reading introduces a different architectural requirement than writing: AMIO needs to look *ahead* in time.
-Here is the finalized, fully integrated, end-to-end **Project Charter and Architectural Specification** for AMIO. This comprehensive document now explicitly accounts for **frequent input prefetching, mixed-format workflows, and CPU core pinning / task allocation**.
+ **Project Charter and Architectural Specification** for AMIO. This comprehensive document now explicitly accounts for **frequent input prefetching, mixed-format workflows, and CPU core pinning / task allocation**.
 # Project Charter & Architectural Specification: AMIO
 **Asynchronous Multidimensional Input Output Library**
 ## 1. Project Charge
