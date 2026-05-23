@@ -1,4 +1,4 @@
- **Project Charter and Architectural Specification** for AMIO. This comprehensive document now explicitly accounts for **frequent input prefetching, mixed-format workflows, and CPU core pinning / task allocation**.
+
 # Project Charter & Architectural Specification: AMIO
 **Asynchronous Multidimensional Input Output Library**
 ## 1. Project Charge
