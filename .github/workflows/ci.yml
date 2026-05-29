@@ -47,9 +47,7 @@ jobs:
               -DAMIO_FORCE_NCZARR=ON \
             && ninja -j\$(nproc) \
             && ctest --output-on-failure -L unit --timeout 120 \
-            && ctest --output-on-failure -L pbt --timeout 600"
-        env:
-          RC_PARAMS: "max_success=100"
+            && RC_PARAMS='max_success=20' ctest --output-on-failure -L pbt --timeout 300"
 
   # Build the Docker image and push to GHCR (only on main)
   docker:

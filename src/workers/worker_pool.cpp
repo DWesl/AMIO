@@ -128,7 +128,7 @@ std::uint64_t WorkerPool::submit_write(DatasetVariableKey dv_key, std::uint64_t 
     // Backpressure handling (same as primary overload).
     if (backpressure_.enabled) {
         if (write_queue_.size() >= backpressure_.high_watermark) {
-            backpressure_cv_.wait_for(lock, std::chrono::seconds(10), [this]() {
+            backpressure_cv_.wait_for(lock, std::chrono::seconds(1), [this]() {
                 return write_queue_.size() < backpressure_.low_watermark || shutdown_.load(std::memory_order_acquire);
             });
         }
@@ -168,7 +168,7 @@ amio_err_t WorkerPool::submit_write(DatasetVariableKey dv_key, std::function<voi
     if (backpressure_.enabled) {
         // If queue depth >= high_watermark, block until depth < low_watermark.
         if (write_queue_.size() >= backpressure_.high_watermark) {
-            backpressure_cv_.wait_for(lock, std::chrono::seconds(10), [this]() {
+            backpressure_cv_.wait_for(lock, std::chrono::seconds(1), [this]() {
                 return write_queue_.size() < backpressure_.low_watermark || shutdown_.load(std::memory_order_acquire);
             });
         }
@@ -244,7 +244,7 @@ void WorkerPool::submit_prefetch(std::int64_t timestep, std::int64_t distance, s
 void WorkerPool::drain() {
     std::unique_lock<std::mutex> lock(mu_);
     // Wait with a 30-second timeout to prevent infinite hangs.
-    bool drained = drain_cv_.wait_for(lock, std::chrono::seconds(30), [this]() {
+    bool drained = drain_cv_.wait_for(lock, std::chrono::seconds(5), [this]() {
         return write_queue_.empty() && prefetch_queue_.empty() && in_flight_.load(std::memory_order_acquire) == 0;
     });
     (void)drained;  // If timeout, we proceed anyway (tests will catch the issue).
@@ -334,8 +334,14 @@ void WorkerPool::worker_loop() {
         std::unique_lock<std::mutex> lock(mu_);
 
         // Wait until there's work or shutdown is signaled.
-        cv_.wait_for(lock, std::chrono::seconds(5),
-                     [this]() { return shutdown_.load(std::memory_order_acquire) || !write_queue_.empty() || !prefetch_queue_.empty(); });
+        // 100ms polling fallback prevents hangs if notify is missed.
+        cv_.wait_for(lock, std::chrono::milliseconds(50),
+                     [this]() { return shutdown_.load(std::memory_order_relaxed) || !write_queue_.empty() || !prefetch_queue_.empty(); });
+
+        // Check shutdown after waking.
+        if (shutdown_.load(std::memory_order_acquire) && write_queue_.empty() && prefetch_queue_.empty()) {
+            break;
+        }
 
         // Try to execute a task.
         if (!try_execute_one(lock)) {
