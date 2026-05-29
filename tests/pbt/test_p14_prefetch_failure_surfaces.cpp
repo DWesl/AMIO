@@ -192,12 +192,23 @@ TEST_CASE("P14: Prefetch failure surfaces - multiple failures retained", "[pbt][
         auto num_failures = *rc::gen::inRange<std::size_t>(2, 4);
         num_failures = std::min(num_failures, static_cast<std::size_t>(max_prefetched));
 
+        // Pick `num_failures` DISTINCT timesteps in [0, max_prefetched).
+        //
+        // We must not call the generator inside an unbounded
+        // "while (set.size() < num_failures)" loop: during shrinking
+        // RapidCheck can repeatedly yield the same minimal value (e.g. 0),
+        // so the set never reaches the target size, the loop spins
+        // forever, and the per-iteration generator bookkeeping grows
+        // without bound until std::bad_alloc.  Instead, draw a single
+        // starting index and select distinct timesteps deterministically.
+        auto start = *rc::gen::inRange<std::int64_t>(0, max_prefetched);
         std::set<std::int64_t> fail_set;
-        while (fail_set.size() < num_failures) {
-            auto t = *rc::gen::inRange<std::int64_t>(0, max_prefetched);
-            fail_set.insert(t);
+        for (std::size_t i = 0; i < num_failures; ++i) {
+            fail_set.insert((start + static_cast<std::int64_t>(i)) % max_prefetched);
         }
-
+        // The modulo selection above yields exactly num_failures distinct
+        // values because num_failures <= max_prefetched.
+        num_failures = fail_set.size();
         // Create staging pool.
         std::size_t buffer_count = static_cast<std::size_t>(max_prefetched) + 4;
         StagingPool pool(buffer_count, 4096, 5000);

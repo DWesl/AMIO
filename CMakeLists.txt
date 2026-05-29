@@ -220,6 +220,11 @@ endif()
 add_library(amio_public_headers INTERFACE)
 add_library(AMIO::public_headers ALIAS amio_public_headers)
 
+# Export under the short name `public_headers` so the installed package provides `AMIO::public_headers` -- the name documented in AMIOConfig.cmake.in
+# and expected by downstream consumers.  Without this the target would be exported as `AMIO::amio_public_headers` (derived from the raw target name),
+# which does not match the in-build alias and breaks `find_package(AMIO)` consumers (R13.1).
+set_target_properties(amio_public_headers PROPERTIES EXPORT_NAME public_headers)
+
 target_include_directories(amio_public_headers INTERFACE $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
                                                          $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>)
 

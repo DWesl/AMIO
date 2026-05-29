@@ -19,6 +19,7 @@
 #include <vector>
 
 #include "c_boundary/amio_core.hpp"
+#include "factory/backend_factory.hpp"
 #include "generators.hpp"
 #include "pbt_common.hpp"
 #include "staging/staging_pool.hpp"
@@ -85,6 +86,13 @@ struct FailureTestContext {
     bool valid = false;
 
     FailureTestContext() {
+        // Register a backend driver under the "netcdf4" key so the
+        // factory (compiled locally into this test, without the real
+        // driver archives) can satisfy amio_open_dataset.  The driver
+        // body is irrelevant here: P23 exercises the failure-recording
+        // mechanism on the DatasetRecord directly, not real I/O.
+        BackendFactory::instance().register_driver("netcdf4", []() -> std::unique_ptr<Backend_Driver> { return std::make_unique<FailingDriver>(); });
+
         std::string yaml = make_manifest_yaml("netcdf4", 8, 65536, 1, 5000);
         manifest_path = write_manifest(dir, yaml);
 
@@ -147,10 +155,9 @@ TEST_CASE("P23: Driver failure recorded - failure surfaces on flush", "[pbt][p23
         // This simulates what the worker pool does when a driver
         // throws during serialization.
         auto& table = process_handle_table();
-        HandleKind kind;
         void* payload = nullptr;
-        table.lookup(HandleTable::from_ptr(ctx.dataset), kind, &payload);
-        if (!payload || kind != HandleKind::Dataset) {
+        amio_status_t lookup_rc = table.lookup(HandleTable::from_ptr(ctx.dataset), HandleKind::Dataset, &payload);
+        if (lookup_rc != AMIO_OK || !payload) {
             RC_DISCARD("invalid handle");
         }
 
@@ -183,10 +190,9 @@ TEST_CASE("P23: Driver failure recorded - failure retained until flush", "[pbt][
         RC_PRE(ctx.valid);
 
         auto& table = process_handle_table();
-        HandleKind kind;
         void* payload = nullptr;
-        table.lookup(HandleTable::from_ptr(ctx.dataset), kind, &payload);
-        if (!payload || kind != HandleKind::Dataset) {
+        amio_status_t lookup_rc = table.lookup(HandleTable::from_ptr(ctx.dataset), HandleKind::Dataset, &payload);
+        if (lookup_rc != AMIO_OK || !payload) {
             RC_DISCARD("invalid handle");
         }
 
@@ -258,10 +264,9 @@ TEST_CASE("P23: Driver failure recorded - error code preserved", "[pbt][p23][dri
         RC_PRE(ctx.valid);
 
         auto& table = process_handle_table();
-        HandleKind kind;
         void* payload = nullptr;
-        table.lookup(HandleTable::from_ptr(ctx.dataset), kind, &payload);
-        if (!payload || kind != HandleKind::Dataset) {
+        amio_status_t lookup_rc = table.lookup(HandleTable::from_ptr(ctx.dataset), HandleKind::Dataset, &payload);
+        if (lookup_rc != AMIO_OK || !payload) {
             RC_DISCARD("invalid handle");
         }
 

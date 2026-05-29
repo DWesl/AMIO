@@ -465,6 +465,7 @@ set_tests_properties(pbt.p22_synchronous_wait_totality PROPERTIES LABELS "pbt;p2
 add_executable(
     pbt_p23_driver_failure_recorded
     test_p23_driver_failure_recorded.cpp
+    ${CMAKE_SOURCE_DIR}/src/c_boundary/amio_api.cpp
     ${CMAKE_SOURCE_DIR}/src/c_boundary/handle_table.cpp
     ${CMAKE_SOURCE_DIR}/src/c_boundary/amio_core_stubs.cpp
     ${CMAKE_SOURCE_DIR}/src/c_boundary/amio_strerror.cpp
