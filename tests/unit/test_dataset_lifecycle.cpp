@@ -101,8 +101,9 @@ void test_open_dataset_null_arguments() {
 
     // Invalid mode
     ds = reinterpret_cast<amio_dataset_handle>(0xDEAD);
+    std::string mode_manifest = write_config_file("netcdf4", "_modetest");
     amio_core_handle core = nullptr;
-    amio_init("dummy.yaml", &core);  // Create a core for mode test
+    amio_init(mode_manifest.c_str(), &core);  // Create a core for mode test
     if (core) {
         rc = amio_open_dataset(core, "path.yaml", 99, &ds);
         EXPECT_EQ(rc, AMIO_ERR_INVALID_INPUT, "amio_open_dataset(invalid mode)");
@@ -125,7 +126,7 @@ void test_open_dataset_unknown_backend() {
     std::string path = write_config_file("nonexistent_backend", "_unknown");
 
     amio_core_handle core = nullptr;
-    amio_init("dummy.yaml", &core);
+    amio_init(path.c_str(), &core);
     EXPECT_TRUE(core != nullptr, "amio_init should succeed");
 
     amio_dataset_handle ds = nullptr;
@@ -145,7 +146,7 @@ void test_open_dataset_success() {
     std::string path = write_config_file("netcdf4", "_success");
 
     amio_core_handle core = nullptr;
-    amio_init("dummy.yaml", &core);
+    amio_init(path.c_str(), &core);
     EXPECT_TRUE(core != nullptr, "amio_init should succeed");
 
     // Open for write.
@@ -180,7 +181,7 @@ void test_close_dataset_stale_handle() {
     std::string path = write_config_file("netcdf4", "_stale");
 
     amio_core_handle core = nullptr;
-    amio_init("dummy.yaml", &core);
+    amio_init(path.c_str(), &core);
     EXPECT_TRUE(core != nullptr, "amio_init should succeed");
 
     amio_dataset_handle ds = nullptr;
@@ -205,7 +206,7 @@ void test_flush_no_pending_writes() {
     std::string path = write_config_file("netcdf4", "_flush");
 
     amio_core_handle core = nullptr;
-    amio_init("dummy.yaml", &core);
+    amio_init(path.c_str(), &core);
     EXPECT_TRUE(core != nullptr, "amio_init should succeed");
 
     amio_dataset_handle ds = nullptr;
@@ -229,7 +230,7 @@ void test_amio_close_as_close_dataset() {
     std::string path = write_config_file("netcdf4", "_close");
 
     amio_core_handle core = nullptr;
-    amio_init("dummy.yaml", &core);
+    amio_init(path.c_str(), &core);
     EXPECT_TRUE(core != nullptr, "amio_init should succeed");
 
     amio_dataset_handle ds = nullptr;

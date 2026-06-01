@@ -14,6 +14,7 @@
 
 #include "drivers/netcdf/netcdf_driver.hpp"
 
+#include "drivers/common/var_attributes.hpp"
 #include "factory/backend_factory.hpp"
 #include "staging/staging_pool.hpp"
 
@@ -84,6 +85,59 @@ static void nc_check(int status, const std::string& context) {
     if (status != NC_NOERR) {
         std::string msg = "NetCDF error in " + context + ": " + nc_strerror(status) + " (nc_errno=" + std::to_string(status) + ")";
         throw eckit::Exception(msg);
+    }
+}
+
+// Write one attribute set onto `varid` (use NC_GLOBAL for file-level
+// attributes).  Must be called in define mode.  Numeric attributes are
+// emitted with a type matching their literal form (integer literals ->
+// NC_INT64 / NC_DOUBLE for reals); everything else is written as text.
+// `_FillValue` is special-cased to the variable's own type so it
+// round-trips correctly per CF.
+static void nc_write_attributes(int ncid, int varid, const VarAttributes& attrs, int var_nc_type) {
+    for (const auto& kv : attrs.items) {
+        const std::string& name = kv.first;
+        const AttrValue& val = kv.second;
+
+        if (val.is_numeric) {
+            if (name == "_FillValue" && varid != NC_GLOBAL && var_nc_type != NC_NAT) {
+                // Emit _FillValue in the variable's own type (CF rule).
+                switch (var_nc_type) {
+                    case NC_FLOAT: {
+                        float f = static_cast<float>(val.number);
+                        nc_check(nc_put_att_float(ncid, varid, name.c_str(), NC_FLOAT, 1, &f), "nc_put_att_float('" + name + "')");
+                        continue;
+                    }
+                    case NC_DOUBLE: {
+                        double d = val.number;
+                        nc_check(nc_put_att_double(ncid, varid, name.c_str(), NC_DOUBLE, 1, &d), "nc_put_att_double('" + name + "')");
+                        continue;
+                    }
+                    case NC_INT: {
+                        int i = static_cast<int>(val.number);
+                        nc_check(nc_put_att_int(ncid, varid, name.c_str(), NC_INT, 1, &i), "nc_put_att_int('" + name + "')");
+                        continue;
+                    }
+                    case NC_INT64: {
+                        long long ll = static_cast<long long>(val.number);
+                        nc_check(nc_put_att_longlong(ncid, varid, name.c_str(), NC_INT64, 1, &ll), "nc_put_att_longlong('" + name + "')");
+                        continue;
+                    }
+                    default:
+                        break;  // fall through to generic numeric handling
+                }
+            }
+
+            if (val.is_integer) {
+                long long ll = static_cast<long long>(val.number);
+                nc_check(nc_put_att_longlong(ncid, varid, name.c_str(), NC_INT64, 1, &ll), "nc_put_att_longlong('" + name + "')");
+            } else {
+                double d = val.number;
+                nc_check(nc_put_att_double(ncid, varid, name.c_str(), NC_DOUBLE, 1, &d), "nc_put_att_double('" + name + "')");
+            }
+        } else {
+            nc_check(nc_put_att_text(ncid, varid, name.c_str(), val.text.size(), val.text.c_str()), "nc_put_att_text('" + name + "')");
+        }
     }
 }
 
@@ -223,30 +277,15 @@ int NetCDF_Driver::dtype_to_nc_type(amio_dtype_t dtype) {
 // ===================================================================
 
 std::size_t NetCDF_Driver::dtype_byte_size(amio_dtype_t dtype) {
-    switch (dtype) {
-        case AMIO_DTYPE_F32:
-            return 4;
-        case AMIO_DTYPE_F64:
-            return 8;
-        case AMIO_DTYPE_I8:
-            return 1;
-        case AMIO_DTYPE_I16:
-            return 2;
-        case AMIO_DTYPE_I32:
-            return 4;
-        case AMIO_DTYPE_I64:
-            return 8;
-        case AMIO_DTYPE_U8:
-            return 1;
-        case AMIO_DTYPE_U16:
-            return 2;
-        case AMIO_DTYPE_U32:
-            return 4;
-        case AMIO_DTYPE_U64:
-            return 8;
-        default:
-            throw eckit::Exception("NetCDF_Driver: unsupported dtype " + std::to_string(static_cast<int>(dtype)));
+    // Delegate to the shared element_size helper (backend_driver.hpp) so the
+    // dtype->byte-width mapping lives in one place.  Preserve the driver's
+    // existing contract of throwing on an unrecognized dtype (element_size
+    // returns 0 as its unknown-dtype sentinel).
+    const std::size_t size = element_size(dtype);
+    if (size == 0) {
+        throw eckit::Exception("NetCDF_Driver: unsupported dtype " + std::to_string(static_cast<int>(dtype)));
     }
+    return size;
 }
 
 // ===================================================================
@@ -276,6 +315,12 @@ void NetCDF_Driver::open_write(const eckit::Configuration& config) {
     active_codec_ = config.getString("codec", "");
     validate_codec(active_codec_, codec_allow_list_);
 
+    // Parse CF/UGRID convention metadata + per-variable attributes
+    // from the manifest.  The global Conventions attribute is written
+    // below; per-variable attributes are applied at variable-define
+    // time in write().
+    attributes_ = parse_dataset_attributes(config);
+
     // Determine the MPI communicator for parallel I/O.
     // Default to MPI_COMM_WORLD if not specified.
     comm_ = MPI_COMM_WORLD;
@@ -291,6 +336,16 @@ void NetCDF_Driver::open_write(const eckit::Configuration& config) {
     // Create the file in parallel mode with MPI-IO (R7.4).
     int status = nc_create_par(path.c_str(), cmode, comm_, info_, &ncid_);
     nc_check(status, "nc_create_par('" + path + "')");
+
+    // Write the global CF/UGRID `Conventions` attribute plus any extra
+    // global attributes declared in the manifest.  The file is in
+    // define mode immediately after nc_create_par.
+    {
+        const std::string& conv = attributes_.conventions;
+        nc_check(nc_put_att_text(ncid_, NC_GLOBAL, "Conventions", conv.size(), conv.c_str()), "nc_put_att_text(Conventions)");
+        nc_write_attributes(ncid_, NC_GLOBAL, attributes_.global, NC_NAT);
+        global_attrs_written_ = true;
+    }
 
     is_open_ = true;
     is_write_mode_ = true;
@@ -383,6 +438,13 @@ void NetCDF_Driver::write(const StagingBuffer& src, const VarMeta& meta) {
         int nc_type = dtype_to_nc_type(meta.dtype);
         status = nc_def_var(ncid_, meta.name.c_str(), nc_type, meta.shape.rank, dimids.data(), &varid);
         nc_check(status, "nc_def_var('" + meta.name + "')");
+
+        // Apply CF/UGRID per-variable attributes declared in the
+        // manifest (units, standard_name, _FillValue, cf_role, ...).
+        // We are still inside define mode here.
+        if (const VarAttributes* var_attrs = attributes_.find(meta.name)) {
+            nc_write_attributes(ncid_, varid, *var_attrs, nc_type);
+        }
 
         // Apply lossless compression if configured (R7.5).
         if (!active_codec_.empty()) {

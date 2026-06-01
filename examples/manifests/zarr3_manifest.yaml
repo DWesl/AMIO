@@ -31,3 +31,40 @@ amio:
   output:
     path: "output_zarr.zarr"
     overwrite: true
+
+# ===================================================================
+# CF / UGRID conventions and per-variable attributes
+#
+# The Zarr backend writes the same CF/UGRID metadata as NetCDF: the
+# global `Conventions` plus `global_attributes` become Zarr group
+# attributes (.zattrs in NCZarr mode / zarr.json attributes in
+# TensorStore mode), and each `variables.<name>.attributes` block
+# becomes that array's attributes.
+#
+# This example describes an unstructured (UGRID) mesh, so the
+# Conventions string is upgraded to include UGRID-1.0.
+# ===================================================================
+conventions: "CF-1.10 UGRID-1.0"
+
+global_attributes:
+  title: "AMIO ocean model output"
+  institution: "NOAA/NWS"
+
+variables:
+  # The UGRID mesh-topology dummy variable.
+  mesh:
+    attributes:
+      cf_role: "mesh_topology"
+      long_name: "Topology data of 2D unstructured mesh"
+      topology_dimension: 2
+      node_coordinates: "mesh_node_lon mesh_node_lat"
+      face_node_connectivity: "mesh_face_nodes"
+  # A data variable living on mesh faces.
+  sea_surface_height:
+    attributes:
+      units: "m"
+      long_name: "Sea Surface Height"
+      standard_name: "sea_surface_height_above_geoid"
+      mesh: "mesh"
+      location: "face"
+      _FillValue: -9999.0

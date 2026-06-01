@@ -31,3 +31,38 @@ amio:
   output:
     path: "output_netcdf4.nc"
     overwrite: true
+
+# ===================================================================
+# CF / UGRID conventions and per-variable attributes
+#
+# AMIO writes a self-describing, convention-compliant file:
+#   * the global `Conventions` attribute is written from `conventions`
+#     below (default "CF-1.10"; auto-upgraded to "CF-1.10 UGRID-1.0"
+#     when a variable declares a UGRID mesh role and `conventions` is
+#     not set explicitly);
+#   * `global_attributes` are written as file-level attributes;
+#   * each `variables.<name>.attributes` block is attached to that
+#     variable.  Numeric values are written with a matching numeric
+#     type; `_FillValue` uses the variable's own type per CF.
+# ===================================================================
+conventions: "CF-1.10"
+
+global_attributes:
+  title: "AMIO atmospheric model output"
+  institution: "NOAA/NWS"
+  source: "AMIO example"
+
+variables:
+  geopotential_height:
+    attributes:
+      units: "gpm"
+      long_name: "Geopotential Height"
+      standard_name: "geopotential_height"
+      _FillValue: -9999.0
+      coordinates: "lat lon"
+  temperature:
+    attributes:
+      units: "K"
+      long_name: "Air Temperature"
+      standard_name: "air_temperature"
+      _FillValue: -9999.0

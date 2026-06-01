@@ -119,6 +119,68 @@ struct BoundingBox {
     std::int64_t strides[AMIO_MAX_RANK] = {};
 };
 
+// element_size -- byte width of a single element of the given dtype.
+//
+// Shared helper for the read path and the concrete drivers so the
+// dtype-size mapping lives in one place (Req 4.3).  The total payload
+// byte count for a variable is:
+//     element_size(dtype) * product(shape.extents[0..rank-1])
+//
+// Returns 0 for an unrecognized dtype tag; callers treat a 0-width
+// element as an error sentinel (an unknown/unsupported element type)
+// rather than a valid zero-byte payload.
+inline std::size_t element_size(amio_dtype_t dtype) {
+    switch (dtype) {
+        case AMIO_DTYPE_F32:
+            return 4;
+        case AMIO_DTYPE_F64:
+            return 8;
+        case AMIO_DTYPE_I8:
+            return 1;
+        case AMIO_DTYPE_I16:
+            return 2;
+        case AMIO_DTYPE_I32:
+            return 4;
+        case AMIO_DTYPE_I64:
+            return 8;
+        case AMIO_DTYPE_U8:
+            return 1;
+        case AMIO_DTYPE_U16:
+            return 2;
+        case AMIO_DTYPE_U32:
+            return 4;
+        case AMIO_DTYPE_U64:
+            return 8;
+        default:
+            return 0;
+    }
+}
+
+// VariableInfo -- driver-reported metadata describing a variable's
+// element type, shape, and timestep count (Dataset_Metadata).
+//
+// Returned by Backend_Driver::describe_variable.  The read path caches
+// this per variable and uses it to size staging buffers, populate
+// VarMeta dtype/shape for every fetch, set the Prefetch_Queue's total
+// timestep count, and validate bounding boxes (Req 4.1, 4.2, 4.5).
+//
+// Fields:
+//   found            - true if the driver located and introspected the
+//                      variable; false means the variable is absent or
+//                      the driver cannot describe it (read fails with
+//                      AMIO_ERR_BACKEND_FAILURE)
+//   dtype            - element type of the variable's payload
+//   shape            - N-dimensional shape (rank + extents); strides
+//                      are contiguous/row-major (0)
+//   total_timesteps  - number of temporal indices available for the
+//                      variable (1 if the variable is not time-varying)
+struct VariableInfo {
+    bool found = false;
+    amio_dtype_t dtype = AMIO_DTYPE_F32;
+    amio_shape_t shape = {};
+    std::int64_t total_timesteps = 1;
+};
+
 // ---------------------------------------------------------------
 // Backend_Driver -- abstract base class for all backend drivers
 // ---------------------------------------------------------------
@@ -210,6 +272,27 @@ class Backend_Driver {
     // Throws eckit::Exception if outstanding operations cannot be
     // completed.
     virtual void close() = 0;
+
+    // describe_variable -- report a variable's element type, shape, and
+    // timestep count (Dataset_Metadata).
+    //
+    // The read path calls this once per variable (lazily, on first
+    // read) to size staging buffers, populate VarMeta dtype/shape for
+    // every fetch, set the Prefetch_Queue's total timestep count, and
+    // validate bounding boxes (Req 4.1, 4.2, 4.5).
+    //
+    // This is intentionally NOT pure virtual: the default implementation
+    // returns VariableInfo{found = false} so existing drivers (and test
+    // mocks) compile unchanged and opt in only when they support read
+    // introspection.  A returned `found == false` causes the read path
+    // to fail the read with AMIO_ERR_BACKEND_FAILURE.
+    //
+    // Unlike the I/O methods, this is invoked from the calling thread
+    // during variable resolution rather than from a Worker_Pool thread.
+    virtual VariableInfo describe_variable(const std::string& name) {
+        (void)name;
+        return VariableInfo{};
+    }
 };
 
 }  // namespace amio::detail

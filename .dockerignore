@@ -1,0 +1,62 @@
+# ===================================================================
+# AMIO .dockerignore - keep the build context small and reproducible
+# ===================================================================
+
+# Version control / CI
+.git/
+.github/
+
+# CMake build directories / artifacts
+build/
+build-*/
+cmake-build-*/
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+*.ninja
+.ninja_deps
+.ninja_log
+compile_commands.json
+CTestTestfile.cmake
+Testing/
+
+# Compiled objects / libraries / executables
+*.o
+*.obj
+*.a
+*.so
+*.so.*
+*.dylib
+*.dll
+*.exe
+*.out
+*.mod
+*.smod
+
+# Documentation pipeline output
+docs/xml/
+docs/_build/
+docs/html/
+node_modules/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+
+# Spack / Docker / editor / OS cruft
+.spack-env/
+spack-lock.yaml
+.docker/
+.vscode/
+.idea/
+.DS_Store
+*~
+*.log
+*.tmp
+*.bak
+
+# Kiro
+.kiro/

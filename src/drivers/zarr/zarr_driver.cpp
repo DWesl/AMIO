@@ -19,6 +19,7 @@
 #include <string>
 #include <vector>
 
+#include "drivers/common/var_attributes.hpp"
 #include "factory/backend_factory.hpp"
 #include "staging/staging_pool.hpp"
 
@@ -145,30 +146,11 @@ std::string Zarr_Driver::dtype_to_string(amio_dtype_t dtype) {
 // ===================================================================
 
 std::size_t Zarr_Driver::dtype_size(amio_dtype_t dtype) {
-    switch (dtype) {
-        case AMIO_DTYPE_F32:
-            return 4;
-        case AMIO_DTYPE_F64:
-            return 8;
-        case AMIO_DTYPE_I8:
-            return 1;
-        case AMIO_DTYPE_I16:
-            return 2;
-        case AMIO_DTYPE_I32:
-            return 4;
-        case AMIO_DTYPE_I64:
-            return 8;
-        case AMIO_DTYPE_U8:
-            return 1;
-        case AMIO_DTYPE_U16:
-            return 2;
-        case AMIO_DTYPE_U32:
-            return 4;
-        case AMIO_DTYPE_U64:
-            return 8;
-        default:
-            return 4;
-    }
+    // Delegate to the shared element_size helper (backend_driver.hpp).  Zarr's
+    // existing contract falls back to a 4-byte (float32) width for an
+    // unrecognized dtype, so preserve that default here.
+    const std::size_t size = element_size(dtype);
+    return size == 0 ? 4 : size;
 }
 
 // ===================================================================
@@ -233,7 +215,7 @@ ZarrConfig Zarr_Driver::parse_zarr_config(const eckit::Configuration& config) {
             oss << missing_fields[i];
         }
 #ifdef AMIO_HAS_ECKIT
-        throw eckit::Exception(oss.str(), Here);
+        throw eckit::Exception(oss.str(), Here());
 #else
         throw std::runtime_error(oss.str());
 #endif
@@ -254,7 +236,7 @@ void Zarr_Driver::validate_sharding(const ZarrConfig& cfg) {
             "number of dimensions (got " +
             std::to_string(cfg.chunk_shape.size()) + " vs " + std::to_string(cfg.shard_shape.size()) + ")";
 #ifdef AMIO_HAS_ECKIT
-        throw eckit::Exception(msg, Here);
+        throw eckit::Exception(msg, Here());
 #else
         throw std::runtime_error(msg);
 #endif
@@ -265,7 +247,7 @@ void Zarr_Driver::validate_sharding(const ZarrConfig& cfg) {
             std::string msg =
                 "Zarr_Driver: chunk_shape[" + std::to_string(i) + "] must be a positive integer (got " + std::to_string(cfg.chunk_shape[i]) + ")";
 #ifdef AMIO_HAS_ECKIT
-            throw eckit::Exception(msg, Here);
+            throw eckit::Exception(msg, Here());
 #else
             throw std::runtime_error(msg);
 #endif
@@ -274,7 +256,7 @@ void Zarr_Driver::validate_sharding(const ZarrConfig& cfg) {
             std::string msg =
                 "Zarr_Driver: shard_shape[" + std::to_string(i) + "] must be a positive integer (got " + std::to_string(cfg.shard_shape[i]) + ")";
 #ifdef AMIO_HAS_ECKIT
-            throw eckit::Exception(msg, Here);
+            throw eckit::Exception(msg, Here());
 #else
             throw std::runtime_error(msg);
 #endif
@@ -283,7 +265,7 @@ void Zarr_Driver::validate_sharding(const ZarrConfig& cfg) {
             std::string msg = "Zarr_Driver: chunk_shape[" + std::to_string(i) + "] (" + std::to_string(cfg.chunk_shape[i]) +
                               ") must evenly divide shard_shape[" + std::to_string(i) + "] (" + std::to_string(cfg.shard_shape[i]) + ")";
 #ifdef AMIO_HAS_ECKIT
-            throw eckit::Exception(msg, Here);
+            throw eckit::Exception(msg, Here());
 #else
             throw std::runtime_error(msg);
 #endif
@@ -299,7 +281,7 @@ void Zarr_Driver::validate_codec(const ZarrConfig& cfg) {
     if (cfg.codec != "blosc" && cfg.codec != "zstandard") {
         std::string msg = "Zarr_Driver: codec must be one of {blosc, zstandard} (got '" + cfg.codec + "')";
 #ifdef AMIO_HAS_ECKIT
-        throw eckit::Exception(msg, Here);
+        throw eckit::Exception(msg, Here());
 #else
         throw std::runtime_error(msg);
 #endif
@@ -374,7 +356,7 @@ nlohmann::json build_kvstore_spec(const std::string& uri) {
 void Zarr_Driver::open_write(const eckit::Configuration& config) {
     if (is_open_) {
 #ifdef AMIO_HAS_ECKIT
-        throw eckit::Exception("Zarr_Driver: already open", Here);
+        throw eckit::Exception("Zarr_Driver: already open", Here());
 #else
         throw std::runtime_error("Zarr_Driver: already open");
 #endif
@@ -384,6 +366,11 @@ void Zarr_Driver::open_write(const eckit::Configuration& config) {
     config_ = parse_zarr_config(config);
     validate_sharding(config_);
     validate_codec(config_);
+
+    // Parse CF/UGRID convention metadata + per-variable attributes
+    // from the manifest.  These are injected into the Zarr v3 group /
+    // array `attributes` metadata below.
+    attributes_ = parse_dataset_attributes(config);
 
 #ifdef AMIO_HAS_TENSORSTORE
     // Build TensorStore JSON spec for Zarr v3 with sharding.
@@ -395,6 +382,25 @@ void Zarr_Driver::open_write(const eckit::Configuration& config) {
     auto& metadata = spec["metadata"];
     metadata["shape"] = config_.array_shape;
     metadata["data_type"] = config_.dtype_str.empty() ? "float32" : config_.dtype_str;
+
+    // Inject CF/UGRID attributes into the Zarr v3 `attributes` map.
+    // Zarr v3 stores user metadata under metadata.attributes, which
+    // TensorStore persists in zarr.json (the CF/Zarr equivalent of
+    // netCDF attributes).  The global `Conventions` string plus any
+    // global attributes are written here; per-variable attributes for
+    // this array are merged in as well (one array per driver instance).
+    {
+        nlohmann::json attrs_json = nlohmann::json::object();
+        attrs_json["Conventions"] = attributes_.conventions;
+        for (const auto& kv : attributes_.global.items) {
+            if (kv.second.is_numeric) {
+                attrs_json[kv.first] = kv.second.number;
+            } else {
+                attrs_json[kv.first] = kv.second.text;
+            }
+        }
+        metadata["attributes"] = std::move(attrs_json);
+    }
 
     // Configure zarr3_sharding_indexed codec chain (R8.3, R8.4):
     //   outer: bytes → sharding_indexed
@@ -469,7 +475,7 @@ void Zarr_Driver::open_write(const eckit::Configuration& config) {
         std::string category = categorize_error(err_msg);
         std::string full_msg = "Zarr_Driver: failed to open TensorStore for writing (" + category + "): " + err_msg;
 #ifdef AMIO_HAS_ECKIT
-        throw eckit::Exception(full_msg, Here);
+        throw eckit::Exception(full_msg, Here());
 #else
         throw std::runtime_error(full_msg);
 #endif
@@ -486,7 +492,7 @@ void Zarr_Driver::open_write(const eckit::Configuration& config) {
         "Rebuild with AMIO_HAS_TENSORSTORE=ON or use NCZarr fallback "
         "mode.";
 #ifdef AMIO_HAS_ECKIT
-    throw eckit::Exception(msg, Here);
+    throw eckit::Exception(msg, Here());
 #else
     throw std::runtime_error(msg);
 #endif
@@ -503,7 +509,7 @@ void Zarr_Driver::open_write(const eckit::Configuration& config) {
 void Zarr_Driver::open_read(const eckit::Configuration& config) {
     if (is_open_) {
 #ifdef AMIO_HAS_ECKIT
-        throw eckit::Exception("Zarr_Driver: already open", Here);
+        throw eckit::Exception("Zarr_Driver: already open", Here());
 #else
         throw std::runtime_error("Zarr_Driver: already open");
 #endif
@@ -533,7 +539,7 @@ void Zarr_Driver::open_read(const eckit::Configuration& config) {
         std::string category = categorize_error(err_msg);
         std::string full_msg = "Zarr_Driver: failed to open TensorStore for reading (" + category + "): " + err_msg;
 #ifdef AMIO_HAS_ECKIT
-        throw eckit::Exception(full_msg, Here);
+        throw eckit::Exception(full_msg, Here());
 #else
         throw std::runtime_error(full_msg);
 #endif
@@ -548,7 +554,7 @@ void Zarr_Driver::open_read(const eckit::Configuration& config) {
         "Rebuild with AMIO_HAS_TENSORSTORE=ON or use NCZarr fallback "
         "mode.";
 #ifdef AMIO_HAS_ECKIT
-    throw eckit::Exception(msg, Here);
+    throw eckit::Exception(msg, Here());
 #else
     throw std::runtime_error(msg);
 #endif
@@ -571,7 +577,7 @@ void Zarr_Driver::write(const StagingBuffer& src, const VarMeta& meta) {
     if (!is_open_ || !is_write_mode_) {
         std::string msg = "Zarr_Driver: write called on driver not open for writing";
 #ifdef AMIO_HAS_ECKIT
-        throw eckit::Exception(msg, Here);
+        throw eckit::Exception(msg, Here());
 #else
         throw std::runtime_error(msg);
 #endif
@@ -605,7 +611,7 @@ void Zarr_Driver::write(const StagingBuffer& src, const VarMeta& meta) {
         std::string category = categorize_error(err_msg);
         std::string full_msg = "Zarr_Driver: write failed (" + category + "): " + err_msg;
 #ifdef AMIO_HAS_ECKIT
-        throw eckit::Exception(full_msg, Here);
+        throw eckit::Exception(full_msg, Here());
 #else
         throw std::runtime_error(full_msg);
 #endif
@@ -616,7 +622,7 @@ void Zarr_Driver::write(const StagingBuffer& src, const VarMeta& meta) {
     (void)meta;
     std::string msg = "Zarr_Driver: TensorStore is not available in this build.";
 #ifdef AMIO_HAS_ECKIT
-    throw eckit::Exception(msg, Here);
+    throw eckit::Exception(msg, Here());
 #else
     throw std::runtime_error(msg);
 #endif
@@ -631,7 +637,7 @@ void Zarr_Driver::read(StagingBuffer& dst, const VarMeta& meta, std::int64_t tim
     if (!is_open_ || is_write_mode_) {
         std::string msg = "Zarr_Driver: read called on driver not open for reading";
 #ifdef AMIO_HAS_ECKIT
-        throw eckit::Exception(msg, Here);
+        throw eckit::Exception(msg, Here());
 #else
         throw std::runtime_error(msg);
 #endif
@@ -654,7 +660,7 @@ void Zarr_Driver::read(StagingBuffer& dst, const VarMeta& meta, std::int64_t tim
         std::string msg = "Zarr_Driver: staging buffer capacity (" + std::to_string(dst.capacity_bytes) + " bytes) insufficient for read payload (" +
                           std::to_string(total_bytes) + " bytes)";
 #ifdef AMIO_HAS_ECKIT
-        throw eckit::Exception(msg, Here);
+        throw eckit::Exception(msg, Here());
 #else
         throw std::runtime_error(msg);
 #endif
@@ -697,7 +703,7 @@ void Zarr_Driver::read(StagingBuffer& dst, const VarMeta& meta, std::int64_t tim
         std::string category = categorize_error(err_msg);
         std::string full_msg = "Zarr_Driver: read failed (" + category + "): " + err_msg;
 #ifdef AMIO_HAS_ECKIT
-        throw eckit::Exception(full_msg, Here);
+        throw eckit::Exception(full_msg, Here());
 #else
         throw std::runtime_error(full_msg);
 #endif
@@ -712,7 +718,7 @@ void Zarr_Driver::read(StagingBuffer& dst, const VarMeta& meta, std::int64_t tim
     (void)bbox;
     std::string msg = "Zarr_Driver: TensorStore is not available in this build.";
 #ifdef AMIO_HAS_ECKIT
-    throw eckit::Exception(msg, Here);
+    throw eckit::Exception(msg, Here());
 #else
     throw std::runtime_error(msg);
 #endif

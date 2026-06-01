@@ -46,6 +46,7 @@
 #include <string>
 #include <vector>
 
+#include "drivers/common/var_attributes.hpp"
 #include "factory/backend_driver.hpp"
 
 #ifdef AMIO_HAS_TENSORSTORE
@@ -154,6 +155,13 @@ class Zarr_Driver : public Backend_Driver {
     bool is_open_ = false;
     bool is_write_mode_ = false;
     ZarrConfig config_;
+
+    // CF/UGRID convention metadata + per-variable attributes parsed
+    // from the dataset manifest.  Written as Zarr attributes (.zattrs)
+    // via netCDF-c in NCZarr mode, or into the TensorStore JSON spec
+    // metadata in TensorStore mode.
+    DatasetAttributes attributes_;
+    bool global_attrs_written_ = false;
 
     // One-shot diagnostic flag: emitted once per driver instance on
     // first open in NCZarr fallback mode (R8.8).

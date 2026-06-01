@@ -130,7 +130,7 @@ void test_write_null_host_data() {
     std::string path = write_config_file("_null_data");
 
     amio_core_handle core = nullptr;
-    amio_init("dummy.yaml", &core);
+    amio_init(path.c_str(), &core);
     EXPECT_TRUE(core != nullptr, "amio_init should succeed");
 
     amio_dataset_handle ds = nullptr;
@@ -160,7 +160,7 @@ void test_write_unsupported_dtype() {
     std::string path = write_config_file("_bad_dtype");
 
     amio_core_handle core = nullptr;
-    amio_init("dummy.yaml", &core);
+    amio_init(path.c_str(), &core);
     EXPECT_TRUE(core != nullptr, "amio_init should succeed");
 
     amio_dataset_handle ds = nullptr;
@@ -191,7 +191,7 @@ void test_write_invalid_shape_rank_zero() {
     std::string path = write_config_file("_rank0");
 
     amio_core_handle core = nullptr;
-    amio_init("dummy.yaml", &core);
+    amio_init(path.c_str(), &core);
     EXPECT_TRUE(core != nullptr, "amio_init should succeed");
 
     amio_dataset_handle ds = nullptr;
@@ -222,7 +222,7 @@ void test_write_invalid_shape_zero_extent() {
     std::string path = write_config_file("_zero_ext");
 
     amio_core_handle core = nullptr;
-    amio_init("dummy.yaml", &core);
+    amio_init(path.c_str(), &core);
     EXPECT_TRUE(core != nullptr, "amio_init should succeed");
 
     amio_dataset_handle ds = nullptr;
@@ -255,7 +255,7 @@ void test_write_invalid_shape_negative_extent() {
     std::string path = write_config_file("_neg_ext");
 
     amio_core_handle core = nullptr;
-    amio_init("dummy.yaml", &core);
+    amio_init(path.c_str(), &core);
     EXPECT_TRUE(core != nullptr, "amio_init should succeed");
 
     amio_dataset_handle ds = nullptr;
@@ -287,7 +287,7 @@ void test_write_invalid_shape_rank_too_high() {
     std::string path = write_config_file("_rank8");
 
     amio_core_handle core = nullptr;
-    amio_init("dummy.yaml", &core);
+    amio_init(path.c_str(), &core);
     EXPECT_TRUE(core != nullptr, "amio_init should succeed");
 
     amio_dataset_handle ds = nullptr;
@@ -319,7 +319,7 @@ void test_write_success_returns_handle() {
     std::string path = write_config_file("_success");
 
     amio_core_handle core = nullptr;
-    amio_init("dummy.yaml", &core);
+    amio_init(path.c_str(), &core);
     EXPECT_TRUE(core != nullptr, "amio_init should succeed");
 
     amio_dataset_handle ds = nullptr;
@@ -356,7 +356,7 @@ void test_write_snapshot_decouples_host_buffer() {
     std::string path = write_config_file("_snapshot");
 
     amio_core_handle core = nullptr;
-    amio_init("dummy.yaml", &core);
+    amio_init(path.c_str(), &core);
     EXPECT_TRUE(core != nullptr, "amio_init should succeed");
 
     amio_dataset_handle ds = nullptr;
@@ -399,7 +399,7 @@ void test_write_multiple_returns_distinct_handles() {
     std::string path = write_config_file("_multi");
 
     amio_core_handle core = nullptr;
-    amio_init("dummy.yaml", &core);
+    amio_init(path.c_str(), &core);
     EXPECT_TRUE(core != nullptr, "amio_init should succeed");
 
     amio_dataset_handle ds = nullptr;
@@ -438,7 +438,7 @@ void test_write_all_supported_dtypes() {
     std::string path = write_config_file("_dtypes");
 
     amio_core_handle core = nullptr;
-    amio_init("dummy.yaml", &core);
+    amio_init(path.c_str(), &core);
     EXPECT_TRUE(core != nullptr, "amio_init should succeed");
 
     amio_dataset_handle ds = nullptr;
@@ -477,7 +477,7 @@ void test_write_null_var_name() {
     std::string path = write_config_file("_null_var");
 
     amio_core_handle core = nullptr;
-    amio_init("dummy.yaml", &core);
+    amio_init(path.c_str(), &core);
     EXPECT_TRUE(core != nullptr, "amio_init should succeed");
 
     amio_dataset_handle ds = nullptr;

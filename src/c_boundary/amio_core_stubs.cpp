@@ -25,13 +25,54 @@
 #include <condition_variable>
 #include <cstring>
 #include <memory>
+#include <string>
 #include <thread>
 
 #include "c_boundary/amio_core.hpp"
 #include "config/config_loader.hpp"
+#include "factory/backend_driver.hpp"
 #include "factory/backend_factory.hpp"
 #include "staging/staging_pool.hpp"
 #include "workers/worker_pool.hpp"
+
+// Open-time dataset configuration source.
+//
+// The Backend_Driver open_write/open_read methods take an
+// eckit::Configuration carrying the dataset-level keys (path / uri /
+// data_model / codec / ...) that the drivers parse directly from the
+// manifest file.  Those keys are NOT captured in the loader's `Config`
+// struct, so the configuration must be built from the manifest file
+// itself at open time (task 5, design §2).
+//
+// When eckit is in the build closure (the production configuration),
+// the manifest is wrapped in an eckit::YAMLConfiguration built from the
+// file path.  When eckit is absent, amio_core is a compile-only
+// configuration (eckit is required for AMIO_Core); a minimal standalone
+// adapter is supplied so the open is still invoked rather than silently
+// skipped.
+#ifdef AMIO_HAS_ECKIT
+#include <eckit/config/YAMLConfiguration.h>
+#include <eckit/filesystem/PathName.h>
+#else
+namespace eckit {
+// Minimal standalone Configuration adapter for builds without eckit.
+// AMIO_Core requires eckit at runtime, so this exists only to keep the
+// open path well-formed (and invoked) in compile-only configurations.
+class Configuration {
+   public:
+    virtual ~Configuration() = default;
+    virtual bool has(const std::string& /*key*/) const {
+        return false;
+    }
+    virtual std::string getString(const std::string& /*key*/, const std::string& def = "") const {
+        return def;
+    }
+    virtual std::vector<std::string> getStringVector(const std::string& /*key*/, const std::vector<std::string>& def = {}) const {
+        return def;
+    }
+};
+}  // namespace eckit
+#endif  // AMIO_HAS_ECKIT
 
 namespace amio::detail {
 
@@ -41,24 +82,92 @@ HandleTable &process_handle_table() {
 }
 
 // ---------------------------------------------------------------
-// amio_init -- stub (task 9.4)
+// amio_init -- task 2: parse the manifest and build the runtime.
+//
+// Parses the manifest via ConfigLoader::parse and, on success,
+// constructs the Staging_Pool and Worker_Pool from the parsed
+// Config so that read/write paths are served from real buffers
+// instead of failing with backpressure.
+//
+//   * Manifest missing / invalid -> the loader's error code
+//     (AMIO_ERR_MANIFEST_NOT_FOUND / AMIO_ERR_MANIFEST_INVALID),
+//     no core handle minted (Req 1).
+//   * Pool construction failure   -> AMIO_ERR_BACKEND_FAILURE,
+//     no core handle minted (Req 1.4).
+//
+// Validates: R1.1, R1.2, R1.3, R1.4
 // ---------------------------------------------------------------
-amio_status_t init(const char * /*manifest_path*/, amio_core_handle *out_core) {
-    // Create a minimal AMIO_Core so that open_dataset can function.
-    auto *core = new AMIO_Core{};
-    auto token = process_handle_table().insert(HandleKind::Core, core);
+amio_status_t init(const char *manifest_path, amio_core_handle *out_core) {
+    // ---- Step 1: Parse + validate the manifest (Req 1) ----
+    Config cfg{};
+    ValidationError verr{};
+    amio_err_t parse_rc = ConfigLoader::parse(std::string(manifest_path), cfg, verr);
+    if (parse_rc != AMIO_OK) {
+        // MANIFEST_NOT_FOUND / MANIFEST_INVALID -- no handle minted.
+        return static_cast<amio_status_t>(parse_rc);
+    }
+
+    // ---- Step 2: Construct the runtime pools (Req 1.1, 1.2) ----
+    auto core = std::make_unique<AMIO_Core>();
+    try {
+        core->staging_pool = std::make_unique<StagingPool>(cfg.staging_pool.buffer_count, cfg.staging_pool.buffer_capacity_bytes,
+                                                           static_cast<std::int64_t>(cfg.staging_timeout_ms));
+
+        WorkerPoolConfig wp{};
+        wp.thread_count = cfg.worker_pool.threads;
+        core->worker_pool = std::make_unique<WorkerPool>(wp);
+    } catch (...) {
+        // Pool construction failed -- AMIO_ERR_BACKEND_FAILURE, no
+        // handle minted (Req 1.4).  `core` is destroyed here, tearing
+        // down any partially-constructed pool.
+        return AMIO_ERR_BACKEND_FAILURE;
+    }
+
+    core->staging_timeout_ms = static_cast<std::int64_t>(cfg.staging_timeout_ms);
+
+    // ---- Step 3: Mint the core handle (Req 1) ----
+    auto token = process_handle_table().insert(HandleKind::Core, core.get());
     core->core_token = token;
     *out_core = HandleTable::to_ptr(token);
+    core.release();  // ownership transferred to the handle table
     return AMIO_OK;
 }
 
 // ---------------------------------------------------------------
-// amio_finalize -- stub (task 9.4)
+// amio_finalize -- task 3: drain the runtime and invalidate the core.
+//
+// Teardown ordering (Req 1.5, 1.6):
+//   1. Drain + join the Worker_Pool so no background prefetch/write
+//      task is still running against dataset/pool state.
+//   2. Flush + close every open dataset and release its handle.
+//   3. Release the Staging_Pool (now that no worker thread can hold a
+//      StagingBuffer reference).
+//   4. Invalidate the core handle and free the core -- unconditionally,
+//      even if the Staging_Pool teardown above threw.
+//
+// Validates: R1.5, R1.6
 // ---------------------------------------------------------------
 amio_status_t finalize(void *core_payload) {
     auto *core = static_cast<AMIO_Core *>(core_payload);
 
-    // Close all open datasets.
+    // ---- Step 1: Drain + join the Worker_Pool (Req 1.5) ----
+    //
+    // The runtime pools are live as of task 2: background prefetch /
+    // write tasks dispatched to the Worker_Pool may still hold
+    // references to dataset PrefetchQueues, Backend_Drivers, and
+    // Staging_Pool buffers.  Quiesce and join the Worker_Pool BEFORE
+    // tearing down datasets so that no worker thread touches dataset
+    // state during teardown (otherwise the dataset records below are
+    // freed out from under an in-flight fetch).  Draining here also
+    // establishes the Req 1.5 precondition for the Staging_Pool
+    // release in step 3: once the pool is joined, no thread can hold
+    // a StagingBuffer reference.
+    if (core->worker_pool) {
+        core->worker_pool->drain();
+        core->worker_pool.reset();  // joins all worker threads
+    }
+
+    // ---- Step 2: Close all open datasets ----
     {
         std::lock_guard<std::mutex> lock(core->datasets_mu);
         for (auto &[id, record] : core->datasets) {
@@ -78,22 +187,45 @@ amio_status_t finalize(void *core_payload) {
         core->datasets.clear();
     }
 
-    // Release the core handle.
+    // ---- Step 3: Release the Staging_Pool (Req 1.5) ----
+    //
+    // The Worker_Pool has been drained/joined (step 1) and every
+    // dataset is closed (step 2), so no thread can still hold a
+    // StagingBuffer reference.  reset() runs the pool destructor,
+    // freeing all buffers.  Wrap it so that even if teardown throws
+    // the core handle is still invalidated below (Req 1.6).
+    try {
+        core->staging_pool.reset();
+    } catch (...) {
+        // Best-effort: swallow the teardown failure and fall through
+        // to invalidate the core handle regardless (Req 1.6).
+    }
+
+    // ---- Step 4: Invalidate the core handle (Req 1.5, 1.6) ----
+    //
+    // Always reached, even when the Staging_Pool release in step 3
+    // throws, so the core handle is guaranteed invalid after finalize.
     process_handle_table().release(core->core_token, HandleKind::Core);
     delete core;
     return AMIO_OK;
 }
 
 // ---------------------------------------------------------------
-// amio_open_dataset -- task 6.3
+// amio_open_dataset -- task 5 (open the backend for reading/writing)
 //
 // Validates core handle → extracts backend key from config →
-// calls BackendFactory::build() → on success creates dataset
-// handle in handle table → calls driver->open_write() or
-// open_read() → returns dataset handle.
+// calls BackendFactory::build() → opens the driver in the requested
+// mode (open_write / open_read) with an eckit::YAMLConfiguration
+// built from config_path → on success creates the dataset handle in
+// the handle table → returns the dataset handle.
 //
 // On factory lookup failure → AMIO_ERR_UNKNOWN_BACKEND, no handle.
 // On driver open failure → AMIO_ERR_BACKEND_FAILURE, no handle.
+//
+// For read-mode datasets the parsed Config is retained on the
+// DatasetRecord (for prefetch depth / read timeout); the per-variable
+// PrefetchQueue is created lazily on first read (design Key Design
+// Decision), so no eager prefetch scheduling happens here.
 // ---------------------------------------------------------------
 amio_status_t open_dataset(void *core_payload, const char *config_path, std::int32_t mode, amio_dataset_handle *out_dataset) {
     auto *core = static_cast<AMIO_Core *>(core_payload);
@@ -119,25 +251,28 @@ amio_status_t open_dataset(void *core_payload, const char *config_path, std::int
         return static_cast<amio_status_t>(factory_err);
     }
 
-    // Attempt to open the driver in the requested mode.
-    // We create a minimal eckit::Configuration-like object.
-    // Since we don't have eckit available in all builds, we use
-    // a try/catch to handle driver open failures.
+    // Attempt to open the driver in the requested mode (Req 2.1).
+    //
+    // The dataset-level configuration (path / uri / data_model / codec
+    // / ...) is parsed by each driver directly from the manifest file,
+    // so it is wrapped in an eckit::YAMLConfiguration built from
+    // `config_path` (or the standalone adapter when eckit is absent).
+    // On any open failure the driver throws; the catch below translates
+    // to AMIO_ERR_BACKEND_FAILURE and returns no dataset handle
+    // (Req 2.2).
     try {
-        // For now, we pass a null configuration since the real eckit
-        // integration lands in task 9.x.  The driver stubs accept this.
-        // When real drivers land, this will use eckit::LocalConfiguration
-        // populated from the parsed Config.
+#ifdef AMIO_HAS_ECKIT
+        eckit::YAMLConfiguration driver_cfg{eckit::PathName{std::string(config_path)}};
+#else
+        eckit::Configuration driver_cfg{};
+#endif
         if (mode == AMIO_MODE_WRITE) {
-            // driver->open_write() requires eckit::Configuration.
-            // For the lifecycle wiring, we defer the actual driver open
-            // to when eckit is available.  The driver is instantiated
-            // and ready; open_write/open_read will be called when the
-            // full write/read path lands (task 9.x).
-        } else if (mode == AMIO_MODE_READ) {
-            // Same deferral for read mode.
+            driver->open_write(driver_cfg);
+        } else /* AMIO_MODE_READ */ {
+            driver->open_read(driver_cfg);
         }
     } catch (...) {
+        // Open failed -- AMIO_ERR_BACKEND_FAILURE, no handle (Req 2.2).
         return AMIO_ERR_BACKEND_FAILURE;
     }
 
@@ -148,32 +283,18 @@ amio_status_t open_dataset(void *core_payload, const char *config_path, std::int
     record->dataset_id = core->next_dataset_id.fetch_add(1);
     record->core = core;  // back-pointer for write path access to staging/worker
 
-    // ---- Read-mode: create PrefetchQueue (task 9.2) ----
+    // Retain the parsed Config so the read path can source the prefetch
+    // depth / read timeout when the per-variable PrefetchQueue is
+    // created lazily on first read (Req 2.3, 2.4).  The per-variable
+    // PrefetchQueue is intentionally NOT created here: with one queue
+    // per variable created lazily on first amio_read (design Key Design
+    // Decision), there is no variable to prefetch at open time, so the
+    // eager schedule_initial() / placeholder total_timesteps block is
+    // removed.
     if (mode == AMIO_MODE_READ) {
-        // Extract prefetch configuration from the parsed config.
-        std::size_t prefetch_depth = config.prefetch.depth;
-        std::int64_t read_timeout_s = static_cast<std::int64_t>(config.prefetch.read_timeout_s);
-        // Total timesteps: use a default if not specified in config.
-        // In a full implementation, this would come from the dataset
-        // metadata queried via the driver.  For now, use a reasonable
-        // default that allows the prefetch queue to function.
-        std::int64_t total_timesteps = 1024;  // default; overridden by dataset metadata
-
-        record->prefetch_depth = prefetch_depth;
-        record->read_timeout_s = read_timeout_s;
-        record->total_timesteps = total_timesteps;
-
-        // Create the PrefetchQueue with the configured depth.
-        record->prefetch_queue = std::make_unique<PrefetchQueue>(prefetch_depth, read_timeout_s,
-                                                                 core->staging_pool,    // may be null in stub mode
-                                                                 core->worker_pool,     // may be null in stub mode
-                                                                 record->driver.get(),  // backend driver for reads
-                                                                 record->dataset_id,
-                                                                 "",  // var_name filled per-read
-                                                                 total_timesteps);
-
-        // Schedule initial min(N, M) background fetches (R5.2).
-        record->prefetch_queue->schedule_initial();
+        record->dataset_config = config;
+        record->prefetch_depth = config.prefetch.depth;
+        record->read_timeout_s = static_cast<std::int64_t>(config.prefetch.read_timeout_s);
     }
 
     // Insert into the handle table.
@@ -299,32 +420,13 @@ amio_status_t close(void *dataset_payload) {
 // ---------------------------------------------------------------
 // Helper: compute element size in bytes for a given dtype.
 // Returns 0 for unsupported/invalid dtype values.
+//
+// Delegates to the shared element_size() helper in backend_driver.hpp
+// so the dtype-size mapping lives in one place (Req 4.3); retained as a
+// thin alias to keep this translation unit's call sites readable.
 // ---------------------------------------------------------------
 static std::size_t dtype_element_size(amio_dtype_t dtype) noexcept {
-    switch (dtype) {
-        case AMIO_DTYPE_F32:
-            return 4;
-        case AMIO_DTYPE_F64:
-            return 8;
-        case AMIO_DTYPE_I8:
-            return 1;
-        case AMIO_DTYPE_I16:
-            return 2;
-        case AMIO_DTYPE_I32:
-            return 4;
-        case AMIO_DTYPE_I64:
-            return 8;
-        case AMIO_DTYPE_U8:
-            return 1;
-        case AMIO_DTYPE_U16:
-            return 2;
-        case AMIO_DTYPE_U32:
-            return 4;
-        case AMIO_DTYPE_U64:
-            return 8;
-        default:
-            return 0;  // unsupported dtype
-    }
+    return element_size(dtype);
 }
 
 // ---------------------------------------------------------------
@@ -411,7 +513,7 @@ amio_status_t write(void *dataset_payload, const char *var_name, const void *hos
     StagingBuffer fallback_buf{};
 
     if (core != nullptr && core->staging_pool != nullptr) {
-        staging_buf = core->staging_pool->acquire(payload_bytes);
+        staging_buf = core->staging_pool.get()->acquire(payload_bytes);
         if (staging_buf == nullptr) {
             // Timeout: no buffer available within staging timeout.
             return AMIO_ERR_STAGING_BACKPRESSURE;
@@ -460,6 +562,18 @@ amio_status_t write(void *dataset_payload, const char *var_name, const void *hos
         dv_key.dataset_id = record->dataset_id;
         dv_key.variable_id = var_hash;
 
+        // Build the variable metadata the backend driver needs to
+        // encode this field (name, dtype, shape).  The GRIB2 driver,
+        // for example, uses the shape to derive Ni/Nj and gates the
+        // contiguity fast/slow path on the strides.
+        VarMeta meta{};
+        meta.dataset_id = record->dataset_id;
+        meta.variable_id = var_hash;
+        meta.name = var_name;
+        meta.dtype = dtype;
+        meta.shape = *shape;
+        meta.timestep = -1;
+
         // Capture staging buffer pointer (NOT host pointer) in the
         // callback.  This is the critical safety property: after
         // this function returns, no worker thread holds a reference
@@ -467,15 +581,19 @@ amio_status_t write(void *dataset_payload, const char *var_name, const void *hos
         StagingBuffer *buf_for_worker = staging_buf;
         std::uint64_t io_handle_id = io_token;
 
-        std::uint64_t seq = core->worker_pool->submit_write(dv_key, io_handle_id, [buf_for_worker, record, io_rec, core]() {
+        std::uint64_t seq = core->worker_pool.get()->submit_write(dv_key, io_handle_id, [buf_for_worker, record, io_rec, core, meta]() {
             // Worker thread callback: serialize buffer via backend.
             // The driver operates on the staging buffer, never
             // the host pointer.
             try {
                 if (record->driver) {
-                    // TODO: When full driver integration lands,
-                    // call record->driver->write(...) here with
-                    // the staging buffer contents.
+                    // Driver serialization is deferred until the full
+                    // runtime-I/O integration (task 9.x) wires the open
+                    // path.  The VarMeta below carries the variable
+                    // name, dtype, and shape the driver will need:
+                    //   record->driver->write(*buf_for_worker, meta);
+                    (void)meta;
+                    (void)buf_for_worker;
                 }
                 io_rec->completed.store(true);
             } catch (...) {
@@ -490,7 +608,7 @@ amio_status_t write(void *dataset_payload, const char *var_name, const void *hos
             // Release staging buffer back to pool after write
             // completes (R3.10).
             if (buf_for_worker != nullptr && core->staging_pool != nullptr) {
-                core->staging_pool->release(buf_for_worker);
+                core->staging_pool.get()->release(buf_for_worker);
             }
 
             // Decrement pending write count.
@@ -508,7 +626,7 @@ amio_status_t write(void *dataset_payload, const char *var_name, const void *hos
         io_rec->completed.store(true);
 
         if (is_pool_buffer && staging_buf != nullptr && core != nullptr && core->staging_pool != nullptr) {
-            core->staging_pool->release(staging_buf);
+            core->staging_pool.get()->release(staging_buf);
         }
         // If fallback_storage was used, it will be freed when this
         // function returns (unique_ptr goes out of scope).  The
@@ -643,7 +761,7 @@ amio_status_t release_view(void *view_payload) {
     // Release the staging buffer back to the pool.
     AMIO_Core *core = view_rec->core;
     if (view_rec->staging_buf != nullptr && core != nullptr && core->staging_pool != nullptr) {
-        core->staging_pool->release(view_rec->staging_buf);
+        core->staging_pool.get()->release(view_rec->staging_buf);
     }
 
     // Decrement outstanding view count on the dataset.

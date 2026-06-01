@@ -1,16 +1,22 @@
 // test_p25_grib2_metadata_invariant.cpp -- Property test P25: GRIB2
-// metadata invariant.
+// metadata / table-sourcing invariant.
 //
-// For any GRIB2_Driver::write: every human-readable metadata string
-// translated to WMO code before encoding; missing WMO key or DRT
-// outside {Adaptive Entropy Coding via libaec, Lossless JPEG2000} →
-// eckit::Exception, zero output bytes.
+// GRIB2 code and template tables are sourced from NCEPLIBS-g2c, not
+// from an eckit-authored code map.  The manifest supplies the numeric
+// GRIB2 product identifiers (discipline, parameter category/number,
+// template numbers, fixed-surface descriptors) which AMIO forwards to
+// g2c verbatim.  The remaining string-level invariant is the DRT:
+// it must name one of {Adaptive Entropy Coding via libaec, Lossless
+// JPEG2000}; anything else -> eckit::Exception, zero output bytes.
 //
-// Min 100 iterations with valid + invalid metadata generators.
+// This test verifies:
+//   * valid DRT names parse to a GRIB2_DRT enum (R9.6)
+//   * invalid DRT names throw (R9.6, R9.7)
+//   * the NCEP template builders emit the correct template layouts
+//     populated from the numeric identifiers, with no string->code
+//     remapping (R9.3, R9.8)
 //
-// Uses REAL GRIB2_Driver (no mocks) — tests through the AMIO C API
-// (amio_init → amio_open_dataset with backend "grib2" → amio_write
-// with various metadata).
+// Min 100 iterations with valid + invalid DRT generators.
 //
 // **Validates: Requirements R9.3, R9.6, R9.7, R9.8**
 
@@ -67,36 +73,6 @@ rc::Gen<std::string> genInvalidDRT() {
     });
 }
 
-// Generate a random string that is NOT a valid WMO key.
-// These are arbitrary strings that won't be in any WMO code table.
-rc::Gen<std::string> genMissingWmoKey() {
-    return rc::gen::exec([]() {
-        // Generate a random string of length 5-20 from alphanumeric chars.
-        int len = *rc::gen::inRange(5, 21);
-        std::string result;
-        result.reserve(len);
-        for (int i = 0; i < len; ++i) {
-            // Use alphanumeric + underscore
-            int ch = *rc::gen::inRange(0, 37);
-            if (ch < 26) {
-                result += static_cast<char>('a' + ch);
-            } else if (ch < 36) {
-                result += static_cast<char>('0' + (ch - 26));
-            } else {
-                result += '_';
-            }
-        }
-        // Prefix with "nonexistent_" to ensure it's not a real WMO key.
-        return "nonexistent_" + result;
-    });
-}
-
-// Generate a valid WMO key that IS in the code table.
-// We'll use a small set of known meteorological variable names.
-std::vector<std::string> known_wmo_keys() {
-    return {"temperature", "pressure", "relative_humidity", "wind_speed", "wind_direction", "geopotential_height"};
-}
-
 }  // anonymous namespace
 
 // ===================================================================
@@ -151,86 +127,66 @@ TEST_CASE("P25: GRIB2 metadata invariant - invalid DRT names rejected", "[pbt][p
 }
 
 // ===================================================================
-// Property Test P25c: Missing WMO metadata key causes exception.
+// Property Test P25c: NCEP template values are forwarded verbatim.
 //
-// For any GRIB2_Driver with a WMO code table: attempting to
-// translate a metadata key that is NOT in the table throws
-// eckit::Exception with zero output bytes.
-//
-// Validates: R9.3, R9.8
+// The Product Definition Template is built directly from the numeric
+// identifiers in Grib2Settings -- there is no string->code remapping.
+// For any (category, parameter) the PDT 4.0 layout must carry exactly
+// those values in entries [0] and [1] (R9.3, R9.8).
 // ===================================================================
 
-TEST_CASE("P25: GRIB2 metadata invariant - missing WMO key throws", "[pbt][p25][grib2][metadata][wmo_missing]") {
-    auto result = rc::check("missing WMO metadata key throws eckit::Exception", []() {
-        // Create a GRIB2_Driver and set up a minimal WMO table
-        // with known keys.  Then attempt to translate a key that
-        // is NOT in the table.
-        //
-        // We test translate_metadata indirectly by constructing
-        // a VarMeta with a name not in the WMO table and calling
-        // write, which calls translate_metadata internally.
-        //
-        // Since we can't easily call write without full g2c setup,
-        // we test the translate_metadata logic by verifying that
-        // a driver initialized with a WMO table rejects unknown keys.
+TEST_CASE("P25: GRIB2 table sourcing - PDT carries numeric identifiers verbatim", "[pbt][p25][grib2][metadata][pdt]") {
+    auto result = rc::check("PDT 4.0 entries equal the manifest's numeric GRIB2 identifiers", []() {
+        Grib2Settings s{};
+        s.parameter_category = *rc::gen::inRange<std::int64_t>(0, 255);
+        s.parameter_number = *rc::gen::inRange<std::int64_t>(0, 255);
+        s.type_of_first_fixed_surface = *rc::gen::inRange<std::int64_t>(0, 255);
+        s.scaled_value_first_surface = *rc::gen::inRange<std::int64_t>(0, 100000);
+        s.forecast_time = *rc::gen::inRange<std::int64_t>(0, 240);
 
-        // Generate a key that won't be in any WMO table.
-        auto missing_key = *genMissingWmoKey();
+        auto pdt = GRIB2_Driver::build_pdt_4_0(s);
 
-        // Create a WMO code table with some known entries.
-        WmoCodeTable table;
-        auto keys = known_wmo_keys();
-        for (std::size_t i = 0; i < keys.size(); ++i) {
-            table[keys[i]] = static_cast<std::int64_t>(i + 1);
-        }
-
-        // Verify the missing key is not in the table.
-        RC_PRE(table.find(missing_key) == table.end());
-
-        // The translate_metadata method looks up meta.name in the
-        // WMO table.  If not found, it throws.  We simulate this
-        // by checking the table lookup directly (since
-        // translate_metadata is a private method, we verify the
-        // invariant through the table lookup pattern).
-        auto it = table.find(missing_key);
-        RC_ASSERT(it == table.end());
-
-        // This confirms that any VarMeta with name == missing_key
-        // would cause translate_metadata to throw, producing zero
-        // output bytes.
+        // PDT 4.0 is a 15-entry template.
+        RC_ASSERT(pdt.size() == 15);
+        // Numeric identifiers are forwarded verbatim (no remapping).
+        RC_ASSERT(pdt[0] == s.parameter_category);
+        RC_ASSERT(pdt[1] == s.parameter_number);
+        RC_ASSERT(pdt[7] == s.indicator_of_unit_of_time);
+        RC_ASSERT(pdt[8] == s.forecast_time);
+        RC_ASSERT(pdt[9] == s.type_of_first_fixed_surface);
+        RC_ASSERT(pdt[11] == s.scaled_value_first_surface);
     });
 
     REQUIRE(result);
 }
 
 // ===================================================================
-// Property Test P25d: Valid WMO keys are translated successfully.
+// Property Test P25d: DRS template matches the selected DRT layout.
 //
-// For any metadata key that IS in the WMO code table: the
-// translation produces a valid integer code (no exception).
-//
-// Validates: R9.3, R9.8
+// The Data Representation Template is chosen by the validated DRT and
+// its layout (entry count) follows the NCEP/WMO table for that DRT:
+//   DRT 5.40 (JPEG2000) -> 7 entries
+//   DRT 5.42 (AEC/CCSDS) -> 8 entries
+// The decimal scale factor is forwarded verbatim (R9.3, R9.8).
 // ===================================================================
 
-TEST_CASE("P25: GRIB2 metadata invariant - valid WMO keys translate", "[pbt][p25][grib2][metadata][wmo_valid]") {
-    auto result = rc::check("valid WMO metadata keys translate to integer codes", []() {
-        // Build a WMO code table with known entries.
-        WmoCodeTable table;
-        auto keys = known_wmo_keys();
-        for (std::size_t i = 0; i < keys.size(); ++i) {
-            table[keys[i]] = static_cast<std::int64_t>(i + 100);
+TEST_CASE("P25: GRIB2 table sourcing - DRS template matches selected DRT", "[pbt][p25][grib2][metadata][drs]") {
+    auto result = rc::check("DRS template layout follows the NCEP table for the chosen DRT", []() {
+        Grib2Settings s{};
+        s.decimal_scale_factor = *rc::gen::inRange<std::int64_t>(0, 6);
+
+        auto drt_name = *genValidDRT();
+        GRIB2_DRT drt = parse_drt_name(drt_name);
+
+        auto drs = GRIB2_Driver::build_drs_template(drt, s);
+
+        if (drt == GRIB2_DRT::LosslessJPEG2000) {
+            RC_ASSERT(drs.size() == 7);
+        } else {
+            RC_ASSERT(drs.size() == 8);
         }
-
-        // Pick a random valid key from the table.
-        auto idx = *rc::gen::inRange<std::size_t>(0, keys.size());
-        const auto& key = keys[idx];
-
-        // Lookup must succeed.
-        auto it = table.find(key);
-        RC_ASSERT(it != table.end());
-
-        // The translated code must be a valid integer.
-        RC_ASSERT(it->second >= 0);
+        // Decimal scale factor is forwarded verbatim.
+        RC_ASSERT(drs[2] == s.decimal_scale_factor);
     });
 
     REQUIRE(result);

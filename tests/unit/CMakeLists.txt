@@ -367,3 +367,30 @@ endif()
 
 add_test(NAME unit.lifecycle_grib2 COMMAND test_lifecycle_grib2)
 set_tests_properties(unit.lifecycle_grib2 PROPERTIES LABELS "unit;lifecycle;grib2" TIMEOUT 60)
+
+# ####################################################################################################################################################
+# test_cf_attributes
+#
+# Integration test for CF/UGRID convention compliance + per-variable attributes.  Drives the real Zarr_Driver (NCZarr fallback, serial netCDF-c) end-
+# to-end and reads the produced store back with netCDF-c to assert the written attributes.  Only built when eckit + netCDF are available and the build
+# is in NCZarr fallback mode (the serial nc_create path needs no MPI).
+# ####################################################################################################################################################
+if(eckit_FOUND AND netCDF_FOUND AND NOT AMIO_HAS_TENSORSTORE)
+    add_executable(
+        test_cf_attributes
+        test_cf_attributes.cpp
+        ${CMAKE_SOURCE_DIR}/src/drivers/zarr/zarr_driver.cpp
+        ${CMAKE_SOURCE_DIR}/src/drivers/zarr/zarr_nczarr_fallback.cpp
+        ${CMAKE_SOURCE_DIR}/src/drivers/common/var_attributes.cpp
+        ${CMAKE_SOURCE_DIR}/src/factory/backend_factory.cpp)
+
+    target_include_directories(test_cf_attributes PRIVATE ${CMAKE_SOURCE_DIR}/src)
+    target_compile_definitions(test_cf_attributes PRIVATE AMIO_NCZARR_FALLBACK AMIO_HAS_ECKIT=1)
+    target_link_libraries(test_cf_attributes PRIVATE AMIO::public_headers eckit netCDF::netcdf)
+    if(Threads_FOUND)
+        target_link_libraries(test_cf_attributes PRIVATE Threads::Threads)
+    endif()
+
+    add_test(NAME unit.cf_attributes COMMAND test_cf_attributes)
+    set_tests_properties(unit.cf_attributes PROPERTIES LABELS "unit;conventions;attributes;cf;ugrid" TIMEOUT 60)
+endif()

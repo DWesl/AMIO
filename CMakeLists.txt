@@ -319,7 +319,8 @@ add_library(
     src/workers/mpi_threading.cpp
     src/prefetch/prefetch_queue.cpp
     src/config/config_loader.cpp
-    src/factory/backend_factory.cpp)
+    src/factory/backend_factory.cpp
+    src/drivers/common/var_attributes.cpp)
 add_library(AMIO::amio_core ALIAS amio_core)
 
 # `amio_api.cpp` checks `AMIO_BUILDING_LIBRARY` so the AMIO_API macro emits `__declspec(dllexport)` on Windows when libamio itself is being built.  On

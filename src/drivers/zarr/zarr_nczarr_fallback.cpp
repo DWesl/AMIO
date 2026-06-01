@@ -28,6 +28,7 @@
 #include <vector>
 
 #include "drivers/zarr/zarr_driver.hpp"
+#include "drivers/common/var_attributes.hpp"
 #include "factory/backend_factory.hpp"
 #include "staging/staging_pool.hpp"
 
@@ -133,6 +134,48 @@ int nczarr_dtype_to_nc_type(amio_dtype_t dtype) {
     }
 }
 
+// Write one attribute set onto `varid` (NC_GLOBAL for file-level).
+// Must be called in define mode.  Numeric attributes use a type
+// matching their literal form; `_FillValue` uses the variable's type.
+void nczarr_write_attributes(int ncid, int varid, const VarAttributes& attrs, int var_nc_type) {
+    for (const auto& kv : attrs.items) {
+        const std::string& name = kv.first;
+        const AttrValue& val = kv.second;
+
+        if (val.is_numeric) {
+            if (name == "_FillValue" && varid != NC_GLOBAL && var_nc_type != NC_NAT) {
+                if (var_nc_type == NC_FLOAT) {
+                    float f = static_cast<float>(val.number);
+                    nczarr_check(nc_put_att_float(ncid, varid, name.c_str(), NC_FLOAT, 1, &f), "nc_put_att_float('" + name + "')");
+                    continue;
+                } else if (var_nc_type == NC_DOUBLE) {
+                    double d = val.number;
+                    nczarr_check(nc_put_att_double(ncid, varid, name.c_str(), NC_DOUBLE, 1, &d), "nc_put_att_double('" + name + "')");
+                    continue;
+                } else if (var_nc_type == NC_INT) {
+                    int i = static_cast<int>(val.number);
+                    nczarr_check(nc_put_att_int(ncid, varid, name.c_str(), NC_INT, 1, &i), "nc_put_att_int('" + name + "')");
+                    continue;
+                } else if (var_nc_type == NC_INT64) {
+                    long long ll = static_cast<long long>(val.number);
+                    nczarr_check(nc_put_att_longlong(ncid, varid, name.c_str(), NC_INT64, 1, &ll), "nc_put_att_longlong('" + name + "')");
+                    continue;
+                }
+            }
+
+            if (val.is_integer) {
+                long long ll = static_cast<long long>(val.number);
+                nczarr_check(nc_put_att_longlong(ncid, varid, name.c_str(), NC_INT64, 1, &ll), "nc_put_att_longlong('" + name + "')");
+            } else {
+                double d = val.number;
+                nczarr_check(nc_put_att_double(ncid, varid, name.c_str(), NC_DOUBLE, 1, &d), "nc_put_att_double('" + name + "')");
+            }
+        } else {
+            nczarr_check(nc_put_att_text(ncid, varid, name.c_str(), val.text.size(), val.text.c_str()), "nc_put_att_text('" + name + "')");
+        }
+    }
+}
+
 // Convert a local filesystem path to an NCZarr URI.
 // NCZarr uses file:// URIs with #mode=nczarr,<format> fragment.
 std::string to_nczarr_uri(const std::string& path) {
@@ -192,6 +235,9 @@ void Zarr_Driver::open_write(const eckit::Configuration& config) {
     // We still validate the codec.
     validate_codec(config_);
 
+    // Parse CF/UGRID convention metadata + per-variable attributes.
+    attributes_ = parse_dataset_attributes(config);
+
     // Reject cloud URIs (R8.6: no cloud KvStore in fallback mode).
     if (is_cloud_uri(config_.uri)) {
         throw std::runtime_error(
@@ -216,6 +262,16 @@ void Zarr_Driver::open_write(const eckit::Configuration& config) {
 
     int status = nc_create(nczarr_uri.c_str(), cmode, &ncid_);
     nczarr_check(status, "nc_create('" + nczarr_uri + "')");
+
+    // Write the global CF/UGRID `Conventions` attribute plus any extra
+    // global attributes.  These surface as Zarr group attributes
+    // (.zattrs) through NCZarr.
+    {
+        const std::string& conv = attributes_.conventions;
+        nczarr_check(nc_put_att_text(ncid_, NC_GLOBAL, "Conventions", conv.size(), conv.c_str()), "nc_put_att_text(Conventions)");
+        nczarr_write_attributes(ncid_, NC_GLOBAL, attributes_.global, NC_NAT);
+        global_attrs_written_ = true;
+    }
 
     is_open_ = true;
     is_write_mode_ = true;
@@ -302,6 +358,13 @@ void Zarr_Driver::write(const StagingBuffer& src, const VarMeta& meta) {
         int nc_type = nczarr_dtype_to_nc_type(meta.dtype);
         status = nc_def_var(ncid_, meta.name.c_str(), nc_type, meta.shape.rank, dimids.data(), &varid);
         nczarr_check(status, "nc_def_var('" + meta.name + "')");
+
+        // Apply CF/UGRID per-variable attributes from the manifest.
+        // Written as Zarr attributes (.zattrs) via NCZarr.  Still in
+        // define mode here.
+        if (const VarAttributes* var_attrs = attributes_.find(meta.name)) {
+            nczarr_write_attributes(ncid_, varid, *var_attrs, nc_type);
+        }
 
         // Set chunking based on config chunk_shape (flat chunks, no
         // sharding in NCZarr mode).

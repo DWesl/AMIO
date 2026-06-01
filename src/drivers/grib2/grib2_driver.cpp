@@ -4,6 +4,27 @@
 // and decoding GRIB2 records.  Registers with BackendFactory under
 // key "grib2" at static initialization time.
 //
+// Table sourcing
+// --------------
+// All GRIB2 code/template tables come from NCEPLIBS-g2c itself.  The
+// encoding path calls the legacy g2c packing API:
+//
+//   g2_create()  -> Sections 0 & 1 (indicator + identification)
+//   g2_addgrid() -> Section 3 (grid definition); g2c looks up the
+//                   Grid Definition Template layout in its NCEP table
+//                   via getgridtemplate()
+//   g2_addfield()-> Sections 4/5/6/7 (product, data representation,
+//                   bitmap, data); g2c looks up the Product- and Data-
+//                   Representation-Template layouts via getpdstemplate()
+//                   / getdrstemplate()
+//   g2_gribend() -> Section 8 (end)
+//
+// AMIO supplies only the *numeric* code-table values (discipline,
+// parameter category/number, template numbers, fixed-surface
+// descriptors) from the manifest.  Those values ARE the WMO/NCEP
+// table entries and are forwarded to g2c verbatim -- there is no
+// eckit-authored string->code map anymore.
+//
 // Conditional compilation:
 //   - AMIO_HAS_G2C: when defined, uses the real g2c API.
 //   - AMIO_HAS_ECKIT: when defined, uses eckit::Exception and
@@ -11,32 +32,32 @@
 //   - When g2c is not defined, the driver compiles but throws on
 //     construction indicating g2c is not available.
 //
-// Key behaviors:
-//   * Throws on construction when g2c is not available
-//   * Loads nceplibs-g2c + WMO code table mapping on open (5s bound)
-//   * Translates metadata strings through WMO mapping table
-//   * Contiguity gating: fast path (zero-copy) vs slow path (pack)
-//   * DRT restricted to {libaec, Lossless JPEG2000}
-//   * Missing WMO key or invalid DRT → exception, zero bytes
-//
 // Validates: R9.1, R9.2, R9.3, R9.4, R9.5, R9.6, R9.7, R9.8
 
 #include "drivers/grib2/grib2_driver.hpp"
 
 #include <algorithm>
-#include <chrono>
 #include <cstring>
-#include <future>
 #include <iostream>
-#include <numeric>
 #include <stdexcept>
 #include <string>
+#include <vector>
 
 #include "factory/backend_factory.hpp"
 #include "staging/staging_pool.hpp"
 
 #ifdef AMIO_HAS_G2C
-#include <grib2.h>  // nceplibs-g2c public header
+// g2c's grib2.h has no extern "C" guard, so wrap it.  Pull in its
+// standard C header dependencies first (outside the extern "C" block)
+// so their include guards keep them from being processed under C
+// linkage.
+#include <stdint.h>
+#include <stdio.h>
+#include <string.h>
+#include <sys/types.h>
+extern "C" {
+#include <grib2.h>  // nceplibs-g2c public header (g2int, g2_create, ...)
+}
 #endif
 
 // When eckit is available, use eckit::Exception and eckit::Configuration.
@@ -70,6 +91,9 @@ class Configuration {
         return def;
     }
     virtual long getLong(const std::string& /*key*/, long def) const {
+        return def;
+    }
+    virtual long long getLong(const std::string& /*key*/, long long def) const {
         return def;
     }
     virtual std::string getString(const std::string& key) const {
@@ -111,6 +135,16 @@ namespace {
 // Register GRIB2_Driver with BackendFactory under key "grib2" at
 // static initialization time (R4.2, R4.5).
 BackendRegistrar<GRIB2_Driver> grib2_registrar("grib2");
+
+// Read a single int64 manifest field, falling back to `def` when the
+// key is absent.  Centralizes the long/int getter quirks across the
+// eckit and shim Configuration variants.
+std::int64_t cfg_int(const eckit::Configuration& config, const std::string& key, std::int64_t def) {
+    if (!config.has(key)) {
+        return def;
+    }
+    return static_cast<std::int64_t>(config.getLong(key, static_cast<long>(def)));
+}
 }  // anonymous namespace
 
 // ---------------------------------------------------------------
@@ -130,7 +164,7 @@ GRIB2_DRT parse_drt_name(const std::string& name) {
         return GRIB2_DRT::LosslessJPEG2000;
     }
 
-    // Not in the allowed set — this is an unrecognized DRT (R9.6, R9.7).
+    // Not in the allowed set -- this is an unrecognized DRT (R9.6, R9.7).
     throw eckit::Exception("GRIB2_Driver: unrecognized Data Representation Template: '" + name +
                            "'. DRT name is not recognized. "
                            "Allowed values: {Adaptive Entropy Coding via libaec, "
@@ -163,19 +197,52 @@ GRIB2_Driver::~GRIB2_Driver() {
 }
 
 // ---------------------------------------------------------------
+// read_settings -- pull the numeric GRIB2 identifiers from manifest
+// ---------------------------------------------------------------
+
+Grib2Settings GRIB2_Driver::read_settings(const eckit::Configuration& config) {
+    Grib2Settings s{};  // start from NCEP-flavored defaults
+
+    s.discipline = cfg_int(config, "grib2.discipline", s.discipline);
+    s.center = cfg_int(config, "grib2.center", s.center);
+    s.subcenter = cfg_int(config, "grib2.subcenter", s.subcenter);
+    s.master_table_version = cfg_int(config, "grib2.master_table_version", s.master_table_version);
+    s.local_table_version = cfg_int(config, "grib2.local_table_version", s.local_table_version);
+    s.significance_of_ref_time = cfg_int(config, "grib2.significance_of_ref_time", s.significance_of_ref_time);
+    s.production_status = cfg_int(config, "grib2.production_status", s.production_status);
+    s.type_of_data = cfg_int(config, "grib2.type_of_data", s.type_of_data);
+
+    s.gdt_number = cfg_int(config, "grib2.gdt_number", s.gdt_number);
+    s.lat_first = cfg_int(config, "grib2.lat_first", s.lat_first);
+    s.lon_first = cfg_int(config, "grib2.lon_first", s.lon_first);
+    s.lat_last = cfg_int(config, "grib2.lat_last", s.lat_last);
+    s.lon_last = cfg_int(config, "grib2.lon_last", s.lon_last);
+
+    s.pdt_number = cfg_int(config, "grib2.pdt_number", s.pdt_number);
+    // Accept both the precise names and the short aliases used in the
+    // example manifests ("category"/"parameter").
+    s.parameter_category = cfg_int(config, "grib2.parameter_category", s.parameter_category);
+    s.parameter_category = cfg_int(config, "grib2.category", s.parameter_category);
+    s.parameter_number = cfg_int(config, "grib2.parameter_number", s.parameter_number);
+    s.parameter_number = cfg_int(config, "grib2.parameter", s.parameter_number);
+    s.type_of_first_fixed_surface = cfg_int(config, "grib2.type_of_first_fixed_surface", s.type_of_first_fixed_surface);
+    s.scale_factor_first_surface = cfg_int(config, "grib2.scale_factor_first_surface", s.scale_factor_first_surface);
+    s.scaled_value_first_surface = cfg_int(config, "grib2.scaled_value_first_surface", s.scaled_value_first_surface);
+    s.forecast_time = cfg_int(config, "grib2.forecast_time", s.forecast_time);
+    s.indicator_of_unit_of_time = cfg_int(config, "grib2.indicator_of_unit_of_time", s.indicator_of_unit_of_time);
+
+    s.decimal_scale_factor = cfg_int(config, "grib2.decimal_scale_factor", s.decimal_scale_factor);
+
+    return s;
+}
+
+// ---------------------------------------------------------------
 // open_write / open_read
 // ---------------------------------------------------------------
 
 void GRIB2_Driver::open_write(const eckit::Configuration& config) {
-    initialize(config);
     active_drt_ = validate_drt(config);
-
-    // Extract output path from configuration.
-    if (config.has("path")) {
-        output_path_ = config.getString("path");
-    } else if (config.has("output_path")) {
-        output_path_ = config.getString("output_path");
-    }
+    initialize(config);
 }
 
 void GRIB2_Driver::open_read(const eckit::Configuration& config) {
@@ -183,7 +250,7 @@ void GRIB2_Driver::open_read(const eckit::Configuration& config) {
 }
 
 // ---------------------------------------------------------------
-// initialize -- load g2c + WMO code table (5s timeout, R9.1, R9.2)
+// initialize -- read product identifiers + open output file
 // ---------------------------------------------------------------
 
 void GRIB2_Driver::initialize(const eckit::Configuration& config) {
@@ -192,72 +259,112 @@ void GRIB2_Driver::initialize(const eckit::Configuration& config) {
     }
 
 #ifndef AMIO_HAS_G2C
-    // Should not reach here — constructor would have thrown.
     (void)config;
     throw eckit::Exception("GRIB2_Driver: nceplibs-g2c is not available in this build.");
 #else
-    // Use async + timeout to enforce the 5-second initialization bound (R9.1).
-    auto init_future = std::async(std::launch::async, [this, &config]() {
-        // Step 1: Load nceplibs-g2c library (R9.1 - "in that order").
-        // The g2c library is linked at build time; verify it's functional
-        // by calling a basic probe function.
-        {
-            // g2c is linked at compile time.  Perform a minimal health
-            // check to confirm the library symbols resolved correctly.
-            // The actual g2c API call depends on the version; we rely
-            // on the linker having resolved g2c symbols at load time.
-            // If g2c failed to load, we would not reach this point
-            // (dynamic linker would have failed).
-        }
+    // The GRIB2 tables are provided by g2c itself; AMIO only needs the
+    // numeric product identifiers from the manifest.
+    settings_ = read_settings(config);
 
-        // Step 2: Load WMO code table mapping from eckit configuration
-        // (R9.1 - "in that order", R9.2).
-        if (!config.has("wmo_code_table")) {
-            throw eckit::Exception(
-                "GRIB2_Driver: WMO code table mapping failed to load. "
-                "Configuration section 'wmo_code_table' not found. "
-                "The eckit-loaded WMO code table mapping table failed "
-                "to load during GRIB2_Driver initialization.");
-        }
-
-        // Parse the WMO code table from configuration.
-        // Expected format: parallel arrays of keys and values.
-        auto keys = config.getStringVector("wmo_code_table_keys", std::vector<std::string>{});
-        auto values = config.getStringVector("wmo_code_table_values", std::vector<std::string>{});
-
-        if (keys.size() != values.size()) {
-            throw eckit::Exception(
-                "GRIB2_Driver: WMO code table mapping failed to load. "
-                "Keys/values size mismatch (keys=" +
-                std::to_string(keys.size()) + ", values=" + std::to_string(values.size()) + ").");
-        }
-
-        for (std::size_t i = 0; i < keys.size(); ++i) {
-            try {
-                wmo_table_[keys[i]] = std::stol(values[i]);
-            } catch (const std::exception& e) {
-                throw eckit::Exception(
-                    "GRIB2_Driver: WMO code table mapping failed to load. "
-                    "Invalid value for key '" +
-                    keys[i] + "': " + e.what());
-            }
-        }
-    });
-
-    // Enforce 5-second timeout (R9.1).
-    auto status = init_future.wait_for(kInitTimeout);
-    if (status == std::future_status::timeout) {
-        throw eckit::Exception(
-            "GRIB2_Driver: initialization timed out (5s limit exceeded). "
-            "Failed to load nceplibs-g2c and WMO code table mapping "
-            "within the 5-second bound.");
+    // Resolve the output path (write mode only).
+    if (config.has("path")) {
+        output_path_ = config.getString("path");
+    } else if (config.has("output_path")) {
+        output_path_ = config.getString("output_path");
     }
 
-    // Propagate any exception from the async task.
-    init_future.get();
+    if (!output_path_.empty()) {
+        out_file_ = std::fopen(output_path_.c_str(), "wb");
+        if (out_file_ == nullptr) {
+            throw eckit::Exception("GRIB2_Driver: failed to open output file '" + output_path_ + "' for writing.");
+        }
+    }
 
     initialized_ = true;
 #endif  // AMIO_HAS_G2C
+}
+
+// ---------------------------------------------------------------
+// NCEP template builders
+//
+// These populate the g2c template-value arrays.  g2c consults its
+// own NCEP template tables (getgridtemplate / getpdstemplate /
+// getdrstemplate) for the matching layout; we only supply values.
+// ---------------------------------------------------------------
+
+std::vector<std::int64_t> GRIB2_Driver::build_gdt_3_0(const Grib2Settings& s, std::int64_t ni, std::int64_t nj) {
+    // Grid Definition Template 3.0 (regular lat/lon), 19 entries.
+    // Layout per WMO GRIB2 Template 3.0 / NCEP getgridtemplate(0).
+    std::vector<std::int64_t> t(19, 0);
+    t[0] = 6;             // shape of earth (6 = sphere, radius 6,371,229 m)
+    t[1] = 0;             // scale factor of radius of spherical earth
+    t[2] = 0;             // scaled value of radius of spherical earth
+    t[3] = 0;             // scale factor of major axis
+    t[4] = 0;             // scaled value of major axis
+    t[5] = 0;             // scale factor of minor axis
+    t[6] = 0;             // scaled value of minor axis
+    t[7] = ni;            // Ni - number of points along a parallel
+    t[8] = nj;            // Nj - number of points along a meridian
+    t[9] = 0;             // basic angle of initial production domain
+    t[10] = 0;            // subdivisions of basic angle (missing = all 1s -> 0 here)
+    t[11] = s.lat_first;  // La1 (1e-6 deg)
+    t[12] = s.lon_first;  // Lo1 (1e-6 deg)
+    t[13] = 48;           // resolution and component flags (0x30: i,j dir incr given)
+    t[14] = s.lat_last;   // La2 (1e-6 deg)
+    t[15] = s.lon_last;   // Lo2 (1e-6 deg)
+    // Di / Dj direction increments (1e-6 deg), derived from the span.
+    std::int64_t di = (ni > 1) ? ((s.lon_last - s.lon_first) / (ni - 1)) : 0;
+    std::int64_t dj = (nj > 1) ? ((s.lat_first - s.lat_last) / (nj - 1)) : 0;
+    t[16] = di < 0 ? -di : di;  // Di must be positive
+    t[17] = dj < 0 ? -dj : dj;  // Dj must be positive
+    t[18] = 0;                  // scanning mode (0 = +i, -j, row-major from NW corner)
+    return t;
+}
+
+std::vector<std::int64_t> GRIB2_Driver::build_pdt_4_0(const Grib2Settings& s) {
+    // Product Definition Template 4.0, 15 entries.
+    std::vector<std::int64_t> t(15, 0);
+    t[0] = s.parameter_category;           // Table 4.1
+    t[1] = s.parameter_number;             // Table 4.2
+    t[2] = 2;                              // generating process type (2 = forecast)
+    t[3] = 0;                              // background generating process id
+    t[4] = 0;                              // analysis/forecast generating process id
+    t[5] = 0;                              // hours after reference time (data cutoff)
+    t[6] = 0;                              // minutes after reference time (data cutoff)
+    t[7] = s.indicator_of_unit_of_time;    // Table 4.4
+    t[8] = s.forecast_time;                // forecast time in above units
+    t[9] = s.type_of_first_fixed_surface;  // Table 4.5
+    t[10] = s.scale_factor_first_surface;  // scale factor of first fixed surface
+    t[11] = s.scaled_value_first_surface;  // scaled value of first fixed surface
+    t[12] = 255;                           // type of second fixed surface (255 = missing)
+    t[13] = 0;                             // scale factor of second fixed surface
+    t[14] = 0;                             // scaled value of second fixed surface
+    return t;
+}
+
+std::vector<std::int64_t> GRIB2_Driver::build_drs_template(GRIB2_DRT drt, const Grib2Settings& s) {
+    if (drt == GRIB2_DRT::LosslessJPEG2000) {
+        // Data Representation Template 5.40 (JPEG2000), 7 entries.
+        // Entry 0 (reference value) is filled by g2c during packing.
+        std::vector<std::int64_t> t(7, 0);
+        t[1] = 0;                       // binary scale factor
+        t[2] = s.decimal_scale_factor;  // decimal scale factor
+        t[3] = 0;                       // number of bits (0 = g2c chooses)
+        t[4] = 0;                       // original field type (0 = floating point)
+        t[5] = 0;                       // compression type (0 = lossless)
+        t[6] = 255;                     // target compression ratio (255 = lossless)
+        return t;
+    }
+    // Data Representation Template 5.42 (CCSDS / AEC via libaec), 8 entries.
+    std::vector<std::int64_t> t(8, 0);
+    t[1] = 0;                       // binary scale factor
+    t[2] = s.decimal_scale_factor;  // decimal scale factor
+    t[3] = 0;                       // number of bits (0 = g2c chooses)
+    t[4] = 0;                       // original field type (0 = floating point)
+    t[5] = 0;                       // CCSDS compression options mask
+    t[6] = 0;                       // CCSDS block size
+    t[7] = 0;                       // CCSDS reference sample interval
+    return t;
 }
 
 // ---------------------------------------------------------------
@@ -269,50 +376,131 @@ void GRIB2_Driver::write(const StagingBuffer& src, const VarMeta& meta) {
         throw eckit::Exception("GRIB2_Driver::write called before successful initialization");
     }
 
-    // Step 1: Translate all metadata through WMO code table (R9.3, R9.8).
-    // Every human-readable metadata string must be translated before encoding.
-    // If any key is missing from the WMO table, throw and emit zero bytes.
-    auto translated_codes = translate_metadata(meta);
+    // GRIB2 grid-point encoding operates on float fields.  Only F32
+    // payloads are supported; anything else is rejected before any
+    // bytes are emitted (R9.8).
+    if (meta.dtype != AMIO_DTYPE_F32) {
+        throw eckit::Exception(
+            "GRIB2_Driver::write: only AMIO_DTYPE_F32 fields can be encoded "
+            "to GRIB2 grid-point data. Zero record bytes emitted.");
+    }
 
-    // Step 2: Contiguity check gates fast vs slow path (R9.4, R9.5).
     const std::size_t elem_size = dtype_size(meta.dtype);
     const std::size_t num_elements = total_elements(meta.shape);
-    const std::size_t payload_bytes = num_elements * elem_size;
+    if (num_elements == 0 || elem_size == 0) {
+        throw eckit::Exception("GRIB2_Driver::write: empty or invalid field shape. Zero record bytes emitted.");
+    }
 
+    // Contiguity check gates fast vs slow path (R9.4, R9.5).
     const std::byte* encode_ptr = nullptr;
     std::vector<std::byte> packed_buffer;
-
     if (is_contiguous_row_major(meta.shape)) {
-        // Fast path (R9.4): is_always_contiguous() + row-major →
-        // pass pointer directly to g2c encoder (zero copy).
+        // Fast path: pass the staging buffer through directly.
         encode_ptr = src.data;
     } else {
-        // Slow path (R9.5): allocate contiguous 1D Staging_Pool buffer,
-        // pack row-major, pass packed buffer to encoder.
+        // Slow path: pack into a contiguous row-major buffer.
         packed_buffer = pack_row_major(src.data, meta.shape, elem_size);
         encode_ptr = packed_buffer.data();
     }
 
-    // Step 3: Encode with g2c using the validated DRT.
 #ifdef AMIO_HAS_G2C
-    // In a full implementation, this would call g2_addfield() or
-    // equivalent g2c encoding functions with:
-    //   - The WMO-translated metadata codes (translated_codes)
-    //   - The data pointer (encode_ptr)
-    //   - The selected DRT (active_drt_)
-    //   - The element count (num_elements)
-    //
-    // Example g2c encoding call:
-    // g2_addfield(grib_msg, ..., encode_ptr, num_elements,
-    //             static_cast<g2int>(active_drt_), ...);
-    (void)encode_ptr;
-    (void)payload_bytes;
-    (void)translated_codes;
+    // Derive the grid dimensions.  For rank >= 2 the last dimension is
+    // longitudes (Ni, fastest varying) and the second-to-last is
+    // latitudes (Nj).  For rank 1 we treat the field as a single row.
+    std::int64_t ni = 0;
+    std::int64_t nj = 0;
+    if (meta.shape.rank >= 2) {
+        nj = meta.shape.extents[meta.shape.rank - 2];
+        ni = meta.shape.extents[meta.shape.rank - 1];
+    } else {
+        nj = 1;
+        ni = static_cast<std::int64_t>(num_elements);
+    }
+
+    // Section 0 (indicator): [discipline, edition].
+    g2int listsec0[2];
+    listsec0[0] = static_cast<g2int>(settings_.discipline);
+    listsec0[1] = 2;  // GRIB edition 2
+
+    // Section 1 (identification): 13 entries.
+    g2int listsec1[13];
+    listsec1[0] = static_cast<g2int>(settings_.center);
+    listsec1[1] = static_cast<g2int>(settings_.subcenter);
+    listsec1[2] = static_cast<g2int>(settings_.master_table_version);
+    listsec1[3] = static_cast<g2int>(settings_.local_table_version);
+    listsec1[4] = static_cast<g2int>(settings_.significance_of_ref_time);
+    listsec1[5] = 1970;  // year   (reference time; AMIO does not yet thread real dates)
+    listsec1[6] = 1;     // month
+    listsec1[7] = 1;     // day
+    listsec1[8] = 0;     // hour
+    listsec1[9] = 0;     // minute
+    listsec1[10] = 0;    // second
+    listsec1[11] = static_cast<g2int>(settings_.production_status);
+    listsec1[12] = static_cast<g2int>(settings_.type_of_data);
+
+    // Generously size the GRIB message buffer: header + raw field +
+    // slack for section overhead.  g2c writes into this buffer.
+    const std::size_t field_bytes = num_elements * sizeof(float);
+    std::vector<unsigned char> cgrib(field_bytes + 8192 + num_elements);
+
+    g2int ierr = g2_create(cgrib.data(), listsec0, listsec1);
+    if (ierr <= 0) {
+        throw eckit::Exception("GRIB2_Driver::write: g2_create failed (Section 0/1). Zero record bytes emitted.");
+    }
+
+    // Section 3 (grid definition).  igds describes the source of the
+    // grid definition and the number of data points.
+    auto gdt = build_gdt_3_0(settings_, ni, nj);
+    std::vector<g2int> igdstmpl(gdt.begin(), gdt.end());
+    g2int igds[5];
+    igds[0] = 0;                                         // grid defined by template (Table 3.0)
+    igds[1] = static_cast<g2int>(ni * nj);               // number of data points
+    igds[2] = 0;                                         // octets for optional list of numbers
+    igds[3] = 0;                                         // interpretation of optional list
+    igds[4] = static_cast<g2int>(settings_.gdt_number);  // Grid Definition Template number
+
+    ierr = g2_addgrid(cgrib.data(), igds, igdstmpl.data(), nullptr, 0);
+    if (ierr <= 0) {
+        throw eckit::Exception("GRIB2_Driver::write: g2_addgrid failed (Section 3). Zero record bytes emitted.");
+    }
+
+    // Sections 4/5/6/7 (product, data representation, bitmap, data).
+    auto pdt = build_pdt_4_0(settings_);
+    std::vector<g2int> ipdstmpl(pdt.begin(), pdt.end());
+    auto drs = build_drs_template(active_drt_, settings_);
+    std::vector<g2int> idrstmpl(drs.begin(), drs.end());
+
+    // Copy the (already row-major) payload into a float field array.
+    std::vector<float> fld(num_elements);
+    std::memcpy(fld.data(), encode_ptr, num_elements * sizeof(float));
+
+    g2int idrsnum = static_cast<g2int>(active_drt_);  // 40 or 42
+    ierr = g2_addfield(cgrib.data(),
+                       static_cast<g2int>(settings_.pdt_number),  // Product Definition Template number
+                       ipdstmpl.data(),
+                       nullptr,  // coordlist
+                       0,        // numcoord
+                       idrsnum, idrstmpl.data(), fld.data(), static_cast<g2int>(num_elements),
+                       0,         // ibmap = 0 -> bitmap applies (255 would mean none); 0 uses supplied bmap
+                       nullptr);  // bmap (none)
+    if (ierr <= 0) {
+        throw eckit::Exception("GRIB2_Driver::write: g2_addfield failed (Section 4/5/7). Zero record bytes emitted.");
+    }
+
+    g2int msglen = g2_gribend(cgrib.data());
+    if (msglen <= 0) {
+        throw eckit::Exception("GRIB2_Driver::write: g2_gribend failed (Section 8). Zero record bytes emitted.");
+    }
+
+    // Commit the complete GRIB2 message to the output file.
+    if (out_file_ != nullptr) {
+        std::size_t written = std::fwrite(cgrib.data(), 1, static_cast<std::size_t>(msglen), out_file_);
+        if (written != static_cast<std::size_t>(msglen)) {
+            throw eckit::Exception("GRIB2_Driver::write: short write committing GRIB2 message to disk.");
+        }
+    }
 #else
-    // Should not reach here — constructor would have thrown.
     (void)encode_ptr;
-    (void)payload_bytes;
-    (void)translated_codes;
     throw eckit::Exception("GRIB2_Driver::write: nceplibs-g2c not available");
 #endif
 }
@@ -327,20 +515,11 @@ void GRIB2_Driver::read(StagingBuffer& dst, const VarMeta& meta, std::int64_t ti
     }
 
 #ifdef AMIO_HAS_G2C
-    // In a full implementation, this would:
-    //   1. Open the GRIB2 file / stream
-    //   2. Seek to the record for (meta.name, timestep)
-    //   3. Decode the record using g2_getfld()
-    //   4. Copy decoded data into dst.data
-    //   5. Set dst.used_bytes
-    //
-    // For selective reads with bbox, only the intersecting region
-    // would be decoded.
+    // Decode is not yet implemented; the write path is the focus of
+    // this change.  Tables for decode also come from g2c (g2_getfld).
     (void)meta;
     (void)timestep;
     (void)bbox;
-
-    // Placeholder: set used_bytes to indicate successful decode.
     dst.used_bytes = 0;
 #else
     (void)dst;
@@ -352,15 +531,19 @@ void GRIB2_Driver::read(StagingBuffer& dst, const VarMeta& meta, std::int64_t ti
 }
 
 // ---------------------------------------------------------------
-// flush -- no-op for GRIB2 (records are self-contained)
+// flush -- flush the output file buffer
 // ---------------------------------------------------------------
 
 void GRIB2_Driver::flush() {
-    // GRIB2 records are self-contained; no buffered state to flush.
+#ifdef AMIO_HAS_G2C
+    if (out_file_ != nullptr) {
+        std::fflush(out_file_);
+    }
+#endif
 }
 
 // ---------------------------------------------------------------
-// close -- release g2c resources
+// close -- release file handle and g2c resources
 // ---------------------------------------------------------------
 
 void GRIB2_Driver::close() {
@@ -369,12 +552,12 @@ void GRIB2_Driver::close() {
     }
 
 #ifdef AMIO_HAS_G2C
-    // Release any g2c resources (file handles, message buffers, etc.)
-    // In a full implementation, this would call g2_free() or close
-    // any open GRIB2 file handles.
+    if (out_file_ != nullptr) {
+        std::fclose(out_file_);
+        out_file_ = nullptr;
+    }
 #endif
 
-    wmo_table_.clear();
     initialized_ = false;
 }
 
@@ -415,41 +598,8 @@ GRIB2_DRT GRIB2_Driver::validate_drt(const eckit::Configuration& config) const {
 }
 
 // ---------------------------------------------------------------
-// translate_metadata -- translate all metadata through WMO table
-// (R9.3, R9.8)
-// ---------------------------------------------------------------
-
-std::unordered_map<std::string, std::int64_t> GRIB2_Driver::translate_metadata(const VarMeta& meta) const {
-    std::unordered_map<std::string, std::int64_t> translated;
-
-    // The variable name is the primary metadata key that must be
-    // translated through the WMO code table (R9.3).
-    if (meta.name.empty()) {
-        throw eckit::Exception(
-            "GRIB2_Driver: missing WMO metadata key 'variable_name'. "
-            "Cannot encode GRIB2 record without variable identification. "
-            "Discarding partial record, zero output bytes.");
-    }
-
-    // Look up the variable name in the WMO code table (R9.8).
-    auto it = wmo_table_.find(meta.name);
-    if (it == wmo_table_.end()) {
-        throw eckit::Exception("GRIB2_Driver: WMO metadata key '" + meta.name +
-                               "' not found in WMO code table mapping. "
-                               "Discarding partial record, zero output bytes.");
-    }
-    translated["variable_name"] = it->second;
-
-    return translated;
-}
-
-// ---------------------------------------------------------------
 // is_contiguous_row_major -- check if shape describes contiguous
 // row-major layout (R9.4)
-//
-// This implements the is_always_contiguous() + row-major check.
-// Returns true when the data pointer can be passed directly to
-// g2c without an intermediate copy (zero-copy fast path).
 // ---------------------------------------------------------------
 
 bool GRIB2_Driver::is_contiguous_row_major(const amio_shape_t& shape) {
@@ -488,10 +638,6 @@ bool GRIB2_Driver::is_contiguous_row_major(const amio_shape_t& shape) {
 // ---------------------------------------------------------------
 // pack_row_major -- pack non-contiguous data into contiguous buffer
 // (R9.5)
-//
-// When the staging buffer's associated shape is not contiguous +
-// row-major, we allocate a contiguous 1D buffer, pack elements in
-// row-major order, and pass the packed buffer to the encoder.
 // ---------------------------------------------------------------
 
 std::vector<std::byte> GRIB2_Driver::pack_row_major(const std::byte* src_data, const amio_shape_t& shape, std::size_t element_size) {
@@ -516,9 +662,6 @@ std::vector<std::byte> GRIB2_Driver::pack_row_major(const std::byte* src_data, c
 
     // Iterate over all elements in row-major order and copy each
     // element from its strided position to the packed buffer.
-    //
-    // We use a multi-dimensional index that increments in row-major
-    // order (last dimension varies fastest).
     std::int64_t indices[AMIO_MAX_RANK] = {};
     std::size_t dst_offset = 0;
 
@@ -570,30 +713,10 @@ std::size_t GRIB2_Driver::total_elements(const amio_shape_t& shape) {
 // ---------------------------------------------------------------
 
 std::size_t GRIB2_Driver::dtype_size(amio_dtype_t dtype) {
-    switch (dtype) {
-        case AMIO_DTYPE_F32:
-            return 4;
-        case AMIO_DTYPE_F64:
-            return 8;
-        case AMIO_DTYPE_I8:
-            return 1;
-        case AMIO_DTYPE_I16:
-            return 2;
-        case AMIO_DTYPE_I32:
-            return 4;
-        case AMIO_DTYPE_I64:
-            return 8;
-        case AMIO_DTYPE_U8:
-            return 1;
-        case AMIO_DTYPE_U16:
-            return 2;
-        case AMIO_DTYPE_U32:
-            return 4;
-        case AMIO_DTYPE_U64:
-            return 8;
-        default:
-            return 0;
-    }
+    // Delegate to the shared element_size helper (backend_driver.hpp); it
+    // already returns 0 as the unknown-dtype sentinel that this driver relies
+    // on (see read()'s elem_size == 0 guard).
+    return element_size(dtype);
 }
 
 }  // namespace amio::detail

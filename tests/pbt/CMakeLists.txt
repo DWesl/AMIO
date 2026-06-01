@@ -528,7 +528,8 @@ set_tests_properties(pbt.p25_grib2_metadata_invariant PROPERTIES LABELS "pbt;p25
 add_executable(
     pbt_p26_zarr_cloud_failure_idempotence
     test_p26_zarr_cloud_failure_idempotence.cpp ${CMAKE_SOURCE_DIR}/src/drivers/zarr/zarr_driver.cpp
-    ${CMAKE_SOURCE_DIR}/src/drivers/zarr/zarr_nczarr_fallback.cpp ${CMAKE_SOURCE_DIR}/src/factory/backend_factory.cpp)
+    ${CMAKE_SOURCE_DIR}/src/drivers/zarr/zarr_nczarr_fallback.cpp ${CMAKE_SOURCE_DIR}/src/drivers/common/var_attributes.cpp
+    ${CMAKE_SOURCE_DIR}/src/factory/backend_factory.cpp)
 
 target_link_libraries(pbt_p26_zarr_cloud_failure_idempotence PRIVATE AMIO::pbt_common)
 
@@ -560,6 +561,7 @@ set_tests_properties(pbt.p27_abi_stability PROPERTIES LABELS "pbt;p27;abi;stabil
 # ####################################################################################################################################################
 add_executable(
     pbt_p28_netcdf_data_model_validation test_p28_netcdf_data_model_validation.cpp ${CMAKE_SOURCE_DIR}/src/drivers/netcdf/netcdf_driver.cpp
+                                         ${CMAKE_SOURCE_DIR}/src/drivers/common/var_attributes.cpp
                                          ${CMAKE_SOURCE_DIR}/src/factory/backend_factory.cpp)
 
 target_link_libraries(pbt_p28_netcdf_data_model_validation PRIVATE AMIO::pbt_common)

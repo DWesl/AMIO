@@ -27,6 +27,7 @@
 #include "amio/amio_errors.h"
 #include "amio/amio_types.h"
 #include "c_boundary/handle_table.hpp"
+#include "config/config_loader.hpp"
 #include "factory/backend_driver.hpp"
 #include "prefetch/prefetch_queue.hpp"
 
@@ -100,6 +101,12 @@ struct DatasetRecord {
 
     // ---- Read path state (task 9.2) ----
 
+    // Retained dataset configuration (parsed at open_dataset).
+    // Read-mode datasets use this to source the prefetch depth and
+    // read timeout when the per-variable PrefetchQueue is created
+    // lazily on first read (Req 2.3, 2.4); see task 6/8.
+    Config dataset_config;
+
     // Prefetch queue for read-mode datasets.  Created during
     // open_dataset when mode == AMIO_MODE_READ.  Null for write
     // datasets.
@@ -133,14 +140,13 @@ struct AMIO_Core {
     std::atomic<std::uint64_t> next_dataset_id{1};
 
     // Staging pool (owned by AMIO_Core, may be null in stub mode).
-    StagingPool *staging_pool = nullptr;
+    std::unique_ptr<StagingPool> staging_pool;
 
     // Staging timeout from config (milliseconds).
     std::int64_t staging_timeout_ms = 5000;
 
     // Worker pool (owned by AMIO_Core, may be null in stub mode).
-    // TODO: Replace with real WorkerPool* when task 9.x lands.
-    WorkerPool *worker_pool = nullptr;
+    std::unique_ptr<WorkerPool> worker_pool;
 };
 
 // process_handle_table() -- accessor for the singleton HandleTable
