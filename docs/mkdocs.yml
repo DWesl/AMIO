@@ -63,6 +63,10 @@ markdown_extensions:
       guess_lang: false
   - toc:
       permalink: true
+  - pymdownx.snippets:
+      base_path:
+        - ..
+      check_paths: false
   - pymdownx.superfences:
       custom_fences:
         - name: mermaid
