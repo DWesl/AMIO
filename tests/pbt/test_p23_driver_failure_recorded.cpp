@@ -73,6 +73,24 @@ class FailingDriver : public Backend_Driver {
 };
 
 // ===================================================================
+// SucceedingDriver -- a Backend_Driver that accepts writes without
+// throwing.  Used by P23c ("no failure on success") to verify that
+// flush returns AMIO_OK when the driver does not fail.
+// ===================================================================
+
+class SucceedingDriver : public Backend_Driver {
+   public:
+    void open_write(const eckit::Configuration& /*config*/) override {}
+    void open_read(const eckit::Configuration& /*config*/) override {}
+    void write(const StagingBuffer& /*src*/, const VarMeta& /*meta*/) override {
+        // No-op: driver succeeds.
+    }
+    void read(StagingBuffer& /*dst*/, const VarMeta& /*meta*/, std::int64_t /*timestep*/, const std::optional<BoundingBox>& /*bbox*/) override {}
+    void flush() override {}
+    void close() override {}
+};
+
+// ===================================================================
 // Helper: Create a test context that uses the FailingDriver to
 // verify that failures are recorded against the write handle and
 // surfaced on flush/wait.
@@ -130,6 +148,59 @@ struct FailureTestContext {
 
     FailureTestContext(const FailureTestContext&) = delete;
     FailureTestContext& operator=(const FailureTestContext&) = delete;
+};
+
+// ===================================================================
+// SuccessTestContext -- like FailureTestContext but registers a
+// SucceedingDriver so that writes complete without failures.
+// Used by P23c ("no failure on success").
+// ===================================================================
+
+struct SuccessTestContext {
+    TempDir dir;
+    std::string manifest_path;
+    amio_core_handle core = nullptr;
+    amio_dataset_handle dataset = nullptr;
+    bool valid = false;
+
+    SuccessTestContext() {
+        BackendFactory::instance().register_driver("netcdf4", []() -> std::unique_ptr<Backend_Driver> { return std::make_unique<SucceedingDriver>(); });
+
+        std::string yaml = make_manifest_yaml("netcdf4", 8, 65536, 1, 5000);
+        manifest_path = write_manifest(dir, yaml);
+
+        amio_status_t rc = amio_init(manifest_path.c_str(), &core);
+        if (rc != AMIO_OK || core == nullptr) {
+            return;
+        }
+
+        std::string ds_yaml = make_dataset_config_yaml("netcdf4", dir.file("output.nc"));
+        std::string ds_path = dir.file("dataset.yaml");
+        std::ofstream ofs(ds_path);
+        ofs << ds_yaml;
+        ofs.close();
+
+        rc = amio_open_dataset(core, ds_path.c_str(), AMIO_MODE_WRITE, &dataset);
+        if (rc != AMIO_OK || dataset == nullptr) {
+            amio_finalize(core);
+            core = nullptr;
+            return;
+        }
+
+        valid = true;
+    }
+
+    ~SuccessTestContext() {
+        if (dataset) {
+            amio_close_dataset(dataset);
+        }
+        if (core) {
+            amio_finalize(core);
+        }
+    }
+
+    SuccessTestContext(const SuccessTestContext&) = delete;
+    SuccessTestContext& operator=(const SuccessTestContext&) = delete;
 };
 
 }  // anonymous namespace
@@ -225,11 +296,11 @@ TEST_CASE("P23: Driver failure recorded - failure retained until flush", "[pbt][
 
 TEST_CASE("P23: Driver failure recorded - no failure on success", "[pbt][p23][driver_failure][no_failure]") {
     auto result = rc::check("successful writes do not record failures", []() {
-        FailureTestContext ctx;
+        SuccessTestContext ctx;
         RC_PRE(ctx.valid);
 
-        // Submit a valid write (which completes immediately in
-        // stub mode without driver failure).
+        // Submit a valid write (which completes successfully via
+        // the SucceedingDriver without driver failure).
         amio_shape_t shape = {};
         shape.rank = 1;
         shape.extents[0] = *rc::gen::inRange<int64_t>(1, 100);

@@ -289,6 +289,25 @@ std::size_t NetCDF_Driver::dtype_byte_size(amio_dtype_t dtype) {
 }
 
 // ===================================================================
+// resolve_dataset_path -- read the dataset file path from the config.
+//
+// The manifest schema and the example/test dataset configs are not fully
+// consistent: some use `path`, others use `output_path` (the GRIB2 driver
+// already accepts both).  Accept either here so the NetCDF driver opens
+// against the same key the rest of the toolchain emits.  Returns an empty
+// string when neither key is present.
+// ===================================================================
+static std::string resolve_dataset_path(const eckit::Configuration& config) {
+    if (config.has("path")) {
+        return config.getString("path");
+    }
+    if (config.has("output_path")) {
+        return config.getString("output_path");
+    }
+    return std::string{};
+}
+
+// ===================================================================
 // open_write -- prepare for parallel write operations (R7.1, R7.4).
 // ===================================================================
 
@@ -299,11 +318,10 @@ void NetCDF_Driver::open_write(const eckit::Configuration& config) {
 
 #ifdef AMIO_HAS_NETCDF
     // Extract configuration parameters.
-    std::string path;
-    if (!config.has("path")) {
-        throw eckit::Exception("NetCDF_Driver::open_write: 'path' field is required");
+    std::string path = resolve_dataset_path(config);
+    if (path.empty()) {
+        throw eckit::Exception("NetCDF_Driver::open_write: 'path' (or 'output_path') field is required");
     }
-    path = config.getString("path");
     file_path_ = path;
 
     // Parse data model (R7.2, R7.3).
@@ -311,8 +329,22 @@ void NetCDF_Driver::open_write(const eckit::Configuration& config) {
     data_model_ = parse_data_model(model_str);
 
     // Parse and validate compression codec (R7.5).
-    codec_allow_list_ = config.getStringVector("codec_allow_list", std::vector<std::string>{});
-    active_codec_ = config.getString("codec", "");
+    //
+    // The manifest nests the codec settings under a `codec:` map
+    // (`codec.active_codec` + `codec.lossless_allow_list`), matching the
+    // ConfigLoader schema and the example manifests.  Read those nested
+    // keys via eckit's dotted-key access.  Fall back to the legacy flat
+    // keys (`codec` / `codec_allow_list`) when the nested form is absent
+    // so older configs keep working.  `getString("codec")` is NOT used
+    // directly because `codec` is a map node (eckit throws Bad Conversion
+    // converting a map to a string).
+    if (config.has("codec.active_codec") || config.has("codec.lossless_allow_list")) {
+        active_codec_ = config.getString("codec.active_codec", "");
+        codec_allow_list_ = config.getStringVector("codec.lossless_allow_list", std::vector<std::string>{});
+    } else {
+        codec_allow_list_ = config.getStringVector("codec_allow_list", std::vector<std::string>{});
+        active_codec_ = config.getString("codec", "");
+    }
     validate_codec(active_codec_, codec_allow_list_);
 
     // Parse CF/UGRID convention metadata + per-variable attributes
@@ -367,10 +399,10 @@ void NetCDF_Driver::open_read(const eckit::Configuration& config) {
 
 #ifdef AMIO_HAS_NETCDF
     // Extract configuration parameters.
-    if (!config.has("path")) {
-        throw eckit::Exception("NetCDF_Driver::open_read: 'path' field is required");
+    std::string path = resolve_dataset_path(config);
+    if (path.empty()) {
+        throw eckit::Exception("NetCDF_Driver::open_read: 'path' (or 'output_path') field is required");
     }
-    std::string path = config.getString("path");
     file_path_ = path;
 
     // Parse data model for validation (R7.2, R7.3).
@@ -632,6 +664,200 @@ void NetCDF_Driver::close() {
     is_open_ = false;
     is_write_mode_ = false;
     file_path_.clear();
+}
+
+// ===================================================================
+// describe_variable -- introspect a variable's dtype, shape, and
+// timestep count from the open NetCDF file (Req 4.1, 4.2, 4.5, 9.1).
+//
+// Steps (design §3):
+//   * nc_inq_varid(name)            -> variable id (NC_ENOTVAR => absent)
+//   * nc_inq_var / nc_inq_vartype   -> netCDF element type -> amio_dtype_t
+//   * nc_inq_varndims / dimids      -> rank + dimension ids
+//   * nc_inq_dimlen(dimid)          -> per-dimension extent
+//   * nc_inq_unlimdim               -> record dimension; if the variable's
+//                                      leading dim is the unlimited dim its
+//                                      length becomes total_timesteps and the
+//                                      reported shape is the per-timestep
+//                                      shape (the leading dim is dropped).
+//                                      Otherwise total_timesteps = 1.
+//
+// Returns VariableInfo{found = false} when the driver is not open for
+// reading, the variable is absent, the rank exceeds AMIO_MAX_RANK, or
+// the netCDF element type has no AMIO dtype mapping.  A false result
+// causes the read path to fail the read with AMIO_ERR_BACKEND_FAILURE.
+// ===================================================================
+
+#ifdef AMIO_HAS_NETCDF
+namespace {
+
+// Map a netCDF external type constant to an amio_dtype_t.  Returns true
+// and writes *out on success; returns false for an unmapped nc type
+// (e.g. NC_CHAR, NC_STRING, user-defined compound/enum types).
+bool nc_type_to_dtype(int nc_type, amio_dtype_t& out) {
+    switch (nc_type) {
+        case NC_FLOAT:
+            out = AMIO_DTYPE_F32;
+            return true;
+        case NC_DOUBLE:
+            out = AMIO_DTYPE_F64;
+            return true;
+        case NC_BYTE:
+            out = AMIO_DTYPE_I8;
+            return true;
+        case NC_SHORT:
+            out = AMIO_DTYPE_I16;
+            return true;
+        case NC_INT:
+            out = AMIO_DTYPE_I32;
+            return true;
+        case NC_INT64:
+            out = AMIO_DTYPE_I64;
+            return true;
+        case NC_UBYTE:
+            out = AMIO_DTYPE_U8;
+            return true;
+        case NC_USHORT:
+            out = AMIO_DTYPE_U16;
+            return true;
+        case NC_UINT:
+            out = AMIO_DTYPE_U32;
+            return true;
+        case NC_UINT64:
+            out = AMIO_DTYPE_U64;
+            return true;
+        default:
+            return false;
+    }
+}
+
+}  // namespace
+#endif  // AMIO_HAS_NETCDF
+
+VariableInfo NetCDF_Driver::describe_variable(const std::string& name) {
+    VariableInfo info{};  // found == false by default.
+
+    if (!is_open_ || is_write_mode_) {
+        return info;
+    }
+
+#ifdef AMIO_HAS_NETCDF
+    // Resolve the variable id; absence is a soft failure (found = false).
+    int varid = -1;
+    int status = nc_inq_varid(ncid_, name.c_str(), &varid);
+    if (status == NC_ENOTVAR) {
+        return info;
+    }
+    if (status != NC_NOERR) {
+        return info;
+    }
+
+    // Element type.
+    nc_type var_type = NC_NAT;
+    status = nc_inq_vartype(ncid_, varid, &var_type);
+    if (status != NC_NOERR) {
+        return info;
+    }
+    amio_dtype_t dtype{};
+    if (!nc_type_to_dtype(static_cast<int>(var_type), dtype)) {
+        // Unmapped element type -> cannot describe robustly.
+        return info;
+    }
+
+    // Rank + dimension ids.
+    int ndims = 0;
+    status = nc_inq_varndims(ncid_, varid, &ndims);
+    if (status != NC_NOERR || ndims < 1 || ndims > AMIO_MAX_RANK) {
+        return info;
+    }
+    std::vector<int> dimids(static_cast<std::size_t>(ndims), -1);
+    status = nc_inq_vardimid(ncid_, varid, dimids.data());
+    if (status != NC_NOERR) {
+        return info;
+    }
+
+    // Identify the unlimited (record) dimension, if any.  netCDF-4 may
+    // have multiple unlimited dimensions; query the full set and treat
+    // any of them appearing as the variable's leading dimension as the
+    // timestep axis.
+    int n_unlim = 0;
+    std::vector<int> unlim_dimids;
+    {
+        // nc_inq_unlimdims is available in netCDF-4; fall back to the
+        // single-unlimited nc_inq_unlimdim otherwise.
+        int probe = 0;
+        if (nc_inq_unlimdims(ncid_, &probe, nullptr) == NC_NOERR) {
+            n_unlim = probe;
+            if (n_unlim > 0) {
+                unlim_dimids.resize(static_cast<std::size_t>(n_unlim), -1);
+                if (nc_inq_unlimdims(ncid_, &probe, unlim_dimids.data()) != NC_NOERR) {
+                    unlim_dimids.clear();
+                    n_unlim = 0;
+                }
+            }
+        } else {
+            int single = -1;
+            if (nc_inq_unlimdim(ncid_, &single) == NC_NOERR && single >= 0) {
+                unlim_dimids.push_back(single);
+                n_unlim = 1;
+            }
+        }
+    }
+
+    auto is_unlimited = [&](int dimid) {
+        for (int u : unlim_dimids) {
+            if (u == dimid) {
+                return true;
+            }
+        }
+        return false;
+    };
+
+    // Read per-dimension extents.
+    std::vector<std::size_t> extents(static_cast<std::size_t>(ndims), 0);
+    for (int d = 0; d < ndims; ++d) {
+        std::size_t len = 0;
+        status = nc_inq_dimlen(ncid_, dimids[static_cast<std::size_t>(d)], &len);
+        if (status != NC_NOERR) {
+            return info;
+        }
+        extents[static_cast<std::size_t>(d)] = len;
+    }
+
+    // If the leading dimension is the record/unlimited dimension, its
+    // length is total_timesteps and the reported shape is the
+    // per-timestep shape (leading dim dropped).  Otherwise the variable
+    // is not time-varying (total_timesteps = 1) and the full shape is
+    // reported as-is.
+    std::int64_t total_timesteps = 1;
+    int shape_start = 0;
+    if (ndims >= 1 && is_unlimited(dimids[0])) {
+        total_timesteps = static_cast<std::int64_t>(extents[0]);
+        shape_start = 1;
+    }
+
+    int reported_rank = ndims - shape_start;
+    if (reported_rank < 1 || reported_rank > AMIO_MAX_RANK) {
+        // A variable consisting solely of the record dimension has no
+        // per-timestep spatial shape we can describe for sizing.
+        return info;
+    }
+
+    info.shape.rank = reported_rank;
+    for (int d = 0; d < reported_rank; ++d) {
+        info.shape.extents[d] = static_cast<std::int64_t>(extents[static_cast<std::size_t>(d + shape_start)]);
+        info.shape.strides[d] = 0;  // contiguous / row-major
+    }
+
+    info.dtype = dtype;
+    info.total_timesteps = total_timesteps > 0 ? total_timesteps : 1;
+    info.found = true;
+    return info;
+
+#else
+    (void)name;
+    return info;
+#endif
 }
 
 // ===================================================================

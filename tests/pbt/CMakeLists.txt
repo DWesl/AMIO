@@ -415,9 +415,12 @@ set_tests_properties(pbt.p19_invalid_io_communicator PROPERTIES LABELS "pbt;p19;
 #
 # Validates: R2.10
 # ####################################################################################################################################################
-add_executable(pbt_p20_invalid_write_input test_p20_invalid_write_input.cpp)
+add_executable(pbt_p20_invalid_write_input test_p20_invalid_write_input.cpp mpi_test_listener.cpp)
 
 target_link_libraries(pbt_p20_invalid_write_input PRIVATE AMIO::pbt_common)
+if(MPI_C_FOUND)
+    target_link_libraries(pbt_p20_invalid_write_input PRIVATE MPI::MPI_C)
+endif()
 
 add_test(NAME pbt.p20_invalid_write_input COMMAND pbt_p20_invalid_write_input)
 set_tests_properties(pbt.p20_invalid_write_input PROPERTIES LABELS "pbt;p20;invalid_write;input_validation" TIMEOUT 120 ENVIRONMENT
@@ -431,9 +434,25 @@ set_tests_properties(pbt.p20_invalid_write_input PROPERTIES LABELS "pbt;p20;inva
 #
 # Validates: R2.2
 # ####################################################################################################################################################
-add_executable(pbt_p21_snapshot_copy_correctness test_p21_snapshot_copy_correctness.cpp ${CMAKE_SOURCE_DIR}/src/staging/staging_pool.cpp)
+add_executable(pbt_p21_snapshot_copy_correctness test_p21_snapshot_copy_correctness.cpp mpi_test_listener.cpp
+    ${CMAKE_SOURCE_DIR}/src/c_boundary/amio_api.cpp
+    ${CMAKE_SOURCE_DIR}/src/c_boundary/handle_table.cpp
+    ${CMAKE_SOURCE_DIR}/src/c_boundary/amio_core_stubs.cpp
+    ${CMAKE_SOURCE_DIR}/src/c_boundary/amio_strerror.cpp
+    ${CMAKE_SOURCE_DIR}/src/factory/backend_factory.cpp
+    ${CMAKE_SOURCE_DIR}/src/config/config_loader.cpp
+    ${CMAKE_SOURCE_DIR}/src/staging/staging_pool.cpp
+    ${CMAKE_SOURCE_DIR}/src/workers/worker_pool.cpp
+    ${CMAKE_SOURCE_DIR}/src/workers/thread_pinning.cpp
+    ${CMAKE_SOURCE_DIR}/src/workers/comm_split.cpp
+    ${CMAKE_SOURCE_DIR}/src/workers/mpi_threading.cpp
+    ${CMAKE_SOURCE_DIR}/src/workers/exception_bridge.cpp
+    ${CMAKE_SOURCE_DIR}/src/prefetch/prefetch_queue.cpp)
 
 target_link_libraries(pbt_p21_snapshot_copy_correctness PRIVATE AMIO::pbt_common)
+if(MPI_C_FOUND)
+    target_link_libraries(pbt_p21_snapshot_copy_correctness PRIVATE MPI::MPI_C)
+endif()
 
 add_test(NAME pbt.p21_snapshot_copy_correctness COMMAND pbt_p21_snapshot_copy_correctness)
 set_tests_properties(pbt.p21_snapshot_copy_correctness PROPERTIES LABELS "pbt;p21;snapshot_copy;staging" TIMEOUT 120 ENVIRONMENT
@@ -447,9 +466,25 @@ set_tests_properties(pbt.p21_snapshot_copy_correctness PROPERTIES LABELS "pbt;p2
 #
 # Validates: R3.9, R6.4
 # ####################################################################################################################################################
-add_executable(pbt_p22_synchronous_wait_totality test_p22_synchronous_wait_totality.cpp)
+add_executable(pbt_p22_synchronous_wait_totality test_p22_synchronous_wait_totality.cpp mpi_test_listener.cpp
+    ${CMAKE_SOURCE_DIR}/src/c_boundary/amio_api.cpp
+    ${CMAKE_SOURCE_DIR}/src/c_boundary/handle_table.cpp
+    ${CMAKE_SOURCE_DIR}/src/c_boundary/amio_core_stubs.cpp
+    ${CMAKE_SOURCE_DIR}/src/c_boundary/amio_strerror.cpp
+    ${CMAKE_SOURCE_DIR}/src/factory/backend_factory.cpp
+    ${CMAKE_SOURCE_DIR}/src/config/config_loader.cpp
+    ${CMAKE_SOURCE_DIR}/src/staging/staging_pool.cpp
+    ${CMAKE_SOURCE_DIR}/src/workers/worker_pool.cpp
+    ${CMAKE_SOURCE_DIR}/src/workers/thread_pinning.cpp
+    ${CMAKE_SOURCE_DIR}/src/workers/comm_split.cpp
+    ${CMAKE_SOURCE_DIR}/src/workers/mpi_threading.cpp
+    ${CMAKE_SOURCE_DIR}/src/workers/exception_bridge.cpp
+    ${CMAKE_SOURCE_DIR}/src/prefetch/prefetch_queue.cpp)
 
 target_link_libraries(pbt_p22_synchronous_wait_totality PRIVATE AMIO::pbt_common)
+if(MPI_C_FOUND)
+    target_link_libraries(pbt_p22_synchronous_wait_totality PRIVATE MPI::MPI_C)
+endif()
 
 add_test(NAME pbt.p22_synchronous_wait_totality COMMAND pbt_p22_synchronous_wait_totality)
 set_tests_properties(pbt.p22_synchronous_wait_totality PROPERTIES LABELS "pbt;p22;wait;totality" TIMEOUT 180 ENVIRONMENT "RC_PARAMS=max_success=100")
@@ -465,6 +500,7 @@ set_tests_properties(pbt.p22_synchronous_wait_totality PROPERTIES LABELS "pbt;p2
 add_executable(
     pbt_p23_driver_failure_recorded
     test_p23_driver_failure_recorded.cpp
+    mpi_test_listener.cpp
     ${CMAKE_SOURCE_DIR}/src/c_boundary/amio_api.cpp
     ${CMAKE_SOURCE_DIR}/src/c_boundary/handle_table.cpp
     ${CMAKE_SOURCE_DIR}/src/c_boundary/amio_core_stubs.cpp
@@ -480,6 +516,9 @@ add_executable(
     ${CMAKE_SOURCE_DIR}/src/prefetch/prefetch_queue.cpp)
 
 target_link_libraries(pbt_p23_driver_failure_recorded PRIVATE AMIO::pbt_common)
+if(MPI_C_FOUND)
+    target_link_libraries(pbt_p23_driver_failure_recorded PRIVATE MPI::MPI_C)
+endif()
 
 add_test(NAME pbt.p23_driver_failure_recorded COMMAND pbt_p23_driver_failure_recorded)
 set_tests_properties(pbt.p23_driver_failure_recorded PROPERTIES LABELS "pbt;p23;driver_failure;recorded" TIMEOUT 180 ENVIRONMENT
@@ -569,3 +608,113 @@ target_link_libraries(pbt_p28_netcdf_data_model_validation PRIVATE AMIO::pbt_com
 add_test(NAME pbt.p28_netcdf_data_model_validation COMMAND pbt_p28_netcdf_data_model_validation)
 set_tests_properties(pbt.p28_netcdf_data_model_validation PROPERTIES LABELS "pbt;p28;netcdf;data_model" TIMEOUT 180 ENVIRONMENT
                                                                      "RC_PARAMS=max_success=100")
+
+# ####################################################################################################################################################
+# Read-pipeline property tests (rp1-rp8) -- correctness Properties P1-P8 from the read-pipeline design.md "Correctness Properties" section.
+#
+# These exercise the read path at the Prefetch_Queue + Staging_Pool layer (the same layering as p10-p14), driving the recording MockBackendDriver and
+# purpose-built slice/capacity drivers.  They run with worker_pool=null (synchronous fetch), so they mirror the p10-p14 source list:
+# prefetch_queue.cpp + staging_pool.cpp + worker_pool.cpp + thread_pinning.cpp + comm_split.cpp + mpi_threading.cpp + exception_bridge.cpp +
+# amio_strerror.cpp.  P3/P4/P5 are already covered by p11/p12/p14; rp1/rp2/rp6/rp7/rp8 add the remaining P1/P2/P6/P7/P8.
+# ####################################################################################################################################################
+
+# pbt_rp1_round_trip_fidelity -- Property 1: read(write(x)) == x byte-equal round trip over generated dtypes/shapes.
+#
+# Validates: Requirements 9.4, 11.3
+add_executable(
+    pbt_rp1_round_trip_fidelity
+    test_rp1_round_trip_fidelity.cpp
+    ${CMAKE_SOURCE_DIR}/src/prefetch/prefetch_queue.cpp
+    ${CMAKE_SOURCE_DIR}/src/staging/staging_pool.cpp
+    ${CMAKE_SOURCE_DIR}/src/workers/worker_pool.cpp
+    ${CMAKE_SOURCE_DIR}/src/workers/thread_pinning.cpp
+    ${CMAKE_SOURCE_DIR}/src/workers/comm_split.cpp
+    ${CMAKE_SOURCE_DIR}/src/workers/mpi_threading.cpp
+    ${CMAKE_SOURCE_DIR}/src/workers/exception_bridge.cpp
+    ${CMAKE_SOURCE_DIR}/src/c_boundary/amio_strerror.cpp)
+
+target_link_libraries(pbt_rp1_round_trip_fidelity PRIVATE AMIO::pbt_common Threads::Threads)
+
+add_test(NAME pbt.rp1_round_trip_fidelity COMMAND pbt_rp1_round_trip_fidelity)
+set_tests_properties(pbt.rp1_round_trip_fidelity PROPERTIES LABELS "pbt;rp1;round_trip;fidelity" TIMEOUT 180 ENVIRONMENT "RC_PARAMS=max_success=100")
+
+# pbt_rp2_subset_equals_slice -- Property 2: a bbox read returns exactly full[offset + k*stride] and used_bytes == element_size * product(extents).
+#
+# Validates: Requirements 9.2, 9.3, 10.1, 10.2, 10.3, 12.1
+add_executable(
+    pbt_rp2_subset_equals_slice
+    test_rp2_subset_equals_slice.cpp
+    ${CMAKE_SOURCE_DIR}/src/prefetch/prefetch_queue.cpp
+    ${CMAKE_SOURCE_DIR}/src/staging/staging_pool.cpp
+    ${CMAKE_SOURCE_DIR}/src/workers/worker_pool.cpp
+    ${CMAKE_SOURCE_DIR}/src/workers/thread_pinning.cpp
+    ${CMAKE_SOURCE_DIR}/src/workers/comm_split.cpp
+    ${CMAKE_SOURCE_DIR}/src/workers/mpi_threading.cpp
+    ${CMAKE_SOURCE_DIR}/src/workers/exception_bridge.cpp
+    ${CMAKE_SOURCE_DIR}/src/c_boundary/amio_strerror.cpp)
+
+target_link_libraries(pbt_rp2_subset_equals_slice PRIVATE AMIO::pbt_common Threads::Threads)
+
+add_test(NAME pbt.rp2_subset_equals_slice COMMAND pbt_rp2_subset_equals_slice)
+set_tests_properties(pbt.rp2_subset_equals_slice PROPERTIES LABELS "pbt;rp2;subset;slice" TIMEOUT 180 ENVIRONMENT "RC_PARAMS=max_success=100")
+
+# pbt_rp6_varmeta_completeness -- Property 6: every Backend_Driver::read receives a non-empty name + dtype/shape matching describe_variable.
+#
+# Validates: Requirements 3.2, 3.3, 4.1, 4.2
+add_executable(
+    pbt_rp6_varmeta_completeness
+    test_rp6_varmeta_completeness.cpp
+    ${CMAKE_SOURCE_DIR}/src/prefetch/prefetch_queue.cpp
+    ${CMAKE_SOURCE_DIR}/src/staging/staging_pool.cpp
+    ${CMAKE_SOURCE_DIR}/src/workers/worker_pool.cpp
+    ${CMAKE_SOURCE_DIR}/src/workers/thread_pinning.cpp
+    ${CMAKE_SOURCE_DIR}/src/workers/comm_split.cpp
+    ${CMAKE_SOURCE_DIR}/src/workers/mpi_threading.cpp
+    ${CMAKE_SOURCE_DIR}/src/workers/exception_bridge.cpp
+    ${CMAKE_SOURCE_DIR}/src/c_boundary/amio_strerror.cpp)
+
+target_link_libraries(pbt_rp6_varmeta_completeness PRIVATE AMIO::pbt_common Threads::Threads)
+
+add_test(NAME pbt.rp6_varmeta_completeness COMMAND pbt_rp6_varmeta_completeness)
+set_tests_properties(pbt.rp6_varmeta_completeness PROPERTIES LABELS "pbt;rp6;varmeta;completeness" TIMEOUT 180 ENVIRONMENT "RC_PARAMS=max_success=100")
+
+# pbt_rp7_view_buffer_conservation -- Property 7: held buffers never returned to the free list; outstanding-view count tracks reads/releases exactly.
+#
+# Validates: Requirements 7.2, 7.3
+add_executable(
+    pbt_rp7_view_buffer_conservation
+    test_rp7_view_buffer_conservation.cpp
+    ${CMAKE_SOURCE_DIR}/src/prefetch/prefetch_queue.cpp
+    ${CMAKE_SOURCE_DIR}/src/staging/staging_pool.cpp
+    ${CMAKE_SOURCE_DIR}/src/workers/worker_pool.cpp
+    ${CMAKE_SOURCE_DIR}/src/workers/thread_pinning.cpp
+    ${CMAKE_SOURCE_DIR}/src/workers/comm_split.cpp
+    ${CMAKE_SOURCE_DIR}/src/workers/mpi_threading.cpp
+    ${CMAKE_SOURCE_DIR}/src/workers/exception_bridge.cpp
+    ${CMAKE_SOURCE_DIR}/src/c_boundary/amio_strerror.cpp)
+
+target_link_libraries(pbt_rp7_view_buffer_conservation PRIVATE AMIO::pbt_common Threads::Threads)
+
+add_test(NAME pbt.rp7_view_buffer_conservation COMMAND pbt_rp7_view_buffer_conservation)
+set_tests_properties(pbt.rp7_view_buffer_conservation PROPERTIES LABELS "pbt;rp7;view;conservation" TIMEOUT 180 ENVIRONMENT
+                                                                 "RC_PARAMS=max_success=100")
+
+# pbt_rp8_no_write_past_capacity -- Property 8: payload > buffer capacity fails with AMIO_ERR_BACKEND_FAILURE and yields no view (no overflow).
+#
+# Validates: Requirements 4.4
+add_executable(
+    pbt_rp8_no_write_past_capacity
+    test_rp8_no_write_past_capacity.cpp
+    ${CMAKE_SOURCE_DIR}/src/prefetch/prefetch_queue.cpp
+    ${CMAKE_SOURCE_DIR}/src/staging/staging_pool.cpp
+    ${CMAKE_SOURCE_DIR}/src/workers/worker_pool.cpp
+    ${CMAKE_SOURCE_DIR}/src/workers/thread_pinning.cpp
+    ${CMAKE_SOURCE_DIR}/src/workers/comm_split.cpp
+    ${CMAKE_SOURCE_DIR}/src/workers/mpi_threading.cpp
+    ${CMAKE_SOURCE_DIR}/src/workers/exception_bridge.cpp
+    ${CMAKE_SOURCE_DIR}/src/c_boundary/amio_strerror.cpp)
+
+target_link_libraries(pbt_rp8_no_write_past_capacity PRIVATE AMIO::pbt_common Threads::Threads)
+
+add_test(NAME pbt.rp8_no_write_past_capacity COMMAND pbt_rp8_no_write_past_capacity)
+set_tests_properties(pbt.rp8_no_write_past_capacity PROPERTIES LABELS "pbt;rp8;capacity" TIMEOUT 180 ENVIRONMENT "RC_PARAMS=max_success=100")

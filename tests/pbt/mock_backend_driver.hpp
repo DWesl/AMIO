@@ -50,6 +50,18 @@ struct CallRecord {
 
     // For read calls: timestep
     std::int64_t timestep = -1;
+
+    // VarMeta captured on write/read (added for Property 6: VarMeta
+    // completeness).  Records the exact name/dtype/shape the driver
+    // received so a property can assert they match the variable's
+    // describe_variable() result and the caller-supplied name.
+    std::string name;
+    amio_dtype_t dtype = AMIO_DTYPE_F32;
+    amio_shape_t shape = {};
+
+    // Bounding box captured on read (has_bbox=false for a full read).
+    bool has_bbox = false;
+    amio::detail::BoundingBox bbox = {};
 };
 
 // ===================================================================
@@ -88,6 +100,9 @@ class MockBackendDriver : public amio::detail::Backend_Driver {
         rec.dataset_id = meta.dataset_id;
         rec.variable_id = meta.variable_id;
         rec.payload_size = src.used_bytes;
+        rec.name = meta.name;
+        rec.dtype = meta.dtype;
+        rec.shape = meta.shape;
         calls_.push_back(rec);
 
         // Store the written payload for round-trip verification
@@ -101,7 +116,7 @@ class MockBackendDriver : public amio::detail::Backend_Driver {
     }
 
     void read(amio::detail::StagingBuffer& dst, const amio::detail::VarMeta& meta, std::int64_t timestep,
-              const std::optional<amio::detail::BoundingBox>& /*bbox*/) override {
+              const std::optional<amio::detail::BoundingBox>& bbox) override {
         std::lock_guard<std::mutex> lock(mu_);
 
         CallRecord rec;
@@ -112,6 +127,13 @@ class MockBackendDriver : public amio::detail::Backend_Driver {
         rec.dataset_id = meta.dataset_id;
         rec.variable_id = meta.variable_id;
         rec.timestep = timestep;
+        rec.name = meta.name;
+        rec.dtype = meta.dtype;
+        rec.shape = meta.shape;
+        if (bbox.has_value()) {
+            rec.has_bbox = true;
+            rec.bbox = bbox.value();
+        }
         calls_.push_back(rec);
 
         check_and_throw(CallRecord::Method::Read);

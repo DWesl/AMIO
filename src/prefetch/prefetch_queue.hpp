@@ -39,6 +39,7 @@
 
 #include "amio/amio_errors.h"
 #include "amio/amio_types.h"
+#include "factory/backend_driver.hpp"  // VariableInfo, VarMeta, element_size
 
 namespace amio::detail {
 
@@ -82,9 +83,11 @@ class PrefetchQueue {
     //   driver         - backend driver for read operations
     //   dataset_id     - owning dataset identifier
     //   var_name       - variable name for reads
+    //   info           - variable metadata (dtype + shape) used to
+    //                    build VarMeta and size the staging buffer
     //   total_timesteps - total number of timesteps in the dataset
     PrefetchQueue(std::size_t depth, std::int64_t read_timeout_s, StagingPool* pool, WorkerPool* workers, Backend_Driver* driver,
-                  std::uint64_t dataset_id, const std::string& var_name, std::int64_t total_timesteps);
+                  std::uint64_t dataset_id, const std::string& var_name, const VariableInfo& info, std::int64_t total_timesteps);
 
     ~PrefetchQueue();
 
@@ -169,6 +172,7 @@ class PrefetchQueue {
     std::int64_t total_timesteps_;
     std::uint64_t dataset_id_;
     std::string var_name_;
+    VariableInfo info_;  // dtype + shape for VarMeta / buffer sizing
 
     // External references (not owned).
     StagingPool* pool_;

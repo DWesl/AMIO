@@ -82,6 +82,14 @@ class NetCDF_Driver : public Backend_Driver {
     void flush() override;
     void close() override;
 
+    // Report a variable's element type, shape, and timestep count by
+    // introspecting the open NetCDF file (nc_inq_varid / nc_inq_var /
+    // nc_inq_dimlen + the unlimited/record dimension).  Returns
+    // VariableInfo{found = false} when the variable is absent, the
+    // driver is not open for reading, or the netCDF element type has no
+    // AMIO dtype mapping.  (Req 4.1, 4.2, 4.5, 9.1)
+    VariableInfo describe_variable(const std::string& name) override;
+
    public:
     // ----- Static utility methods (public for testability) -----
 

@@ -84,9 +84,10 @@ TEST_CASE("P11: Prefetch zero-I/O on hit - no driver read on completed buffer", 
         }
 
         // Create PrefetchQueue in synchronous mode.
+        auto info = make_var_info_1d(AMIO_DTYPE_F32, 16, total_timesteps);
         PrefetchQueue pq(depth, 60, &pool,
                          nullptr,  // synchronous mode
-                         driver.get(), 1, "test_var", total_timesteps);
+                         driver.get(), 1, "test_var", info, total_timesteps);
 
         // Schedule initial fetches -- all complete synchronously.
         pq.schedule_initial();
@@ -171,7 +172,8 @@ TEST_CASE("P11: Prefetch zero-I/O on hit - sequential reads all from cache", "[p
         }
 
         // Create PrefetchQueue in synchronous mode.
-        PrefetchQueue pq(depth, 60, &pool, nullptr, driver.get(), 1, "test_var", total_timesteps);
+        auto info = make_var_info_1d(AMIO_DTYPE_F32, 16, total_timesteps);
+        PrefetchQueue pq(depth, 60, &pool, nullptr, driver.get(), 1, "test_var", info, total_timesteps);
 
         // Schedule initial fetches.
         pq.schedule_initial();
@@ -194,6 +196,89 @@ TEST_CASE("P11: Prefetch zero-I/O on hit - sequential reads all from cache", "[p
         // calls (all were cache hits from the initial prefetch).
         std::size_t reads_after_gets = driver->call_count(CallRecord::Method::Read);
         RC_ASSERT(reads_after_gets == reads_after_init);
+    });
+
+    REQUIRE(result);
+}
+
+// ===================================================================
+// Property Test P11c (read-pipeline Property 3): No calling-thread
+// I/O on hit -- async dispatch variant.
+//
+// Design "Correctness Properties", Property 3:
+//   If a timestep's fetch has completed, amio_read returns its buffer
+//   without invoking Backend_Driver::read on the calling thread.
+//
+// This strengthens the synchronous P11 above: fetches are dispatched
+// through a real Worker_Pool, so every Backend_Driver::read executes
+// on a worker thread.  After draining, get_buffer(T) for a completed
+// timestep must (a) return immediately, (b) invoke no additional
+// driver read, and (c) confirm that NO driver read ever ran on the
+// calling thread.
+//
+// **Validates: Requirements 5.2**
+// ===================================================================
+
+TEST_CASE("P11: read-pipeline Property 3 - completed hit performs no calling-thread driver read (async)",
+          "[pbt][p11][prefetch][zero_io][p3][async]") {
+    auto result = rc::check("completed-fetch hit returns without any Backend_Driver::read on the calling thread", []() {
+        auto depth = *rc::gen::inRange<std::size_t>(2, 17);
+        auto total_timesteps = *rc::gen::inRange<std::int64_t>(2, 33);
+        std::int64_t max_prefetched = std::min(static_cast<std::int64_t>(depth), total_timesteps);
+        auto timestep_t = *rc::gen::inRange<std::int64_t>(0, max_prefetched);
+
+        std::size_t buffer_count = static_cast<std::size_t>(max_prefetched) + 4;
+        StagingPool pool(buffer_count, 4096, 5000);
+
+        auto driver = std::make_shared<MockBackendDriver>();
+        driver->set_store_payloads(true);
+        {
+            std::vector<std::byte> dummy(64, std::byte{0x24});
+            StagingBuffer dummy_buf;
+            dummy_buf.data = dummy.data();
+            dummy_buf.capacity_bytes = dummy.size();
+            dummy_buf.used_bytes = dummy.size();
+            VarMeta meta;
+            meta.dataset_id = 1;
+            meta.name = "test_var";
+            driver->write(dummy_buf, meta);
+        }
+
+        WorkerPoolConfig wp_config;
+        wp_config.thread_count = 2;
+        wp_config.backpressure.queue_capacity = 1024;
+        wp_config.backpressure.enabled = false;
+        auto workers = std::make_unique<WorkerPool>(wp_config);
+
+        auto info = make_var_info_1d(AMIO_DTYPE_F32, 16, total_timesteps);
+        PrefetchQueue pq(depth, 60, &pool, workers.get(), driver.get(), 1, "test_var", info, total_timesteps);
+
+        pq.schedule_initial();
+        workers->drain();  // all fetches now complete on worker threads
+
+        auto calling_thread = std::this_thread::get_id();
+        std::size_t reads_before = driver->call_count(CallRecord::Method::Read);
+
+        auto start = std::chrono::steady_clock::now();
+        StagingBuffer* buf = nullptr;
+        amio_status_t status = pq.get_buffer(timestep_t, nullptr, &buf);
+        auto elapsed = std::chrono::steady_clock::now() - start;
+
+        RC_ASSERT(status == AMIO_OK);
+        RC_ASSERT(buf != nullptr);
+
+        // (a) No additional driver read on hit.
+        RC_ASSERT(driver->call_count(CallRecord::Method::Read) == reads_before);
+
+        // (b) Returned promptly (cache hit, no blocking I/O).
+        RC_ASSERT(std::chrono::duration_cast<std::chrono::milliseconds>(elapsed).count() < 10);
+
+        // (c) No Backend_Driver::read ever executed on the calling thread.
+        for (const auto& rec : driver->get_calls(CallRecord::Method::Read)) {
+            RC_ASSERT(rec.thread_id != calling_thread);
+        }
+
+        pool.release(buf);
     });
 
     REQUIRE(result);

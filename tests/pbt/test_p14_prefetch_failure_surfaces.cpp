@@ -137,9 +137,10 @@ TEST_CASE("P14: Prefetch failure surfaces - failed fetch returns error on read",
         driver->add_fail_timestep(fail_timestep);
 
         // Create PrefetchQueue in synchronous mode.
+        auto info = make_var_info_1d(AMIO_DTYPE_F32, 16, total_timesteps);
         PrefetchQueue pq(depth, 60, &pool,
                          nullptr,  // synchronous mode
-                         driver.get(), 1, "test_var", total_timesteps);
+                         driver.get(), 1, "test_var", info, total_timesteps);
 
         // Schedule initial fetches.
         // The fetch for fail_timestep will throw and be recorded
@@ -218,7 +219,8 @@ TEST_CASE("P14: Prefetch failure surfaces - multiple failures retained", "[pbt][
         driver->set_fail_timesteps(fail_set);
 
         // Create PrefetchQueue in synchronous mode.
-        PrefetchQueue pq(depth, 60, &pool, nullptr, driver.get(), 1, "test_var", total_timesteps);
+        auto info = make_var_info_1d(AMIO_DTYPE_F32, 16, total_timesteps);
+        PrefetchQueue pq(depth, 60, &pool, nullptr, driver.get(), 1, "test_var", info, total_timesteps);
 
         // Schedule initial fetches.
         pq.schedule_initial();
@@ -287,7 +289,8 @@ TEST_CASE("P14: Prefetch failure surfaces - async with Worker_Pool", "[pbt][p14]
         auto workers = std::make_unique<WorkerPool>(wp_config);
 
         // Create PrefetchQueue with worker pool.
-        PrefetchQueue pq(depth, 60, &pool, workers.get(), driver.get(), 1, "test_var", total_timesteps);
+        auto info = make_var_info_1d(AMIO_DTYPE_F32, 16, total_timesteps);
+        PrefetchQueue pq(depth, 60, &pool, workers.get(), driver.get(), 1, "test_var", info, total_timesteps);
 
         // Schedule initial fetches (dispatched to worker pool).
         pq.schedule_initial();

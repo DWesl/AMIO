@@ -123,6 +123,15 @@ class Zarr_Driver : public Backend_Driver {
     // close -- close TensorStore handles.
     void close() override;
 
+    // describe_variable -- report a variable's element type, shape, and
+    // timestep count by introspecting the open TensorStore store
+    // (ts_store_.domain() / ts_store_.dtype()).  Returns
+    // VariableInfo{found = false} when the driver is not open for
+    // reading or the store's element type has no AMIO dtype mapping.
+    // In the NCZarr fallback build (no TensorStore) the default
+    // found = false is returned.  (Req 4.1, 4.2, 4.5)
+    VariableInfo describe_variable(const std::string& name) override;
+
     // ----- Static utility methods (public for testability) -----
 
     // Determine if a URI is a cloud URI (s3://, gs://, https://).

@@ -3,7 +3,7 @@
 // Implements the look-ahead prefetch queue for the read path.
 // See prefetch_queue.hpp for the full interface documentation.
 //
-// Validates: R5.1, R5.2, R5.3, R5.4, R5.5, R5.7, R5.8
+// Validates: R5.1, R5.2, R5.3, R5.4, R5.5, R5.7, R5.8, R4.4, R6.1, R6.2, R6.3
 
 #include "prefetch/prefetch_queue.hpp"
 
@@ -17,12 +17,13 @@
 namespace amio::detail {
 
 PrefetchQueue::PrefetchQueue(std::size_t depth, std::int64_t read_timeout_s, StagingPool* pool, WorkerPool* workers, Backend_Driver* driver,
-                             std::uint64_t dataset_id, const std::string& var_name, std::int64_t total_timesteps)
+                             std::uint64_t dataset_id, const std::string& var_name, const VariableInfo& info, std::int64_t total_timesteps)
     : depth_(depth),
       read_timeout_s_(read_timeout_s),
       total_timesteps_(total_timesteps),
       dataset_id_(dataset_id),
       var_name_(var_name),
+      info_(info),
       pool_(pool),
       workers_(workers),
       driver_(driver) {
@@ -242,13 +243,36 @@ void PrefetchQueue::sync_fetch(std::int64_t timestep, const amio_bbox_t* bbox) {
         }
     }
 
-    // Acquire a staging buffer.
+    // Acquire a staging buffer sized for the variable's payload.
+    //
+    // The payload byte count is element_size(dtype) * product(extents)
+    // (Req 4.3).  When the variable info is empty or carries an
+    // unknown dtype / zero-or-absent extents (rank 0), the size cannot
+    // be derived; fall back to the pool's per-buffer capacity so the
+    // acquire stays safe and the read path keeps working (the previous
+    // behavior).
     StagingBuffer* buf = nullptr;
     if (pool_) {
-        // Use a reasonable buffer size.  In a full implementation,
-        // this would be computed from the variable's shape and dtype.
-        // For now, acquire the pool's default buffer capacity.
-        buf = pool_->acquire(pool_->buffer_capacity());
+        std::size_t payload_bytes = 0;
+        const std::size_t elem = element_size(info_.dtype);
+        if (elem > 0 && info_.shape.rank > 0) {
+            std::size_t product = 1;
+            bool valid = true;
+            for (int d = 0; d < info_.shape.rank && d < AMIO_MAX_RANK; ++d) {
+                const std::int64_t ext = info_.shape.extents[d];
+                if (ext <= 0) {
+                    valid = false;
+                    break;
+                }
+                product *= static_cast<std::size_t>(ext);
+            }
+            if (valid) {
+                payload_bytes = elem * product;
+            }
+        }
+
+        const std::size_t acquire_bytes = (payload_bytes > 0) ? payload_bytes : pool_->buffer_capacity();
+        buf = pool_->acquire(acquire_bytes);
     }
 
     if (!buf) {
@@ -257,10 +281,14 @@ void PrefetchQueue::sync_fetch(std::int64_t timestep, const amio_bbox_t* bbox) {
         return;
     }
 
-    // Build VarMeta for the read.
+    // Build VarMeta for the read.  The dtype/shape come from the
+    // variable's Dataset_Metadata so the driver can size and select
+    // the payload (Req 3.2, 3.3, 4.1, 4.2).
     VarMeta meta{};
     meta.dataset_id = dataset_id_;
     meta.name = var_name_;
+    meta.dtype = info_.dtype;
+    meta.shape = info_.shape;
     meta.timestep = timestep;
 
     // Build optional BoundingBox from bbox parameter.
@@ -281,9 +309,32 @@ void PrefetchQueue::sync_fetch(std::int64_t timestep, const amio_bbox_t* bbox) {
         if (driver_) {
             driver_->read(*buf, meta, timestep, opt_bbox);
         }
+
+        // Central buffer-capacity guard (Req 4.4, Property 8: "no write
+        // past capacity").  A driver read must never deliver a payload
+        // larger than the acquired staging buffer.  The concrete drivers
+        // already throw *before* writing when the computed payload would
+        // exceed dst.capacity_bytes (caught below), which is what
+        // actually prevents an out-of-bounds write.  This post-read
+        // check is the central backstop on the read path: if any driver
+        // reports used_bytes beyond the buffer capacity, the fetch is
+        // failed with AMIO_ERR_BACKEND_FAILURE and the buffer is returned
+        // to the pool, so no over-capacity / partial view is ever handed
+        // to the host -- regardless of whether a particular driver
+        // remembered to guard the capacity itself.
+        if (buf->used_bytes > buf->capacity_bytes) {
+            if (pool_) {
+                pool_->release(buf);
+            }
+            mark_failed(timestep, AMIO_ERR_BACKEND_FAILURE);
+            return;
+        }
+
         mark_complete(timestep, buf);
     } catch (...) {
-        // Release the buffer back to the pool on failure.
+        // Release the buffer back to the pool on failure.  Driver-thrown
+        // capacity guards (payload > dst.capacity_bytes) land here and
+        // surface as AMIO_ERR_BACKEND_FAILURE with no view (Req 4.4).
         if (pool_ && buf) {
             pool_->release(buf);
         }

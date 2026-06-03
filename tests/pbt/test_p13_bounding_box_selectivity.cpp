@@ -203,9 +203,12 @@ TEST_CASE("P13: Bounding-box read selectivity - only intersecting bytes transfer
         auto driver = std::make_shared<InstrumentedBBoxDriver>();
         driver->set_var_info(shape, dtype);
 
-        // Create PrefetchQueue in synchronous mode.
+        // Create PrefetchQueue in synchronous mode.  The VariableInfo
+        // carries the generated shape/dtype so the staging acquisition
+        // is sized to the full variable (full_bytes <= buffer_capacity).
+        auto info = amio::pbt::make_var_info(dtype, shape, 1);
         PrefetchQueue pq(1,  // depth = 1 (we only need one fetch)
-                         60, &pool, nullptr, driver.get(), 1, "test_var",
+                         60, &pool, nullptr, driver.get(), 1, "test_var", info,
                          1  // total_timesteps = 1
         );
 
@@ -288,8 +291,11 @@ TEST_CASE("P13: Bounding-box read selectivity - full read without bbox", "[pbt][
         auto driver = std::make_shared<InstrumentedBBoxDriver>();
         driver->set_var_info(shape, dtype);
 
-        // Create PrefetchQueue.
-        PrefetchQueue pq(1, 60, &pool, nullptr, driver.get(), 1, "test_var", 1);
+        // Create PrefetchQueue.  The VariableInfo carries the generated
+        // shape/dtype so the staging acquisition is sized to the full
+        // variable (full_bytes <= buffer_capacity).
+        auto info = amio::pbt::make_var_info(dtype, shape, 1);
+        PrefetchQueue pq(1, 60, &pool, nullptr, driver.get(), 1, "test_var", info, 1);
 
         // Read without bbox.
         StagingBuffer* buf = nullptr;

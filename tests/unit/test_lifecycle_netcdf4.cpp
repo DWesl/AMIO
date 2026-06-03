@@ -18,6 +18,12 @@
 #include <stdlib.h>
 #include <string.h>
 
+// Use only the MPI C API; suppress the deprecated C++ MPI bindings so we
+// do not need to link libmpi_cxx.
+#define OMPI_SKIP_MPICXX 1
+#define MPICH_SKIP_MPICXX 1
+#include <mpi.h>
+
 #include "amio/amio.h"
 
 /* ----------------------------------------------------------------
@@ -116,6 +122,17 @@ static void cleanup(void) {
  * ---------------------------------------------------------------- */
 
 int main(void) {
+    /* The NetCDF-4 backend issues parallel HDF5 calls (nc_create_par)
+     * that require MPI to be initialized by the host application before
+     * amio_open_dataset opens the driver.  Initialize MPI here (the host
+     * role in the AMIO contract) and finalize on exit. */
+    int mpi_already = 0;
+    MPI_Initialized(&mpi_already);
+    if (!mpi_already) {
+        int provided = 0;
+        MPI_Init_thread(NULL, NULL, MPI_THREAD_MULTIPLE, &provided);
+    }
+
     amio_core_handle core = NULL;
     amio_dataset_handle ds = NULL;
     amio_io_handle io = NULL;
@@ -221,5 +238,14 @@ int main(void) {
 
     /* Report results. */
     fprintf(stdout, "test_lifecycle_netcdf4: passed=%d failed=%d\n", g_passed, g_failed);
+
+    int mpi_init_flag = 0;
+    MPI_Initialized(&mpi_init_flag);
+    int mpi_final_flag = 0;
+    MPI_Finalized(&mpi_final_flag);
+    if (mpi_init_flag && !mpi_final_flag) {
+        MPI_Finalize();
+    }
+
     return g_failed == 0 ? 0 : 1;
 }

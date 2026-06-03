@@ -56,6 +56,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 #include "factory/backend_driver.hpp"
@@ -64,6 +65,38 @@ namespace amio::detail {
 
 // Forward-declare StagingPool for slow-path buffer allocation.
 class StagingPool;
+
+// ---------------------------------------------------------------
+// Read-side record index types
+// ---------------------------------------------------------------
+//
+// GRIB2 is a sequence of self-describing, independently packed
+// messages.  There is no random intra-record access and no global
+// "variable table"; the only way to know what a file contains is to
+// scan it once.  open_read therefore walks the file with g2c's
+// seekgb()/g2_info()/g2_getfld() (metadata only, unpack=0) and records,
+// for every field, its byte location and grid geometry, keyed by a
+// synthetic field-identity name (see GRIB2_Driver::field_identity_name).
+
+// GribRecordLocation -- byte location of a single GRIB2 message plus the
+// 1-based field number within that message.  Captured during the
+// open_read scan so a later read for (variable, timestep) can seek the
+// exact record (task 17).
+struct GribRecordLocation {
+    std::int64_t offset = 0;        // byte offset of the GRIB2 message ("GRIB")
+    std::int64_t length = 0;        // total message length in bytes
+    std::int64_t field_number = 1;  // 1-based field index within the message
+};
+
+// GribFieldIndex -- per field-identity index entry.  Holds the grid
+// geometry shared by every record of this field and the ordered list of
+// record locations (records[t] is the field's timestep t).
+struct GribFieldIndex {
+    std::int64_t ni = 0;       // points along a parallel  (longitudes, fastest dim)
+    std::int64_t nj = 0;       // points along a meridian  (latitudes, slowest dim)
+    std::int64_t ngrdpts = 0;  // total grid points (gribfield::ngrdpts)
+    std::vector<GribRecordLocation> records;
+};
 
 // Allowed Data Representation Template identifiers.
 // These correspond to the WMO GRIB2 DRT numbers:
@@ -150,10 +183,28 @@ class GRIB2_Driver : public Backend_Driver {
     void flush() override;
     void close() override;
 
+    // describe_variable -- report a field's element type, shape, and
+    // timestep count from the record index built at open_read.
+    //
+    // For GRIB2 every grid-point field is delivered as AMIO_DTYPE_F32
+    // (consistent with the encode path, Req 13.3).  The shape is derived
+    // from the grid template (Ni = points along a parallel -> fastest
+    // extent, Nj = points along a meridian -> slowest extent), and the
+    // number of indexed records for the field identity becomes
+    // total_timesteps.  Returns VariableInfo{found = false} for an
+    // unknown variable or when the driver is not open for reading.
+    // (Req 4.1, 4.2, 4.5)
+    VariableInfo describe_variable(const std::string& name) override;
+
    private:
     // Read the GRIB2 product identifiers from the manifest and open
     // the output file.  Throws on failure.  Called from open_write.
     void initialize(const eckit::Configuration& config);
+
+    // Scan the GRIB2 source file and build the in-memory record index
+    // (records_), keyed by field-identity name.  Throws on failure.
+    // Called from open_read.  Only compiled when AMIO_HAS_G2C is set.
+    void build_record_index(const eckit::Configuration& config);
 
     // Validate that the DRT field is present and in the allowed set.
     // Throws with appropriate message on failure, identifying whether
@@ -161,6 +212,27 @@ class GRIB2_Driver : public Backend_Driver {
     GRIB2_DRT validate_drt(const eckit::Configuration& config) const;
 
    public:
+    // field_identity_name -- the variable-name <-> field-identity
+    // convention used to key the read index.
+    //
+    // GRIB2 records have no variable names; a field is identified by its
+    // WMO product descriptors.  AMIO keys a field by the same numeric
+    // identifiers the encode path writes (Grib2Settings): the GRIB2
+    // discipline, the Product Definition Template's parameter category
+    // (Table 4.1) and parameter number (Table 4.2), and the first fixed
+    // surface (Table 4.5) type plus its scaled value (the "level").  The
+    // synthetic name is:
+    //
+    //   "d{discipline}_c{category}_n{number}_s{surface}_l{level}"
+    //
+    // e.g. discipline 0, category 3, number 5, surface 100, level 50000
+    //   -> "d0_c3_n5_s100_l50000".
+    //
+    // A host reads a GRIB2 field by passing this exact string as the
+    // variable name.  The encode path uses the same fields, so a
+    // write-then-read round trip resolves to the same identity (Req 13.4).
+    static std::string field_identity_name(std::int64_t discipline, std::int64_t parameter_category, std::int64_t parameter_number,
+                                           std::int64_t surface_type, std::int64_t surface_value);
     // ----- Static utility methods (public for testability) -----
 
     // Check if a buffer described by shape is contiguous and row-major.
@@ -212,6 +284,15 @@ class GRIB2_Driver : public Backend_Driver {
     std::string output_path_;
     GRIB2_DRT active_drt_ = GRIB2_DRT::AdaptiveEntropyCoding;
     std::FILE* out_file_ = nullptr;
+
+    // ----- Read-side state -----
+    // Set when the driver is opened via open_read (vs open_write).
+    bool read_mode_ = false;
+    // Path of the GRIB2 source opened for reading.
+    std::string input_path_;
+    // In-memory record index built at open_read: field-identity name ->
+    // grid geometry + ordered record locations (one per timestep).
+    std::unordered_map<std::string, GribFieldIndex> records_;
 };
 
 }  // namespace amio::detail

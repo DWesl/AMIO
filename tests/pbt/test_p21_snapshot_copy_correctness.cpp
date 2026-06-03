@@ -17,6 +17,7 @@
 
 #include "generators.hpp"
 #include "pbt_common.hpp"
+#include "factory/backend_factory.hpp"
 #include "staging/staging_pool.hpp"
 
 using namespace amio::detail;
@@ -45,6 +46,24 @@ using namespace amio::pbt;
 
 namespace {
 
+// NoOpDriver -- a Backend_Driver that accepts writes without performing
+// real I/O.  Used by infrastructure tests (P21) that verify snapshot
+// copy correctness, NOT driver serialization behavior.  Registering
+// this under "netcdf4" before opening the dataset prevents the real
+// netcdf4 parallel-I/O path from being invoked (which would require
+// a valid HDF5 parallel file and crash the test).
+class NoOpDriver : public Backend_Driver {
+   public:
+    void open_write(const eckit::Configuration& /*config*/) override {}
+    void open_read(const eckit::Configuration& /*config*/) override {}
+    void write(const StagingBuffer& /*src*/, const VarMeta& /*meta*/) override {
+        // No-op: accepts the write without I/O.
+    }
+    void read(StagingBuffer& /*dst*/, const VarMeta& /*meta*/, std::int64_t /*timestep*/, const std::optional<BoundingBox>& /*bbox*/) override {}
+    void flush() override {}
+    void close() override {}
+};
+
 struct SnapshotTestContext {
     TempDir dir;
     std::string manifest_path;
@@ -53,6 +72,11 @@ struct SnapshotTestContext {
     bool valid = false;
 
     SnapshotTestContext() {
+        // Register a no-op driver so the write path doesn't invoke
+        // real netcdf4 parallel I/O (which requires a valid HDF5
+        // parallel file and would crash this infrastructure test).
+        BackendFactory::instance().register_driver("netcdf4", []() -> std::unique_ptr<Backend_Driver> { return std::make_unique<NoOpDriver>(); });
+
         // Use a larger buffer capacity to accommodate various payload sizes.
         std::string yaml = make_manifest_yaml("netcdf4", 8, 1048576, 1, 5000);
         manifest_path = write_manifest(dir, yaml);

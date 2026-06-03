@@ -13,6 +13,7 @@
 #include "drivers/zarr/zarr_driver.hpp"
 
 #include <algorithm>
+#include <cstdint>
 #include <cstring>
 #include <sstream>
 #include <stdexcept>
@@ -25,6 +26,7 @@
 
 #ifdef AMIO_HAS_TENSORSTORE
 #include <tensorstore/context.h>
+#include <tensorstore/index_space/dim_expression.h>
 #include <tensorstore/open.h>
 #include <tensorstore/spec.h>
 #include <tensorstore/tensorstore.h>
@@ -339,6 +341,92 @@ nlohmann::json build_kvstore_spec(const std::string& uri) {
     return kvstore;
 }
 
+// Map an amio_dtype_t to the corresponding TensorStore DataType.
+//
+// Mirrors the dtype case set in Zarr_Driver::dtype_to_string so the
+// read/write array views carry the variable's real element type rather
+// than a hardcoded float32 (Req 11.1, 11.2).  Returns a default-
+// constructed (invalid) DataType for an unsupported dtype tag; callers
+// check DataType::valid() and throw so the cordon maps it to
+// AMIO_ERR_INVALID_INPUT (Req 11.4).
+tensorstore::DataType to_ts_dtype(amio_dtype_t dtype) {
+    switch (dtype) {
+        case AMIO_DTYPE_F32:
+            return tensorstore::dtype_v<float>;
+        case AMIO_DTYPE_F64:
+            return tensorstore::dtype_v<double>;
+        case AMIO_DTYPE_I8:
+            return tensorstore::dtype_v<std::int8_t>;
+        case AMIO_DTYPE_I16:
+            return tensorstore::dtype_v<std::int16_t>;
+        case AMIO_DTYPE_I32:
+            return tensorstore::dtype_v<std::int32_t>;
+        case AMIO_DTYPE_I64:
+            return tensorstore::dtype_v<std::int64_t>;
+        case AMIO_DTYPE_U8:
+            return tensorstore::dtype_v<std::uint8_t>;
+        case AMIO_DTYPE_U16:
+            return tensorstore::dtype_v<std::uint16_t>;
+        case AMIO_DTYPE_U32:
+            return tensorstore::dtype_v<std::uint32_t>;
+        case AMIO_DTYPE_U64:
+            return tensorstore::dtype_v<std::uint64_t>;
+        default:
+            // Unsupported dtype -> invalid DataType; caller throws.
+            return tensorstore::DataType{};
+    }
+}
+
+// Map a TensorStore DataType back to an amio_dtype_t (inverse of
+// to_ts_dtype).  Used by describe_variable to report the store's
+// element type from ts_store_.dtype().  Returns true and writes *out
+// on success; returns false for an element type with no AMIO dtype
+// mapping (e.g. bool, complex, string), in which case the variable
+// cannot be described robustly (describe_variable -> found = false).
+bool to_amio_dtype(tensorstore::DataType dt, amio_dtype_t& out) {
+    if (dt == tensorstore::dtype_v<float>) {
+        out = AMIO_DTYPE_F32;
+        return true;
+    }
+    if (dt == tensorstore::dtype_v<double>) {
+        out = AMIO_DTYPE_F64;
+        return true;
+    }
+    if (dt == tensorstore::dtype_v<std::int8_t>) {
+        out = AMIO_DTYPE_I8;
+        return true;
+    }
+    if (dt == tensorstore::dtype_v<std::int16_t>) {
+        out = AMIO_DTYPE_I16;
+        return true;
+    }
+    if (dt == tensorstore::dtype_v<std::int32_t>) {
+        out = AMIO_DTYPE_I32;
+        return true;
+    }
+    if (dt == tensorstore::dtype_v<std::int64_t>) {
+        out = AMIO_DTYPE_I64;
+        return true;
+    }
+    if (dt == tensorstore::dtype_v<std::uint8_t>) {
+        out = AMIO_DTYPE_U8;
+        return true;
+    }
+    if (dt == tensorstore::dtype_v<std::uint16_t>) {
+        out = AMIO_DTYPE_U16;
+        return true;
+    }
+    if (dt == tensorstore::dtype_v<std::uint32_t>) {
+        out = AMIO_DTYPE_U32;
+        return true;
+    }
+    if (dt == tensorstore::dtype_v<std::uint64_t>) {
+        out = AMIO_DTYPE_U64;
+        return true;
+    }
+    return false;
+}
+
 }  // anonymous namespace
 
 #endif  // AMIO_HAS_TENSORSTORE
@@ -598,7 +686,21 @@ void Zarr_Driver::write(const StagingBuffer& src, const VarMeta& meta) {
     // Create a shared array view over the staging buffer data.
     // The non-owning shared_ptr ensures TensorStore does not free
     // the staging buffer (ownership remains with Staging_Pool).
-    auto array = tensorstore::MakeArray(std::shared_ptr<const void>(src.data, [](const void*) {}), shape_vec, tensorstore::dtype_v<float>);
+    //
+    // Resolve the element type from the variable's dtype so the write
+    // array view carries the real element type rather than a hardcoded
+    // float32; the same dispatch is applied on the read side so
+    // write/read round-trips are byte-equal (Req 11.2, 11.3).
+    tensorstore::DataType dt = to_ts_dtype(meta.dtype);
+    if (!dt.valid()) {
+        std::string msg = "Zarr_Driver: unsupported dtype";  // -> AMIO_ERR_INVALID_INPUT (Req 11.4)
+#ifdef AMIO_HAS_ECKIT
+        throw eckit::Exception(msg, Here());
+#else
+        throw std::runtime_error(msg);
+#endif
+    }
+    auto array = tensorstore::Array(tensorstore::ElementPointer<const void>(src.data, dt), shape_vec, tensorstore::c_order);
 
     // Write the data to TensorStore.  The codec chain configured in
     // open_write applies Byte-Shuffle + compression automatically.
@@ -649,10 +751,30 @@ void Zarr_Driver::read(StagingBuffer& dst, const VarMeta& meta, std::int64_t tim
     // Determine the element size.
     const std::size_t elem_size = dtype_size(meta.dtype);
 
-    // Calculate total bytes needed.
+    // Determine the selected extents per dimension.  With a bounding box
+    // the selection is the box extents (the number of elements chosen
+    // per dimension); without one it is the full variable shape (Req
+    // 10.1, 10.4).  The array view passed to tensorstore::Read and the
+    // reported used_bytes are both sized from these selected extents so
+    // a subset read reports the sub-region size, not the full array
+    // (Req 10.3).
+    std::vector<tensorstore::Index> shape_vec;
+    if (bbox.has_value()) {
+        shape_vec.reserve(static_cast<std::size_t>(bbox->rank));
+        for (int d = 0; d < bbox->rank; ++d) {
+            shape_vec.push_back(static_cast<tensorstore::Index>(bbox->extents[d]));
+        }
+    } else {
+        shape_vec.reserve(static_cast<std::size_t>(meta.shape.rank));
+        for (int d = 0; d < meta.shape.rank; ++d) {
+            shape_vec.push_back(static_cast<tensorstore::Index>(meta.shape.extents[d]));
+        }
+    }
+
+    // Calculate total bytes for the selected region.
     std::size_t total_elements = 1;
-    for (int d = 0; d < meta.shape.rank; ++d) {
-        total_elements *= static_cast<std::size_t>(meta.shape.extents[d]);
+    for (const tensorstore::Index ext : shape_vec) {
+        total_elements *= static_cast<std::size_t>(ext);
     }
     std::size_t total_bytes = total_elements * elem_size;
 
@@ -666,31 +788,47 @@ void Zarr_Driver::read(StagingBuffer& dst, const VarMeta& meta, std::int64_t tim
 #endif
     }
 
-    // Build the domain from the variable shape.
-    std::vector<tensorstore::Index> shape_vec;
-    for (int d = 0; d < meta.shape.rank; ++d) {
-        shape_vec.push_back(static_cast<tensorstore::Index>(meta.shape.extents[d]));
+    // Create a target array view over the staging buffer, sized to the
+    // selected region.
+    //
+    // Resolve the element type from the variable's dtype so the read
+    // transfers the bytes for the real element type rather than
+    // reinterpreting them as float32 (Req 11.1, 11.2).  An unsupported
+    // dtype yields an invalid DataType; throw so the cordon maps it to
+    // AMIO_ERR_INVALID_INPUT (Req 11.4).
+    tensorstore::DataType dt = to_ts_dtype(meta.dtype);
+    if (!dt.valid()) {
+        std::string msg = "Zarr_Driver: unsupported dtype";  // -> AMIO_ERR_INVALID_INPUT (Req 11.4)
+#ifdef AMIO_HAS_ECKIT
+        throw eckit::Exception(msg, Here());
+#else
+        throw std::runtime_error(msg);
+#endif
     }
+    auto array = tensorstore::Array(tensorstore::ElementPointer<void>(dst.data, dt), shape_vec, tensorstore::c_order);
 
-    // Create a target array view over the staging buffer.
-    auto array = tensorstore::MakeArray(std::shared_ptr<void>(dst.data, [](void*) {}), shape_vec, tensorstore::dtype_v<float>);
-
-    // If bounding box is specified, apply domain restriction.
+    // Restrict the read domain to the bounding box, if any.  For each
+    // dimension, TranslateSizedInterval(offset, size, stride) selects
+    // `size` elements starting at `offset` with the given stride and
+    // translates the origin back to 0, so the resulting domain matches
+    // the array view shape (Req 10.1, 10.2).  With no bounding box the
+    // full domain is read (Req 10.4).
     tensorstore::TensorStore<> source = ts_store_;
     if (bbox.has_value()) {
-        // Apply index domain restriction based on bounding box.
-        // Use tensorstore::Dims to restrict the read domain to
-        // only the intersecting byte ranges (R5.7).
-        auto transform = tensorstore::IdentityTransform(bbox->rank);
-        for (int d = 0; d < bbox->rank; ++d) {
-            auto end = bbox->offsets[d] + bbox->extents[d] * bbox->strides[d];
-            (void)end;  // Domain restriction applied below.
+        const auto& b = *bbox;
+        for (int d = 0; d < b.rank; ++d) {
+            auto sliced = source | tensorstore::Dims(d).TranslateSizedInterval(b.offsets[d], b.extents[d], b.strides[d]);
+            if (!sliced.ok()) {
+                std::string err_msg = std::string(sliced.status().message());
+                std::string full_msg = "Zarr_Driver: failed to restrict read domain for dimension " + std::to_string(d) + ": " + err_msg;
+#ifdef AMIO_HAS_ECKIT
+                throw eckit::Exception(full_msg, Here());
+#else
+                throw std::runtime_error(full_msg);
+#endif
+            }
+            source = std::move(sliced).value();
         }
-        // Note: Full bounding-box restriction requires
-        // tensorstore::Dims(...).TranslateSizedInterval(...) which
-        // is applied at the TensorStore spec level.  For the initial
-        // implementation, we read the full array and the caller
-        // handles sub-selection.
     }
 
     // Read from TensorStore.
@@ -763,5 +901,94 @@ void Zarr_Driver::close() {
 }
 
 #endif  // !AMIO_NCZARR_FALLBACK
+
+// ===================================================================
+// describe_variable -- introspect a variable's dtype, shape, and
+// timestep count from the open TensorStore store (Req 4.1, 4.2, 4.5).
+//
+// Defined outside the AMIO_NCZARR_FALLBACK guard above because
+// zarr_driver.cpp is compiled in BOTH the TensorStore build and the
+// NCZarr fallback build, and the Zarr_Driver vtable references this
+// override in either case (zarr_nczarr_fallback.cpp does not define
+// it).  The real introspection is compiled only when TensorStore is
+// available; otherwise the base-class behavior (found = false) applies
+// so the NCZarr fallback reports no describable variable here.
+//
+// Steps (design §3), mirroring the NetCDF approach:
+//   * ts_store_.dtype()   -> element type (inverse of to_ts_dtype); an
+//                            unmapped element type => found = false.
+//   * ts_store_.domain()  -> rank + per-dimension extent.
+//   * Timestep model: Zarr encodes the timestep in the leading array
+//     index (design §3).  When the store has rank >= 2 the leading
+//     dimension is treated as the time axis: its extent is
+//     total_timesteps and the reported per-timestep shape is the
+//     remaining dimensions.  A rank-1 store has no separable time axis,
+//     so total_timesteps = 1 and the full 1-D shape is reported.
+//
+// Returns VariableInfo{found = false} when the driver is not open for
+// reading, the store's element type has no AMIO dtype mapping, or the
+// reported rank is outside [1, AMIO_MAX_RANK].  A false result causes
+// the read path to fail the read with AMIO_ERR_BACKEND_FAILURE.
+// ===================================================================
+
+VariableInfo Zarr_Driver::describe_variable(const std::string& name) {
+    VariableInfo info{};  // found == false by default.
+
+    if (!is_open_ || is_write_mode_) {
+        return info;
+    }
+
+#ifdef AMIO_HAS_TENSORSTORE
+    // The TensorStore store opened by this driver instance represents a
+    // single Zarr array; the variable name is not used to look up a
+    // sub-array.  Reference it to avoid an unused-parameter warning.
+    (void)name;
+
+    // Element type: invert to_ts_dtype.  An element type with no AMIO
+    // dtype mapping (bool, complex, string, ...) cannot be described.
+    amio_dtype_t dtype{};
+    if (!to_amio_dtype(ts_store_.dtype(), dtype)) {
+        return info;
+    }
+
+    // Shape + rank from the store domain.
+    auto domain = ts_store_.domain();
+    const tensorstore::DimensionIndex rank = domain.rank();
+    if (rank < 1) {
+        return info;
+    }
+    const auto shape_span = domain.shape();  // span<const Index>, Index = int64_t
+
+    // Leading-dimension timestep model (see header comment): treat the
+    // leading dimension as the time axis only when there is at least one
+    // remaining dimension to report as the per-timestep shape.
+    std::int64_t total_timesteps = 1;
+    tensorstore::DimensionIndex shape_start = 0;
+    if (rank >= 2) {
+        total_timesteps = static_cast<std::int64_t>(shape_span[0]);
+        shape_start = 1;
+    }
+
+    const tensorstore::DimensionIndex reported_rank = rank - shape_start;
+    if (reported_rank < 1 || reported_rank > AMIO_MAX_RANK) {
+        return info;
+    }
+
+    info.shape.rank = static_cast<std::int32_t>(reported_rank);
+    for (tensorstore::DimensionIndex d = 0; d < reported_rank; ++d) {
+        info.shape.extents[d] = static_cast<std::int64_t>(shape_span[d + shape_start]);
+        info.shape.strides[d] = 0;  // contiguous / row-major
+    }
+
+    info.dtype = dtype;
+    info.total_timesteps = total_timesteps > 0 ? total_timesteps : 1;
+    info.found = true;
+    return info;
+
+#else
+    (void)name;
+    return info;
+#endif  // AMIO_HAS_TENSORSTORE
+}
 
 }  // namespace amio::detail

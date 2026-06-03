@@ -246,7 +246,256 @@ void GRIB2_Driver::open_write(const eckit::Configuration& config) {
 }
 
 void GRIB2_Driver::open_read(const eckit::Configuration& config) {
-    initialize(config);
+#ifndef AMIO_HAS_G2C
+    // g2c is not available in this build.  A read open must fail so the
+    // C-boundary cordon translates the throw to AMIO_ERR_BACKEND_FAILURE
+    // (Req 13.7).
+    (void)config;
+    throw eckit::Exception(
+        "GRIB2_Driver::open_read: nceplibs-g2c is not available in this build. "
+        "Rebuild AMIO with AMIO_HAS_G2C=ON to use the GRIB2 read path.");
+#else
+    if (initialized_) {
+        return;  // Already initialized.
+    }
+
+    // Default numeric product identifiers from the manifest.  These act
+    // as fallbacks and document the encode settings; the record index is
+    // built from the descriptors carried in the file itself.
+    settings_ = read_settings(config);
+
+    // Resolve the input path.  Accept the same key aliases the rest of
+    // the toolchain emits (path / input_path / output_path).
+    if (config.has("path")) {
+        input_path_ = config.getString("path");
+    } else if (config.has("input_path")) {
+        input_path_ = config.getString("input_path");
+    } else if (config.has("output_path")) {
+        input_path_ = config.getString("output_path");
+    }
+    if (input_path_.empty()) {
+        throw eckit::Exception("GRIB2_Driver::open_read: 'path' (or 'input_path') field is required.");
+    }
+
+    // Scan the file and build the in-memory record index (Req 13.1).
+    build_record_index(config);
+
+    read_mode_ = true;
+    initialized_ = true;
+#endif  // AMIO_HAS_G2C
+}
+
+// ---------------------------------------------------------------
+// field_identity_name -- variable-name <-> field-identity convention
+//
+// GRIB2 records carry no variable names, only WMO numeric descriptors.
+// AMIO synthesizes a stable name from the same identifiers the encode
+// path writes (discipline + PDT parameter category/number + first fixed
+// surface type/value), so a write-then-read round trip resolves to the
+// same key.  See the header for the full rationale.
+// ---------------------------------------------------------------
+
+std::string GRIB2_Driver::field_identity_name(std::int64_t discipline, std::int64_t parameter_category, std::int64_t parameter_number,
+                                              std::int64_t surface_type, std::int64_t surface_value) {
+    return "d" + std::to_string(discipline) + "_c" + std::to_string(parameter_category) + "_n" + std::to_string(parameter_number) + "_s" +
+           std::to_string(surface_type) + "_l" + std::to_string(surface_value);
+}
+
+// ---------------------------------------------------------------
+// build_record_index -- scan the GRIB2 file and index every field
+// (Req 13.1)
+//
+// Walks the file message-by-message with seekgb(), reads each message
+// into memory, enumerates its fields with g2_info(), and for each field
+// decodes the metadata-only header with g2_getfld(unpack=0).  From the
+// decoded gribfield it derives the field-identity name (discipline +
+// PDT category/number + first fixed surface type/value) and the grid
+// geometry (Ni/Nj from the GDT, ngrdpts), appending a record location
+// keyed by that identity.  Records for the same identity are ordered by
+// file position, so records[t] is the field's timestep t.
+// ---------------------------------------------------------------
+
+#ifdef AMIO_HAS_G2C
+namespace {
+
+// PDT-relative offsets of the descriptors that make up a field identity.
+// These match the Product Definition Template 4.0 layout the encode path
+// emits (build_pdt_4_0): [0]=category, [1]=number, [9]=first surface
+// type, [11]=first surface scaled value.  Templates 4.0/4.1/4.8/... share
+// this leading layout, so the identity is stable across the common PDTs.
+constexpr int kPdtCategoryIdx = 0;
+constexpr int kPdtNumberIdx = 1;
+constexpr int kPdtSurfaceTypeIdx = 9;
+constexpr int kPdtSurfaceValueIdx = 11;
+
+// GDT-relative offsets of Ni / Nj for the templates whose layout matches
+// 3.0 (regular lat/lon) -- Ni at index 7, Nj at index 8.  Used as a
+// best-effort grid-shape probe; falls back to ngrdpts as a single row.
+constexpr int kGdtNiIdx = 7;
+constexpr int kGdtNjIdx = 8;
+
+std::int64_t pdt_value(const gribfield* gfld, int idx) {
+    if (gfld->ipdtmpl != nullptr && idx < gfld->ipdtlen) {
+        return static_cast<std::int64_t>(gfld->ipdtmpl[idx]);
+    }
+    return 0;
+}
+
+}  // namespace
+#endif  // AMIO_HAS_G2C
+
+void GRIB2_Driver::build_record_index(const eckit::Configuration& config) {
+#ifndef AMIO_HAS_G2C
+    (void)config;
+    throw eckit::Exception("GRIB2_Driver::build_record_index: nceplibs-g2c not available");
+#else
+    (void)config;
+    records_.clear();
+
+    std::FILE* fp = std::fopen(input_path_.c_str(), "rb");
+    if (fp == nullptr) {
+        throw eckit::Exception("GRIB2_Driver::open_read: failed to open input file '" + input_path_ + "' for reading.");
+    }
+
+    // RAII-ish guard: ensure the scan handle is closed on every path.
+    struct FileGuard {
+        std::FILE* f;
+        ~FileGuard() {
+            if (f != nullptr) std::fclose(f);
+        }
+    } guard{fp};
+
+    g2int seek_from = 0;
+    const g2int mseek = 32000;  // bytes to scan ahead per seekgb call
+
+    while (true) {
+        g2int lskip = 0;  // byte offset of the located message
+        g2int lgrib = 0;  // length of the located message
+        seekgb(fp, seek_from, mseek, &lskip, &lgrib);
+        if (lgrib == 0) {
+            break;  // no further GRIB2 message found
+        }
+
+        // Read the full message into memory.
+        std::vector<unsigned char> cgrib(static_cast<std::size_t>(lgrib));
+        if (std::fseek(fp, static_cast<long>(lskip), SEEK_SET) != 0) {
+            throw eckit::Exception("GRIB2_Driver::open_read: seek failed while indexing '" + input_path_ + "'.");
+        }
+        std::size_t got = std::fread(cgrib.data(), 1, static_cast<std::size_t>(lgrib), fp);
+        if (got != static_cast<std::size_t>(lgrib)) {
+            throw eckit::Exception("GRIB2_Driver::open_read: short read while indexing '" + input_path_ + "'.");
+        }
+
+        // Enumerate the fields in this message.
+        g2int listsec0[3] = {0, 0, 0};
+        g2int listsec1[13] = {0};
+        g2int numfields = 0;
+        g2int numlocal = 0;
+        g2int ret = g2_info(cgrib.data(), listsec0, listsec1, &numfields, &numlocal);
+        if (ret != 0) {
+            throw eckit::Exception("GRIB2_Driver::open_read: g2_info failed (code " + std::to_string(static_cast<long long>(ret)) +
+                                   ") while indexing '" + input_path_ + "'.");
+        }
+
+        const std::int64_t discipline = static_cast<std::int64_t>(listsec0[0]);
+
+        for (g2int n = 1; n <= numfields; ++n) {
+            gribfield* gfld = nullptr;
+            // unpack=0, expand=0: metadata only -- fast, no data decode.
+            ret = g2_getfld(cgrib.data(), n, 0, 0, &gfld);
+            if (ret != 0 || gfld == nullptr) {
+                if (gfld != nullptr) {
+                    g2_free(gfld);
+                }
+                throw eckit::Exception("GRIB2_Driver::open_read: g2_getfld (metadata) failed (code " +
+                                       std::to_string(static_cast<long long>(ret)) + ") while indexing '" + input_path_ + "'.");
+            }
+
+            const std::int64_t category = pdt_value(gfld, kPdtCategoryIdx);
+            const std::int64_t number = pdt_value(gfld, kPdtNumberIdx);
+            const std::int64_t surf_type = pdt_value(gfld, kPdtSurfaceTypeIdx);
+            const std::int64_t surf_value = pdt_value(gfld, kPdtSurfaceValueIdx);
+
+            const std::string key = field_identity_name(discipline, category, number, surf_type, surf_value);
+
+            // Derive grid geometry.  Ni/Nj come from the GDT for the
+            // common lat/lon-style layouts; fall back to a single row of
+            // ngrdpts points when the template does not expose them.
+            std::int64_t ngrdpts = static_cast<std::int64_t>(gfld->ngrdpts);
+            std::int64_t ni = 0;
+            std::int64_t nj = 0;
+            if (gfld->igdtmpl != nullptr && gfld->igdtlen > kGdtNjIdx) {
+                ni = static_cast<std::int64_t>(gfld->igdtmpl[kGdtNiIdx]);
+                nj = static_cast<std::int64_t>(gfld->igdtmpl[kGdtNjIdx]);
+            }
+            if (ni <= 0 || nj <= 0 || (ni * nj) != ngrdpts) {
+                // Template did not yield a usable 2D shape; treat the
+                // field as a single row of ngrdpts points.
+                ni = ngrdpts;
+                nj = 1;
+            }
+
+            GribFieldIndex& entry = records_[key];
+            if (entry.records.empty()) {
+                entry.ni = ni;
+                entry.nj = nj;
+                entry.ngrdpts = ngrdpts;
+            }
+            entry.records.push_back(
+                GribRecordLocation{static_cast<std::int64_t>(lskip), static_cast<std::int64_t>(lgrib), static_cast<std::int64_t>(n)});
+
+            g2_free(gfld);
+        }
+
+        // Advance past this message for the next seekgb scan.
+        seek_from = lskip + lgrib;
+    }
+#endif  // AMIO_HAS_G2C
+}
+
+// ---------------------------------------------------------------
+// describe_variable -- report a field's dtype/shape/timestep count
+// from the record index (Req 4.1, 4.2, 4.5, 13.x)
+// ---------------------------------------------------------------
+
+VariableInfo GRIB2_Driver::describe_variable(const std::string& name) {
+    VariableInfo info{};  // found == false by default.
+
+#ifdef AMIO_HAS_G2C
+    if (!initialized_ || !read_mode_) {
+        return info;
+    }
+
+    auto it = records_.find(name);
+    if (it == records_.end() || it->second.records.empty()) {
+        return info;  // Unknown variable.
+    }
+
+    const GribFieldIndex& entry = it->second;
+
+    // GRIB2 grid-point fields are delivered as F32 (Req 13.3).
+    info.dtype = AMIO_DTYPE_F32;
+
+    // Shape: Nj (points along a meridian -> slowest) x Ni (points along a
+    // parallel -> fastest), matching the encode path's row-major layout.
+    info.shape = amio_shape_t{};
+    if (entry.nj > 1) {
+        info.shape.rank = 2;
+        info.shape.extents[0] = entry.nj;
+        info.shape.extents[1] = entry.ni;
+    } else {
+        info.shape.rank = 1;
+        info.shape.extents[0] = entry.ni;
+    }
+
+    // One record per timestep for this field identity (Req 4.5).
+    info.total_timesteps = static_cast<std::int64_t>(entry.records.size());
+    info.found = true;
+#else
+    (void)name;
+#endif  // AMIO_HAS_G2C
+
+    return info;
 }
 
 // ---------------------------------------------------------------
@@ -481,8 +730,8 @@ void GRIB2_Driver::write(const StagingBuffer& src, const VarMeta& meta) {
                        nullptr,  // coordlist
                        0,        // numcoord
                        idrsnum, idrstmpl.data(), fld.data(), static_cast<g2int>(num_elements),
-                       0,         // ibmap = 0 -> bitmap applies (255 would mean none); 0 uses supplied bmap
-                       nullptr);  // bmap (none)
+                       255,       // ibmap = 255 -> bitmap does not apply (no bmap); 0/254 would dereference bmap
+                       nullptr);  // bmap (none -- no missing-value grid points)
     if (ierr <= 0) {
         throw eckit::Exception("GRIB2_Driver::write: g2_addfield failed (Section 4/5/7). Zero record bytes emitted.");
     }
@@ -515,12 +764,162 @@ void GRIB2_Driver::read(StagingBuffer& dst, const VarMeta& meta, std::int64_t ti
     }
 
 #ifdef AMIO_HAS_G2C
-    // Decode is not yet implemented; the write path is the focus of
-    // this change.  Tables for decode also come from g2c (g2_getfld).
-    (void)meta;
-    (void)timestep;
-    (void)bbox;
-    dst.used_bytes = 0;
+    if (!read_mode_) {
+        throw eckit::Exception("GRIB2_Driver::read: driver was not opened for reading.");
+    }
+
+    // ---- Locate the indexed record for (variable, timestep) ----
+    // meta.name is the synthetic field-identity string (see
+    // field_identity_name); the read coordinator threads the caller's
+    // variable name through unchanged.  A missing variable or an
+    // out-of-range timestep is a hard failure -- no partial success
+    // (Req 13.6).
+    auto it = records_.find(meta.name);
+    if (it == records_.end() || it->second.records.empty()) {
+        throw eckit::Exception("GRIB2_Driver::read: field '" + meta.name + "' not found in the GRIB2 record index.");
+    }
+    const GribFieldIndex& entry = it->second;
+
+    if (timestep < 0 || timestep >= static_cast<std::int64_t>(entry.records.size())) {
+        throw eckit::Exception("GRIB2_Driver::read: timestep " + std::to_string(static_cast<long long>(timestep)) +
+                               " out of range for field '" + meta.name + "' (" + std::to_string(entry.records.size()) + " records).");
+    }
+    const GribRecordLocation& loc = entry.records[static_cast<std::size_t>(timestep)];
+    if (loc.length <= 0) {
+        throw eckit::Exception("GRIB2_Driver::read: invalid record length for field '" + meta.name + "'.");
+    }
+
+    // ---- Read the GRIB2 message bytes from the source file ----
+    std::FILE* fp = std::fopen(input_path_.c_str(), "rb");
+    if (fp == nullptr) {
+        throw eckit::Exception("GRIB2_Driver::read: failed to open input file '" + input_path_ + "' for reading.");
+    }
+    struct FileGuard {
+        std::FILE* f;
+        ~FileGuard() {
+            if (f != nullptr) std::fclose(f);
+        }
+    } guard{fp};
+
+    std::vector<unsigned char> cgrib(static_cast<std::size_t>(loc.length));
+    if (std::fseek(fp, static_cast<long>(loc.offset), SEEK_SET) != 0) {
+        throw eckit::Exception("GRIB2_Driver::read: seek failed decoding field '" + meta.name + "'.");
+    }
+    std::size_t got = std::fread(cgrib.data(), 1, static_cast<std::size_t>(loc.length), fp);
+    if (got != static_cast<std::size_t>(loc.length)) {
+        throw eckit::Exception("GRIB2_Driver::read: short read decoding field '" + meta.name + "'.");
+    }
+
+    // ---- Decode the requested record (unpack=1, expand=1) ----
+    // expand=1 fills bit-mapped-out grid points so fld matches the grid,
+    // keeping the decoded layout aligned with the encode path.
+    gribfield* gfld = nullptr;
+    g2int ret = g2_getfld(cgrib.data(), static_cast<g2int>(loc.field_number), /*unpack=*/1, /*expand=*/1, &gfld);
+    if (ret != 0 || gfld == nullptr) {
+        if (gfld != nullptr) {
+            g2_free(gfld);
+        }
+        throw eckit::Exception("GRIB2_Driver::read: g2_getfld failed (code " + std::to_string(static_cast<long long>(ret)) +
+                               ") decoding field '" + meta.name + "'.");
+    }
+
+    // gfld->fld is a g2float* (== float*, confirmed in grib2.h) of
+    // ngrdpts unpacked grid-point values.  Copy into a contiguous
+    // full-grid float buffer; GRIB2 fields are delivered as F32
+    // consistent with the encode path (Req 13.3).
+    const std::int64_t ngrdpts = static_cast<std::int64_t>(gfld->ngrdpts);
+    if (ngrdpts <= 0 || gfld->fld == nullptr) {
+        g2_free(gfld);
+        throw eckit::Exception("GRIB2_Driver::read: decoded field '" + meta.name + "' has no grid-point data.");
+    }
+
+    std::vector<float> full(static_cast<std::size_t>(ngrdpts));
+    std::memcpy(full.data(), gfld->fld, static_cast<std::size_t>(ngrdpts) * sizeof(float));
+
+    // Release the gribfield on every subsequent path (no leaks); all the
+    // data we need now lives in `full`.
+    g2_free(gfld);
+    gfld = nullptr;
+
+    // Decoded grid geometry (row-major: Nj rows of Ni), matching the
+    // shape describe_variable reports and the encode path's layout.
+    std::int64_t grid_extents[AMIO_MAX_RANK] = {};
+    std::int32_t grid_rank = 0;
+    if (entry.nj > 1) {
+        grid_rank = 2;
+        grid_extents[0] = entry.nj;
+        grid_extents[1] = entry.ni;
+    } else {
+        grid_rank = 1;
+        grid_extents[0] = ngrdpts;
+    }
+
+    // ---- Deliver the full grid or the requested sub-region (Req 13.5) ----
+    // GRIB2 has no random intra-record access, so the full record is
+    // decoded above and the bounding box selects from the decoded grid
+    // (decode-then-subset).  The extraction mirrors pack_row_major: it
+    // walks the destination in row-major order over the box extents and
+    // gathers each element from its strided position in the full grid.
+    std::size_t payload_bytes = 0;
+    if (!bbox.has_value()) {
+        payload_bytes = static_cast<std::size_t>(ngrdpts) * sizeof(float);
+        if (payload_bytes > dst.capacity_bytes) {
+            throw eckit::Exception("GRIB2_Driver::read: decoded payload exceeds staging buffer capacity.");
+        }
+        std::memcpy(dst.data, full.data(), payload_bytes);
+    } else {
+        const BoundingBox& b = *bbox;
+        if (b.rank != grid_rank) {
+            throw eckit::Exception("GRIB2_Driver::read: bounding-box rank does not match field rank.");
+        }
+
+        // Validate the box against the decoded grid and count elements.
+        std::size_t sub_elems = 1;
+        for (std::int32_t d = 0; d < grid_rank; ++d) {
+            if (b.extents[d] < 1 || b.strides[d] < 1 || b.offsets[d] < 0) {
+                throw eckit::Exception("GRIB2_Driver::read: invalid bounding box for field '" + meta.name + "'.");
+            }
+            const std::int64_t last = b.offsets[d] + (b.extents[d] - 1) * b.strides[d];
+            if (last >= grid_extents[d]) {
+                throw eckit::Exception("GRIB2_Driver::read: bounding box exceeds field extents for '" + meta.name + "'.");
+            }
+            sub_elems *= static_cast<std::size_t>(b.extents[d]);
+        }
+
+        payload_bytes = sub_elems * sizeof(float);
+        if (payload_bytes > dst.capacity_bytes) {
+            throw eckit::Exception("GRIB2_Driver::read: sub-region exceeds staging buffer capacity.");
+        }
+
+        // Full-grid row-major strides (in elements).
+        std::int64_t full_strides[AMIO_MAX_RANK] = {};
+        std::int64_t stride_acc = 1;
+        for (std::int32_t d = grid_rank - 1; d >= 0; --d) {
+            full_strides[d] = stride_acc;
+            stride_acc *= grid_extents[d];
+        }
+
+        // Gather the sub-region into the destination buffer.
+        float* out = reinterpret_cast<float*>(dst.data);
+        std::int64_t idx[AMIO_MAX_RANK] = {};
+        for (std::size_t e = 0; e < sub_elems; ++e) {
+            std::int64_t src_off = 0;
+            for (std::int32_t d = 0; d < grid_rank; ++d) {
+                src_off += (b.offsets[d] + idx[d] * b.strides[d]) * full_strides[d];
+            }
+            out[e] = full[static_cast<std::size_t>(src_off)];
+
+            // Increment the multi-dimensional index (row-major: last dim first).
+            for (std::int32_t d = grid_rank - 1; d >= 0; --d) {
+                if (++idx[d] < b.extents[d]) {
+                    break;
+                }
+                idx[d] = 0;
+            }
+        }
+    }
+
+    dst.used_bytes = payload_bytes;
 #else
     (void)dst;
     (void)meta;
@@ -557,6 +956,12 @@ void GRIB2_Driver::close() {
         out_file_ = nullptr;
     }
 #endif
+
+    // Release read-side state (the scan handle is already closed by
+    // build_record_index; only the in-memory index persists).
+    records_.clear();
+    read_mode_ = false;
+    input_path_.clear();
 
     initialized_ = false;
 }

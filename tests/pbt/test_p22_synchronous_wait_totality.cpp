@@ -17,7 +17,9 @@
 
 #include "generators.hpp"
 #include "pbt_common.hpp"
+#include "factory/backend_factory.hpp"
 
+using namespace amio::detail;
 using namespace amio::pbt;
 
 // ===================================================================
@@ -34,6 +36,19 @@ const std::set<amio_status_t> kWaitTrichotomy = {AMIO_OK, AMIO_ERR_BACKEND_FAILU
 // trichotomy applies.
 const std::set<amio_status_t> kFlushTrichotomy = {AMIO_OK, AMIO_ERR_BACKEND_FAILURE, AMIO_ERR_TIMEOUT};
 
+// NoOpDriver -- a Backend_Driver that accepts writes without performing
+// real I/O.  Used by infrastructure tests (P22) that verify wait/flush
+// trichotomy, NOT driver serialization behavior.
+class NoOpDriver : public Backend_Driver {
+   public:
+    void open_write(const eckit::Configuration& /*config*/) override {}
+    void open_read(const eckit::Configuration& /*config*/) override {}
+    void write(const StagingBuffer& /*src*/, const VarMeta& /*meta*/) override {}
+    void read(StagingBuffer& /*dst*/, const VarMeta& /*meta*/, std::int64_t /*timestep*/, const std::optional<BoundingBox>& /*bbox*/) override {}
+    void flush() override {}
+    void close() override {}
+};
+
 struct WaitTestContext {
     TempDir dir;
     std::string manifest_path;
@@ -42,6 +57,11 @@ struct WaitTestContext {
     bool valid = false;
 
     WaitTestContext() {
+        // Register a no-op driver so the write path doesn't invoke
+        // real netcdf4 parallel I/O (which would crash this
+        // infrastructure test).
+        BackendFactory::instance().register_driver("netcdf4", []() -> std::unique_ptr<Backend_Driver> { return std::make_unique<NoOpDriver>(); });
+
         std::string yaml = make_manifest_yaml("netcdf4", 8, 65536, 1, 5000);
         manifest_path = write_manifest(dir, yaml);
 

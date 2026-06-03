@@ -44,8 +44,39 @@
 
 // AMIO private headers (accessible via test include paths)
 #include "config/config_loader.hpp"
+#include "factory/backend_driver.hpp"  // amio::detail::VariableInfo
 
 namespace amio::pbt {
+
+// ===================================================================
+// make_var_info -- build an amio::detail::VariableInfo for the
+// PrefetchQueue constructor (task 7).
+//
+// The dtype + extents size the staging acquisition as
+// element_size(dtype) * product(extents).  Callers supply a payload
+// that fits the test's staging-pool buffer capacity so acquisition
+// succeeds and existing byte-count assertions still hold.
+// ===================================================================
+
+inline amio::detail::VariableInfo make_var_info(amio_dtype_t dtype, const amio_shape_t& shape, std::int64_t total_timesteps = 1) {
+    amio::detail::VariableInfo info{};
+    info.found = true;
+    info.dtype = dtype;
+    info.shape = shape;
+    info.total_timesteps = total_timesteps;
+    return info;
+}
+
+// Convenience overload: build a 1-D VariableInfo with `elements`
+// extents of `dtype`.  Used by prefetch scheduling / look-ahead
+// tests where only the buffer-sizing payload (not the variable
+// shape) is relevant.
+inline amio::detail::VariableInfo make_var_info_1d(amio_dtype_t dtype, std::int64_t elements, std::int64_t total_timesteps = 1) {
+    amio_shape_t shape = {};
+    shape.rank = 1;
+    shape.extents[0] = elements;
+    return make_var_info(dtype, shape, total_timesteps);
+}
 
 // ===================================================================
 // dtype_size -- byte size of an amio_dtype_t element.
@@ -272,6 +303,13 @@ inline std::string make_dataset_config_yaml(const std::string& backend, const st
     yaml += "output_path: " + output_path + "\n";
     yaml += "codec:\n";
     yaml += "  active_codec: " + codec + "\n";
+    // Declare the active codec on the lossless allow-list so the backend
+    // driver's lossless-codec guard (e.g. NetCDF_Driver::validate_codec,
+    // R7.5) accepts it.  The driver reads codec.lossless_allow_list from the
+    // dataset config; omitting it leaves the allow-list empty and the open
+    // is rejected.
+    yaml += "  lossless_allow_list:\n";
+    yaml += "    - " + codec + "\n";
 
     if (backend == "netcdf4") {
         yaml += "data_model: classic\n";

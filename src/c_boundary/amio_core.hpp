@@ -21,6 +21,7 @@
 #include <cstdint>
 #include <memory>
 #include <mutex>
+#include <string>
 #include <unordered_map>
 #include <vector>
 
@@ -75,6 +76,31 @@ struct ViewRecord {
 };
 
 // ---------------------------------------------------------------
+// VariableReadState -- per-variable read look-ahead state.
+//
+// A read-mode dataset opens once but may be read for many
+// variables.  Each variable gets its own PrefetchQueue so that the
+// completed/pending/failed look-ahead windows for different
+// variables never alias on the same timestep keys (see design.md
+// Key Design Decision: per-variable prefetch).
+//
+// Created lazily on the first amio_read for a given variable name
+// (task 8): the driver's describe_variable result is cached in
+// `info`, and `queue` is constructed bound to that variable's name,
+// dtype, shape, and total timestep count.
+//
+// Fields:
+//   name   - the variable name this state tracks
+//   info   - cached Dataset_Metadata (dtype, shape, total_timesteps)
+//            from Backend_Driver::describe_variable
+//   queue  - the variable's look-ahead PrefetchQueue (owned)
+struct VariableReadState {
+    std::string name;
+    VariableInfo info;
+    std::unique_ptr<PrefetchQueue> queue;
+};
+
+// ---------------------------------------------------------------
 // DatasetRecord -- internal state for an open dataset.
 //
 // Holds the Backend_Driver instance, the dataset's mode (read or
@@ -106,6 +132,19 @@ struct DatasetRecord {
     // read timeout when the per-variable PrefetchQueue is created
     // lazily on first read (Req 2.3, 2.4); see task 6/8.
     Config dataset_config;
+
+    // ---- Per-variable read state (task 6) ----
+
+    // Guards `variables` against concurrent lazy creation from
+    // multiple amio_read calls (Req 3.1).
+    mutable std::mutex variables_mu;
+
+    // Per-variable read look-ahead state, keyed by variable name.
+    // Populated lazily on the first amio_read for each variable
+    // (task 8): each entry owns the variable's resolved metadata
+    // and its dedicated PrefetchQueue so look-ahead windows for
+    // different variables stay independent (Req 2.3, 2.4, 3.1).
+    std::unordered_map<std::string, std::unique_ptr<VariableReadState>> variables;
 
     // Prefetch queue for read-mode datasets.  Created during
     // open_dataset when mode == AMIO_MODE_READ.  Null for write

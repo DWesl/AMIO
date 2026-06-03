@@ -312,17 +312,65 @@ amio_status_t open_dataset(void *core_payload, const char *config_path, std::int
 }
 
 // ---------------------------------------------------------------
-// amio_close_dataset -- task 6.3
+// amio_close_dataset -- task 6.3 / task 11
 //
-// Flush all pending writes → surface failures → call
-// driver->close() → release handle from table.
+// Outstanding-view guard → cancel read prefetches → flush pending
+// writes → surface failures → call driver->close() → release handle
+// from table.
+//
+// Step 0 (Req 8.1): if any Memory_View for this dataset is still
+// outstanding, close fails with AMIO_ERR_VIEWS_OUTSTANDING and NO
+// teardown is performed -- the backend driver, its handle, and every
+// staging buffer behind the outstanding views are left intact so the
+// host can still release them.  The guard runs BEFORE any flush /
+// cancel / close so close is a no-op when views are live.
+//
+// Step 1 (Req 8.3): for a read-mode dataset with no outstanding views,
+// cancel every per-variable PrefetchQueue.  cancel_pending() marks the
+// queue cancelled, drops in-flight pending fetches, and releases any
+// completed-but-unread staging buffers back to the pool, so closing a
+// reader does not leak the look-ahead window.
+//
+// Steps 2-4 (Req 8.2): the existing write-path flush / failure
+// surfacing and the driver flush+close run unchanged once views are
+// drained, releasing the Backend_Driver resources.
+//
+// Validates: R8.1, R8.2, R8.3
 // ---------------------------------------------------------------
 amio_status_t close_dataset(void *dataset_payload) {
     auto *record = static_cast<DatasetRecord *>(dataset_payload);
 
+    // Step 0: Outstanding-view guard (Req 8.1).
+    //
+    // Reject the close before ANY teardown when one or more
+    // Memory_Views for this dataset are still outstanding.  Returning
+    // here leaves the driver open, the handle valid, and the staged
+    // buffers retained, so the host can release the views and retry.
+    if (record->outstanding_views.load() > 0) {
+        return AMIO_ERR_VIEWS_OUTSTANDING;
+    }
+
     amio_status_t result = AMIO_OK;
 
-    // Step 1: Flush pending writes (block until all complete or fail).
+    // Step 1: Cancel pending prefetches for read-mode datasets (Req 8.3).
+    //
+    // With no views outstanding, every completed-but-unread buffer in a
+    // PrefetchQueue is safe to reclaim.  Iterate the per-variable read
+    // state under variables_mu and cancel each queue: cancel_pending()
+    // marks the queue cancelled, clears the pending set, and releases
+    // completed buffers back to the Staging_Pool.  Write-mode datasets
+    // hold no PrefetchQueues, so this loop is a no-op for them.
+    {
+        std::lock_guard<std::mutex> lock(record->variables_mu);
+        for (auto &[name, vs] : record->variables) {
+            (void)name;
+            if (vs && vs->queue) {
+                vs->queue->cancel_pending();
+            }
+        }
+    }
+
+    // Step 2: Flush pending writes (block until all complete or fail).
     if (record->pending_writes.load() > 0) {
         // In the full implementation (task 9.x), this would block
         // until the worker pool drains all tasks for this dataset.
@@ -330,12 +378,12 @@ amio_status_t close_dataset(void *dataset_payload) {
         // not yet wired.
     }
 
-    // Step 2: Surface any recorded failures.
+    // Step 3: Surface any recorded failures.
     if (record->has_failure.load()) {
         result = static_cast<amio_status_t>(record->first_failure_code);
     }
 
-    // Step 3: Flush and close the driver.
+    // Step 4: Flush and close the driver.
     try {
         if (record->driver) {
             record->driver->flush();
@@ -356,10 +404,10 @@ amio_status_t close_dataset(void *dataset_payload) {
         }
     }
 
-    // Step 4: Release the handle from the table.
+    // Step 5: Release the handle from the table.
     process_handle_table().release(record->token, HandleKind::Dataset);
 
-    // Step 5: Remove from the core's dataset map.
+    // Step 6: Remove from the core's dataset map.
     // Note: We don't have a back-pointer to the core here, so the
     // record will be cleaned up when the core is finalized or when
     // the dataset record is destroyed.  The handle is already
@@ -587,13 +635,7 @@ amio_status_t write(void *dataset_payload, const char *var_name, const void *hos
             // the host pointer.
             try {
                 if (record->driver) {
-                    // Driver serialization is deferred until the full
-                    // runtime-I/O integration (task 9.x) wires the open
-                    // path.  The VarMeta below carries the variable
-                    // name, dtype, and shape the driver will need:
-                    //   record->driver->write(*buf_for_worker, meta);
-                    (void)meta;
-                    (void)buf_for_worker;
+                    record->driver->write(*buf_for_worker, meta);
                 }
                 io_rec->completed.store(true);
             } catch (...) {
@@ -640,80 +682,225 @@ amio_status_t write(void *dataset_payload, const char *var_name, const void *hos
 }
 
 // ---------------------------------------------------------------
-// amio_read -- task 9.2: read prefetch path
+// validate_bbox -- task 9: selective-read bounds validation (Req 12).
 //
-// If the prefetch queue has a completed buffer for timestep T,
-// returns a Memory_View (no I/O on calling thread).  If not
-// completed, blocks until the worker signals or read_timeout
-// expires.  After successful return, schedules T+N if within
-// bounds to maintain look-ahead depth.
+// Validates a caller-supplied Bounding_Box against the variable's
+// shape (sourced from Dataset_Metadata via describe_variable) before
+// it is handed to the PrefetchQueue / Backend_Driver, so out-of-range
+// or malformed requests fail clearly instead of corrupting memory.
 //
-// Failed prefetch: retains failure record, surfaces on next
-// amio_read(T) as AMIO_ERR_*.
+//   * null bbox                     -> AMIO_OK (full read)            (Req 12 full-read)
+//   * rank != variable rank         -> AMIO_ERR_INVALID_INPUT         (Req 12.2)
+//   * stride < 1 in any dimension   -> AMIO_ERR_INVALID_INPUT         (Req 12.4)
+//   * negative offset               -> AMIO_ERR_INVALID_INPUT         (Req 12.3)
+//   * extent < 1                    -> AMIO_ERR_INVALID_INPUT         (Req 12.3)
+//   * offset + (extent-1)*stride
+//       selects an index >= the
+//       variable extent in any dim  -> AMIO_ERR_INVALID_INPUT         (Req 12.3)
 //
-// Bounding-box/stride reads: passes bbox to Backend_Driver so
-// only intersecting byte ranges are requested from storage.
+// A validated box is passed through to the driver so only intersecting
+// byte ranges are requested from storage (Req 12.1).
 //
-// Validates: R5.1, R5.2, R5.3, R5.4, R5.5, R5.7, R5.8
+// Validates: R12.1, R12.2, R12.3, R12.4
+// ---------------------------------------------------------------
+static amio_status_t validate_bbox(const amio_bbox_t *b, const amio_shape_t &shape) noexcept {
+    if (b == nullptr) {
+        // No Bounding_Box -- full read (Req 12, full-read case).
+        return AMIO_OK;
+    }
+    if (b->rank != shape.rank) {
+        // Rank mismatch (Req 12.2).
+        return AMIO_ERR_INVALID_INPUT;
+    }
+    for (int d = 0; d < b->rank; ++d) {
+        if (b->strides[d] < 1) {
+            // Stride less than one (Req 12.4).
+            return AMIO_ERR_INVALID_INPUT;
+        }
+        if (b->offsets[d] < 0) {
+            // Negative offset (Req 12.3).
+            return AMIO_ERR_INVALID_INPUT;
+        }
+        std::int64_t last = b->offsets[d] + (b->extents[d] - 1) * b->strides[d];
+        if (b->extents[d] < 1 || last >= shape.extents[d]) {
+            // Empty extent or selection outside the variable extents
+            // in this dimension (Req 12.3).
+            return AMIO_ERR_INVALID_INPUT;
+        }
+    }
+    return AMIO_OK;
+}
+
+// ---------------------------------------------------------------
+// resolve_variable -- task 8: lazily create per-variable read state.
+//
+// A read-mode dataset opens once but may be read for many variables;
+// each variable gets its own PrefetchQueue so the completed / pending
+// / failed look-ahead windows never alias on the same timestep keys
+// (design.md Key Design Decision: per-variable prefetch).
+//
+// On the first amio_read for `var_name` this:
+//   1. probes the backend via describe_variable for the variable's
+//      element type, shape, and total timestep count (Dataset_Metadata,
+//      Req 4.5);
+//   2. if the variable is found, constructs its dedicated PrefetchQueue
+//      with the depth / read timeout sourced from the retained dataset
+//      Config (Req 2.3) and the shared Staging_Pool / Worker_Pool, bound
+//      to the variable's metadata and total timestep count (Req 2.4);
+//   3. kicks off the initial min(depth, total_timesteps) look-ahead
+//      fetches via schedule_initial() (Req 5.1).
+//
+// Subsequent reads for the same variable reuse the cached state.
+//
+// Thread-safe: serialized on record->variables_mu so concurrent
+// amio_read calls create each VariableReadState exactly once (Req 3.1).
+//
+// Returns a pointer to the cached VariableReadState, or nullptr when
+// the driver reports the variable is absent / undescribable
+// (describe_variable returns found == false); the caller maps that to
+// AMIO_ERR_BACKEND_FAILURE (Req 4.5).
+//
+// Validates: R2.3, R2.4, R3.1, R4.5, R5.1
+// ---------------------------------------------------------------
+static VariableReadState *resolve_variable(DatasetRecord *record, const std::string &var_name) {
+    std::lock_guard<std::mutex> lock(record->variables_mu);
+
+    // Reuse existing state if the variable has already been resolved.
+    auto it = record->variables.find(var_name);
+    if (it != record->variables.end()) {
+        return it->second.get();
+    }
+
+    // First use of this variable: probe the backend for its metadata.
+    if (!record->driver) {
+        return nullptr;
+    }
+    VariableInfo info = record->driver->describe_variable(var_name);
+    if (!info.found) {
+        // Variable absent or driver cannot introspect it (Req 4.5).
+        return nullptr;
+    }
+
+    // Construct the variable's read state and its dedicated queue.
+    auto state = std::make_unique<VariableReadState>();
+    state->name = var_name;
+    state->info = info;
+
+    AMIO_Core *core = record->core;
+    StagingPool *pool = (core != nullptr) ? core->staging_pool.get() : nullptr;
+    WorkerPool *workers = (core != nullptr) ? core->worker_pool.get() : nullptr;
+
+    // Depth / read timeout come from the retained dataset Config
+    // (Req 2.3); the queue is bound to this variable's metadata and
+    // total timestep count (Req 2.4).
+    state->queue = std::make_unique<PrefetchQueue>(record->dataset_config.prefetch.depth,
+                                                   static_cast<std::int64_t>(record->dataset_config.prefetch.read_timeout_s), pool, workers,
+                                                   record->driver.get(), record->dataset_id, var_name, info, info.total_timesteps);
+
+    // Kick off the initial min(depth, total_timesteps) look-ahead
+    // fetches for this variable (Req 5.1).
+    state->queue->schedule_initial();
+
+    VariableReadState *raw = state.get();
+    record->variables.emplace(var_name, std::move(state));
+    return raw;
+}
+
+// ---------------------------------------------------------------
+// amio_read -- task 8: read coordinator + lazy per-variable resolve
+//
+// Validation order (design §5):
+//   1. null / empty var_name        -> AMIO_ERR_INVALID_INPUT (Req 3.4, 6.5)
+//   2. write-mode dataset           -> AMIO_ERR_INVALID_INPUT (Req 6.6)
+//   3. timestep < 0                 -> AMIO_ERR_INVALID_INPUT (Req 6.4)
+//   4. unresolved variable          -> AMIO_ERR_BACKEND_FAILURE (Req 4.5)
+//   5. timestep >= total_timesteps  -> AMIO_ERR_INVALID_INPUT (Req 6.4)
+//
+// On the first read of a variable, resolve_variable creates its
+// PrefetchQueue and launches the initial look-ahead (Req 2.3, 2.4,
+// 3.1, 5.1).  get_buffer returns the staged buffer for timestep T
+// without calling-thread I/O when the fetch has completed, or blocks
+// until it completes / fails / times out (Req 5.2, 5.3, 6.1, 6.2).
+// On success a ViewRecord is minted, the outstanding-view count is
+// incremented (Req 7), and T + depth is scheduled to replenish the
+// look-ahead window (Req 5.3).
+//
+// Bounding-box validation (task 9) is inserted between variable
+// resolution and get_buffer: the bbox is checked against the
+// variable's shape (Req 12) and the validated box is then passed
+// through to the queue / driver.
+//
+// Validates: R2.3, R2.4, R3.1, R3.2, R4.5, R5.1, R5.2, R5.3, R6.4, R6.5, R6.6, R12.1, R12.2, R12.3, R12.4
 // ---------------------------------------------------------------
 amio_status_t read(void *dataset_payload, const char *var_name, std::int64_t timestep, const amio_bbox_t *bbox, amio_view_handle *out_view) {
     auto *record = static_cast<DatasetRecord *>(dataset_payload);
 
-    // ---- Step 1: Validate inputs ----
-    if (var_name == nullptr) {
+    // ---- Step 1: Validate inputs (fixed order, design §5) ----
+
+    // Null / empty variable name (Req 3.4, 6.5).
+    if (var_name == nullptr || var_name[0] == '\0') {
         return AMIO_ERR_INVALID_INPUT;
     }
 
-    // Verify this is a read-mode dataset.
+    // Read on a write-mode dataset (Req 6.6).
     if (record->mode != AMIO_MODE_READ) {
         return AMIO_ERR_INVALID_INPUT;
     }
 
-    // Verify timestep is non-negative and within bounds.
+    // Negative timestep (Req 6.4).
     if (timestep < 0) {
         return AMIO_ERR_INVALID_INPUT;
     }
-    if (timestep >= record->total_timesteps) {
+
+    // ---- Step 2: Resolve per-variable read state (lazy) ----
+    // Creates the VariableReadState + PrefetchQueue on first use and
+    // launches the initial look-ahead (Req 2.3, 2.4, 3.1, 4.5, 5.1).
+    VariableReadState *vs = resolve_variable(record, var_name);
+    if (vs == nullptr) {
+        // Variable not found / driver cannot describe it (Req 4.5).
+        return AMIO_ERR_BACKEND_FAILURE;
+    }
+
+    // Timestep at or beyond the variable's total timestep count
+    // (Req 6.4) -- validated against Dataset_Metadata, not a
+    // placeholder.
+    if (timestep >= vs->info.total_timesteps) {
         return AMIO_ERR_INVALID_INPUT;
     }
 
-    // ---- Step 2: Access the PrefetchQueue ----
-    PrefetchQueue *pfq = record->prefetch_queue.get();
-    if (pfq == nullptr) {
-        // No prefetch queue -- this shouldn't happen for a read
-        // dataset, but handle gracefully.
-        return AMIO_ERR_BACKEND_FAILURE;
+    // ---- Step 2b: Validate the Bounding_Box against the variable shape ----
+    // Rank mismatch, negative offset, empty extent, stride < 1, or a
+    // selection that runs past the variable extents in any dimension
+    // is rejected before any fetch is scheduled (Req 12.2, 12.3, 12.4).
+    // A null bbox is a full read and passes through.  The validated box
+    // is then handed to the queue / driver so only intersecting byte
+    // ranges are requested from storage (Req 12.1).
+    amio_status_t bbox_rc = validate_bbox(bbox, vs->info.shape);
+    if (bbox_rc != AMIO_OK) {
+        return bbox_rc;
     }
 
-    // ---- Step 3: Get buffer from prefetch queue (R5.3, R5.5) ----
-    // If the buffer is already completed for timestep T, this
-    // returns immediately (no I/O on calling thread).
-    // If not completed, blocks until worker signals or timeout.
-    // If the fetch failed, returns the recorded error code.
+    // ---- Step 3: Get buffer from the variable's PrefetchQueue ----
+    // The validated bounding box is passed straight through to the
+    // queue / driver (Req 12.1).  A completed fetch returns immediately
+    // with no calling-thread I/O; otherwise this blocks until the fetch
+    // completes / fails / times out (Req 5.2, 5.3, 6.1, 6.2).
     StagingBuffer *buf = nullptr;
-    amio_status_t get_rc = pfq->get_buffer(timestep, bbox, &buf);
-
+    amio_status_t get_rc = vs->queue->get_buffer(timestep, bbox, &buf);
     if (get_rc != AMIO_OK) {
-        // Timeout or backend failure -- surface the error (R5.5, R5.8).
+        // Timeout or backend failure -- surface the error (Req 6.1, 6.2).
         return get_rc;
     }
-
     if (buf == nullptr) {
-        // Should not happen if get_buffer returned AMIO_OK, but
-        // guard against it.
+        // Should not happen if get_buffer returned AMIO_OK, but guard.
         return AMIO_ERR_BACKEND_FAILURE;
     }
 
-    // ---- Step 4: Create ViewRecord and add ref to buffer ----
+    // ---- Step 4: Create ViewRecord and track the outstanding view ----
+    // The staging buffer carries ref_count=1 from acquire; that
+    // reference is held by the view until amio_release_view (R5.6,
+    // R5.9).
     AMIO_Core *core = record->core;
-
-    // Add a reference to the staging buffer so it stays live until
-    // the host calls amio_release_view (R5.6, R5.9).
-    if (core != nullptr && core->staging_pool != nullptr) {
-        // The buffer already has ref_count=1 from acquire.
-        // We keep that reference for the view.  The prefetch queue
-        // no longer owns it (it was removed from completed_ map).
-    }
 
     auto *view_rec = new ViewRecord{};
     view_rec->staging_buf = buf;
@@ -728,10 +915,8 @@ amio_status_t read(void *dataset_payload, const char *var_name, std::int64_t tim
     // Track outstanding views for close-time validation (R5.10).
     record->outstanding_views.fetch_add(1);
 
-    // ---- Step 5: Schedule T+N if within bounds (R5.4) ----
-    // After returning timestep T, schedule fetch for T+N to
-    // maintain the look-ahead depth.
-    pfq->schedule_next(timestep);
+    // ---- Step 5: Replenish look-ahead -- schedule T + depth (Req 5.3) ----
+    vs->queue->schedule_next(timestep);
 
     // ---- Step 6: Return view handle to caller ----
     *out_view = HandleTable::to_ptr(view_token);

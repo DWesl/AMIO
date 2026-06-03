@@ -7,6 +7,7 @@
 #include <cassert>
 #include <cstdint>
 #include <cstring>
+#include <initializer_list>
 #include <iostream>
 #include <memory>
 #include <string>
@@ -19,6 +20,33 @@
 
 namespace amio::detail {
 namespace test {
+
+// ---------------------------------------------------------------
+// make_var_info -- build a VariableInfo for the PrefetchQueue
+// constructor (task 7).  The dtype/shape size the staging
+// acquisition as element_size(dtype) * product(extents); each test
+// supplies a payload that fits within its pool's buffer capacity so
+// the existing assertions (which depend on the buffer capacity, not
+// the acquire size) still hold.
+// ---------------------------------------------------------------
+inline VariableInfo make_var_info(amio_dtype_t dtype, std::initializer_list<std::int64_t> extents) {
+    VariableInfo info{};
+    info.found = true;
+    info.dtype = dtype;
+    info.shape.rank = static_cast<std::int32_t>(extents.size());
+    std::int32_t d = 0;
+    for (std::int64_t e : extents) {
+        info.shape.extents[d++] = e;
+    }
+    info.total_timesteps = 1;  // unused by sync_fetch; set for consistency
+    return info;
+}
+
+// Shared VariableInfo: F32, 256 elements -> 1024-byte payload.
+// Fits the 1024-byte pools used below (acquire requires capacity >=
+// payload) and the larger 4096-byte pools, so every test's buffer
+// sizing and byte-count assertions remain valid.
+static const VariableInfo kVarInfo = make_var_info(AMIO_DTYPE_F32, {256});
 
 // ---------------------------------------------------------------
 // MockBackendDriver -- a test double that simulates reads by
@@ -86,7 +114,7 @@ void test_schedule_initial_min_n_m() {
 
     // Case 1: N < M (depth=4, total_timesteps=10)
     {
-        PrefetchQueue pq(4, 60, &pool, nullptr, &driver, 1, "var", 10);
+        PrefetchQueue pq(4, 60, &pool, nullptr, &driver, 1, "var", kVarInfo, 10);
         pq.schedule_initial();
 
         // Should have scheduled 4 fetches (min(4, 10) = 4).
@@ -99,7 +127,7 @@ void test_schedule_initial_min_n_m() {
     // Case 2: N > M (depth=8, total_timesteps=3)
     {
         MockBackendDriver driver2;
-        PrefetchQueue pq(8, 60, &pool, nullptr, &driver2, 2, "var", 3);
+        PrefetchQueue pq(8, 60, &pool, nullptr, &driver2, 2, "var", kVarInfo, 3);
         pq.schedule_initial();
 
         // Should have scheduled 3 fetches (min(8, 3) = 3).
@@ -110,7 +138,7 @@ void test_schedule_initial_min_n_m() {
     // Case 3: N == M (depth=5, total_timesteps=5)
     {
         MockBackendDriver driver3;
-        PrefetchQueue pq(5, 60, &pool, nullptr, &driver3, 3, "var", 5);
+        PrefetchQueue pq(5, 60, &pool, nullptr, &driver3, 3, "var", kVarInfo, 5);
         pq.schedule_initial();
 
         assert(pq.completed_count() == 5);
@@ -129,7 +157,7 @@ void test_get_buffer_immediate_return() {
     StagingPool pool(16, 1024, 5000);
     MockBackendDriver driver;
 
-    PrefetchQueue pq(4, 60, &pool, nullptr, &driver, 1, "var", 10);
+    PrefetchQueue pq(4, 60, &pool, nullptr, &driver, 1, "var", kVarInfo, 10);
     pq.schedule_initial();
 
     // Timestep 0 should be completed -- get_buffer returns immediately.
@@ -158,7 +186,7 @@ void test_schedule_next_maintains_lookahead() {
     MockBackendDriver driver;
 
     // depth=3, total_timesteps=10
-    PrefetchQueue pq(3, 60, &pool, nullptr, &driver, 1, "var", 10);
+    PrefetchQueue pq(3, 60, &pool, nullptr, &driver, 1, "var", kVarInfo, 10);
     pq.schedule_initial();
 
     // Initial: fetched timesteps 0, 1, 2 (min(3, 10) = 3).
@@ -199,7 +227,7 @@ void test_schedule_next_bounds_check() {
     MockBackendDriver driver;
 
     // depth=3, total_timesteps=5
-    PrefetchQueue pq(3, 60, &pool, nullptr, &driver, 1, "var", 5);
+    PrefetchQueue pq(3, 60, &pool, nullptr, &driver, 1, "var", kVarInfo, 5);
     pq.schedule_initial();
 
     // Initial: fetched 0, 1, 2.
@@ -263,7 +291,7 @@ void test_failed_prefetch_surfaces_error() {
     driver.set_fail_timestep(2);
 
     // depth=4, total_timesteps=10
-    PrefetchQueue pq(4, 60, &pool, nullptr, &driver, 1, "var", 10);
+    PrefetchQueue pq(4, 60, &pool, nullptr, &driver, 1, "var", kVarInfo, 10);
     pq.schedule_initial();
 
     // Timesteps 0, 1 should be completed; timestep 2 should have failed.
@@ -296,7 +324,7 @@ void test_bbox_read_selectivity() {
     MockBackendDriver driver;
 
     // depth=2, total_timesteps=5
-    PrefetchQueue pq(2, 60, &pool, nullptr, &driver, 1, "var", 5);
+    PrefetchQueue pq(2, 60, &pool, nullptr, &driver, 1, "var", kVarInfo, 5);
     // Don't schedule initial -- we'll request with bbox directly.
 
     // Create a bounding box requesting a sub-region.
@@ -336,13 +364,13 @@ void test_depth_clamping() {
 
     // Depth below minimum (0) should be clamped to 1.
     {
-        PrefetchQueue pq(0, 60, &pool, nullptr, &driver, 1, "var", 10);
+        PrefetchQueue pq(0, 60, &pool, nullptr, &driver, 1, "var", kVarInfo, 10);
         assert(pq.depth() == 1);
     }
 
     // Depth above maximum (2000) should be clamped to 1024.
     {
-        PrefetchQueue pq(2000, 60, &pool, nullptr, &driver, 2, "var", 10);
+        PrefetchQueue pq(2000, 60, &pool, nullptr, &driver, 2, "var", kVarInfo, 10);
         assert(pq.depth() == 1024);
     }
 
@@ -360,7 +388,7 @@ void test_read_timeout() {
 
     // Create a queue with very short timeout (1 second) and don't
     // schedule any fetches.
-    PrefetchQueue pq(4, 1, &pool, nullptr, &driver, 1, "var", 10);
+    PrefetchQueue pq(4, 1, &pool, nullptr, &driver, 1, "var", kVarInfo, 10);
     // Note: schedule_initial not called, so no fetches are pending.
 
     // Requesting timestep 5 (not pre-fetched) should trigger a
@@ -390,7 +418,7 @@ void test_cancel_pending() {
     StagingPool pool(16, 1024, 5000);
     MockBackendDriver driver;
 
-    PrefetchQueue pq(4, 60, &pool, nullptr, &driver, 1, "var", 10);
+    PrefetchQueue pq(4, 60, &pool, nullptr, &driver, 1, "var", kVarInfo, 10);
     pq.schedule_initial();
 
     // Should have 4 completed buffers.

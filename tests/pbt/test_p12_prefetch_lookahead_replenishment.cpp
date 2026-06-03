@@ -78,9 +78,10 @@ TEST_CASE("P12: Prefetch look-ahead replenishment - T+N within bounds", "[pbt][p
         }
 
         // Create PrefetchQueue in synchronous mode.
+        auto info = make_var_info_1d(AMIO_DTYPE_F32, 16, total_timesteps);
         PrefetchQueue pq(depth, 60, &pool,
                          nullptr,  // synchronous mode
-                         driver.get(), 1, "test_var", total_timesteps);
+                         driver.get(), 1, "test_var", info, total_timesteps);
 
         // Schedule initial fetches.
         pq.schedule_initial();
@@ -167,7 +168,8 @@ TEST_CASE("P12: Prefetch look-ahead replenishment - T+N out of bounds", "[pbt][p
         }
 
         // Create PrefetchQueue in synchronous mode.
-        PrefetchQueue pq(depth, 60, &pool, nullptr, driver.get(), 1, "test_var", total_timesteps);
+        auto info = make_var_info_1d(AMIO_DTYPE_F32, 16, total_timesteps);
+        PrefetchQueue pq(depth, 60, &pool, nullptr, driver.get(), 1, "test_var", info, total_timesteps);
 
         // Schedule initial fetches.
         pq.schedule_initial();
@@ -234,7 +236,8 @@ TEST_CASE("P12: Prefetch look-ahead replenishment - sliding window", "[pbt][p12]
         }
 
         // Create PrefetchQueue in synchronous mode.
-        PrefetchQueue pq(depth, 60, &pool, nullptr, driver.get(), 1, "test_var", total_timesteps);
+        auto info = make_var_info_1d(AMIO_DTYPE_F32, 16, total_timesteps);
+        PrefetchQueue pq(depth, 60, &pool, nullptr, driver.get(), 1, "test_var", info, total_timesteps);
 
         // Schedule initial fetches.
         pq.schedule_initial();

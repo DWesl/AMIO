@@ -82,13 +82,17 @@ TEST_CASE("P10: Prefetch open scheduling - schedules exactly min(N,M) fetches", 
         // fallback mode). This means schedule_initial() will
         // perform fetches synchronously and they will appear as
         // completed entries.
+        //
+        // The VariableInfo sizes the staging acquisition (F32, 16
+        // elements = 64 bytes) -- well within the 4096-byte buffers.
+        auto info = make_var_info_1d(AMIO_DTYPE_F32, 16, total_timesteps);
         PrefetchQueue pq(depth,
                          60,  // read_timeout_s
                          &pool,
                          nullptr,  // no worker pool -> synchronous fetch
                          driver.get(),
                          1,  // dataset_id
-                         "test_var", total_timesteps);
+                         "test_var", info, total_timesteps);
 
         // Schedule initial fetches.
         pq.schedule_initial();
@@ -167,7 +171,8 @@ TEST_CASE("P10: Prefetch open scheduling - async with Worker_Pool", "[pbt][p10][
         auto workers = std::make_unique<WorkerPool>(wp_config);
 
         // Create PrefetchQueue with the worker pool.
-        PrefetchQueue pq(depth, 60, &pool, workers.get(), driver.get(), 1, "test_var", total_timesteps);
+        auto info = make_var_info_1d(AMIO_DTYPE_F32, 16, total_timesteps);
+        PrefetchQueue pq(depth, 60, &pool, workers.get(), driver.get(), 1, "test_var", info, total_timesteps);
 
         // Schedule initial fetches.
         pq.schedule_initial();
