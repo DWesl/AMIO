@@ -1,6 +1,6 @@
 site_name: "AMIO Documentation"
 site_description: "Asynchronous Multidimensional I/O engine for NOAA NWS Earth system models"
-site_url: ""
+site_url: "https://bbakernoaa.github.io/amio/"
 
 docs_dir: site/
 site_dir: _build/
