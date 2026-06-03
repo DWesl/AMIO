@@ -1,8 +1,8 @@
 # AMIO — Asynchronous Multidimensional I/O
 
-[![CI](https://github.com/NOAA-EMC/AMIO/actions/workflows/ci.yml/badge.svg)](https://github.com/NOAA-EMC/AMIO/actions/workflows/ci.yml)
+[![CI](https://github.com/bbakernoaa/amio/actions/workflows/ci.yml/badge.svg)](https://github.com/bbakernoaa/amio/actions/workflows/ci.yml)
 [![License: CC0-1.0](https://img.shields.io/badge/License-CC0_1.0-lightgrey.svg)](https://creativecommons.org/publicdomain/zero/1.0/)
-[![Tests](https://img.shields.io/badge/tests-66%20passing-brightgreen)](https://github.com/NOAA-EMC/AMIO/actions/workflows/ci.yml)
+[![Tests](https://img.shields.io/badge/tests-66%20passing-brightgreen)](https://github.com/bbakernoaa/amio/actions/workflows/ci.yml)
 [![C Standard](https://img.shields.io/badge/API-C99-blue)](include/amio/amio.h)
 [![Fortran](https://img.shields.io/badge/Fortran-2003%20iso__c__binding-blue)](fortran/amio_mod.f90)
 [![NOAA Disclaimer](https://img.shields.io/badge/NOAA-Disclaimer-yellow)](DISCLAIMER)
