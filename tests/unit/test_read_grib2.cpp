@@ -44,6 +44,8 @@
 // Validates: Req 13.2, 13.3, 13.4, 13.5 (GRIB2 decode + bbox + lossless
 // round trip).
 
+#include <eckit/config/YAMLConfiguration.h>
+
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
@@ -51,8 +53,6 @@
 #include <stdexcept>
 #include <string>
 #include <vector>
-
-#include <eckit/config/YAMLConfiguration.h>
 
 #include "drivers/grib2/grib2_driver.hpp"
 #include "factory/backend_driver.hpp"
@@ -314,15 +314,12 @@ int main() {
     const RoundTripResult aec = run_roundtrip("libaec", "/tmp/amio_test_read_grib2_aec.grib2");
     const RoundTripResult jp2 = run_roundtrip("jpeg2000", "/tmp/amio_test_read_grib2_jp2.grib2");
 
-    std::fprintf(stdout, "libaec (DRT 5.42):   encoded=%s byte_equal=%s\n", aec.encoded ? "YES" : "NO (skipped)",
-                 aec.byte_equal ? "YES" : "NO");
-    std::fprintf(stdout, "JPEG2000 (DRT 5.40): encoded=%s byte_equal=%s\n", jp2.encoded ? "YES" : "NO (skipped)",
-                 jp2.byte_equal ? "YES" : "NO");
+    std::fprintf(stdout, "libaec (DRT 5.42):   encoded=%s byte_equal=%s\n", aec.encoded ? "YES" : "NO (skipped)", aec.byte_equal ? "YES" : "NO");
+    std::fprintf(stdout, "JPEG2000 (DRT 5.40): encoded=%s byte_equal=%s\n", jp2.encoded ? "YES" : "NO (skipped)", jp2.byte_equal ? "YES" : "NO");
 
     // At least one lossless DRT must be available and round-trip
     // byte-equal, otherwise Req 13.4 cannot be validated in this build.
-    EXPECT_TRUE((aec.encoded && aec.byte_equal) || (jp2.encoded && jp2.byte_equal),
-                "at least one lossless DRT round-trips byte-equal");
+    EXPECT_TRUE((aec.encoded && aec.byte_equal) || (jp2.encoded && jp2.byte_equal), "at least one lossless DRT round-trips byte-equal");
 
     std::fprintf(stdout, "test_read_grib2: passed=%d failed=%d\n", g_passed, g_failed);
     return g_failed == 0 ? 0 : 1;

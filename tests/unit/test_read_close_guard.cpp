@@ -200,8 +200,8 @@ void test_close_blocked_by_outstanding_view() {
     EXPECT_TRUE(fx.driver->closed, "driver close() invoked once views are drained");
 
     // All staging buffers are free again (nothing leaked / retained).
-    EXPECT_EQ(static_cast<int>(fx.core->staging_pool->free_buffer_count()),
-              static_cast<int>(fx.core->staging_pool->total_buffer_count()), "all buffers free after a clean close");
+    EXPECT_EQ(static_cast<int>(fx.core->staging_pool->free_buffer_count()), static_cast<int>(fx.core->staging_pool->total_buffer_count()),
+              "all buffers free after a clean close");
 }
 
 // ---------------------------------------------------------------
@@ -227,12 +227,14 @@ void test_close_releases_completed_unread_buffers() {
     // held by the view, three are completed-but-unread.  So four are in
     // use and the rest are free.
     const int total = static_cast<int>(fx.core->staging_pool->total_buffer_count());
-    EXPECT_EQ(static_cast<int>(fx.core->staging_pool->free_buffer_count()), total - 4, "four buffers in use after first read (1 view + 3 prefetched)");
+    EXPECT_EQ(static_cast<int>(fx.core->staging_pool->free_buffer_count()), total - 4,
+              "four buffers in use after first read (1 view + 3 prefetched)");
 
     // Release the view (returns the ts-0 buffer); three prefetched
     // buffers are still retained by the queue.
     fx.release(view);
-    EXPECT_EQ(static_cast<int>(fx.core->staging_pool->free_buffer_count()), total - 3, "three prefetched buffers still held by the queue after release");
+    EXPECT_EQ(static_cast<int>(fx.core->staging_pool->free_buffer_count()), total - 3,
+              "three prefetched buffers still held by the queue after release");
 
     // Close: cancel_pending() must release the three completed-but-unread
     // buffers back to the pool (Req 8.3).
@@ -251,8 +253,8 @@ void test_close_fresh_read_dataset_succeeds() {
     amio_status_t close_rc = amio::detail::close_dataset(fx.record);
     EXPECT_EQ(close_rc, AMIO_OK, "close on a never-read dataset succeeds");
     EXPECT_TRUE(fx.driver->closed, "driver close() invoked on a clean close");
-    EXPECT_EQ(static_cast<int>(fx.core->staging_pool->free_buffer_count()),
-              static_cast<int>(fx.core->staging_pool->total_buffer_count()), "no buffers retained when nothing was read");
+    EXPECT_EQ(static_cast<int>(fx.core->staging_pool->free_buffer_count()), static_cast<int>(fx.core->staging_pool->total_buffer_count()),
+              "no buffers retained when nothing was read");
 }
 
 }  // namespace

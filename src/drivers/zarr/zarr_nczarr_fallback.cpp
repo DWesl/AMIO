@@ -27,8 +27,8 @@
 #include <string>
 #include <vector>
 
-#include "drivers/zarr/zarr_driver.hpp"
 #include "drivers/common/var_attributes.hpp"
+#include "drivers/zarr/zarr_driver.hpp"
 #include "factory/backend_factory.hpp"
 #include "staging/staging_pool.hpp"
 

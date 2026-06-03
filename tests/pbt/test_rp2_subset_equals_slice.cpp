@@ -38,8 +38,7 @@ namespace {
 std::vector<std::size_t> row_major_strides(const amio_shape_t& shape) {
     std::vector<std::size_t> strides(static_cast<std::size_t>(shape.rank), 1);
     for (int d = shape.rank - 2; d >= 0; --d) {
-        strides[static_cast<std::size_t>(d)] =
-            strides[static_cast<std::size_t>(d + 1)] * static_cast<std::size_t>(shape.extents[d + 1]);
+        strides[static_cast<std::size_t>(d)] = strides[static_cast<std::size_t>(d + 1)] * static_cast<std::size_t>(shape.extents[d + 1]);
     }
     return strides;
 }

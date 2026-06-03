@@ -33,7 +33,7 @@ class MpiLifecycleListener : public Catch::EventListenerBase {
    public:
     using Catch::EventListenerBase::EventListenerBase;
 
-    void testRunStarting(const Catch::TestRunInfo&) override {
+    void testRunStarting(const Catch::TestRunInfo &) override {
         int already = 0;
         MPI_Initialized(&already);
         if (!already) {
@@ -43,7 +43,7 @@ class MpiLifecycleListener : public Catch::EventListenerBase {
         }
     }
 
-    void testRunEnded(const Catch::TestRunStats&) override {
+    void testRunEnded(const Catch::TestRunStats &) override {
         if (!owns_mpi_) {
             return;
         }

@@ -221,6 +221,23 @@ AMIO_API amio_status_t amio_close(amio_dataset_handle dataset);
 AMIO_API amio_status_t amio_wait(amio_io_handle io, int64_t timeout_ms);
 
 /**
+ * @brief Retrieve the data pointer and byte count from a read view.
+ *
+ * The returned pointer is valid until amio_release_view() is called on
+ * this view handle. The data resides in host (CPU) memory.
+ *
+ * @param[in]  view       A valid view handle from amio_read().
+ * @param[out] out_data   On success, receives a pointer to the view's data.
+ * @param[out] out_size   On success, receives the number of valid bytes.
+ *
+ * @return AMIO_OK on success, or one of:
+ *   - AMIO_ERR_NULL_HANDLE — view is NULL
+ *   - AMIO_ERR_INVALID_HANDLE — view stale or wrong kind
+ *   - AMIO_ERR_INVALID_INPUT — out_data or out_size is NULL
+ */
+AMIO_API amio_status_t amio_view_data(amio_view_handle view, const void **out_data, size_t *out_size);
+
+/**
  * @brief Release a read-side Memory_View, returning its buffer to the pool.
  *
  * Once the last reference is dropped, the buffer returns to the

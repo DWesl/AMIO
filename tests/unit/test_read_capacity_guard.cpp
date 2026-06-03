@@ -65,15 +65,15 @@ void report_failure(const char *expr, const char *file, int line, const std::str
         }                                                     \
     } while (0)
 
-#define EXPECT_EQ(a, b, ctx)                                                                                              \
-    do {                                                                                                                  \
-        if ((a) != (b)) {                                                                                                 \
-            char buf[256];                                                                                                \
+#define EXPECT_EQ(a, b, ctx)                                                                                             \
+    do {                                                                                                                 \
+        if ((a) != (b)) {                                                                                                \
+            char buf[256];                                                                                               \
             std::snprintf(buf, sizeof(buf), "%s: expected %d, got %d", (ctx), static_cast<int>(b), static_cast<int>(a)); \
-            report_failure(#a " == " #b, __FILE__, __LINE__, buf);                                                        \
-        } else {                                                                                                          \
-            ++g_result.passed;                                                                                            \
-        }                                                                                                                 \
+            report_failure(#a " == " #b, __FILE__, __LINE__, buf);                                                       \
+        } else {                                                                                                         \
+            ++g_result.passed;                                                                                           \
+        }                                                                                                                \
     } while (0)
 
 // Variable shape every mock describes: rank-1 [16] F32, single
@@ -238,8 +238,8 @@ void test_over_capacity_report_fails_read() {
 
     // The over-capacity buffer must have been returned to the pool, so
     // all buffers are free again (nothing leaked / retained).
-    EXPECT_EQ(static_cast<int>(fx.core->staging_pool->free_buffer_count()),
-              static_cast<int>(fx.core->staging_pool->total_buffer_count()), "over-capacity buffer should be released back to the pool");
+    EXPECT_EQ(static_cast<int>(fx.core->staging_pool->free_buffer_count()), static_cast<int>(fx.core->staging_pool->total_buffer_count()),
+              "over-capacity buffer should be released back to the pool");
 }
 
 // ---------------------------------------------------------------
@@ -254,8 +254,8 @@ void test_throwing_capacity_guard_fails_read() {
     EXPECT_EQ(rc, AMIO_ERR_BACKEND_FAILURE, "driver throw should map to BACKEND_FAILURE");
     EXPECT_TRUE(view == nullptr, "no view when the driver throws");
 
-    EXPECT_EQ(static_cast<int>(fx.core->staging_pool->free_buffer_count()),
-              static_cast<int>(fx.core->staging_pool->total_buffer_count()), "failed-fetch buffer should be released back to the pool");
+    EXPECT_EQ(static_cast<int>(fx.core->staging_pool->free_buffer_count()), static_cast<int>(fx.core->staging_pool->total_buffer_count()),
+              "failed-fetch buffer should be released back to the pool");
 }
 
 // ---------------------------------------------------------------

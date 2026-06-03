@@ -214,6 +214,16 @@ AMIO_API amio_status_t amio_release_view(amio_view_handle view) {
     return kind_dispatch(view, HandleKind::View, [](void *payload) -> amio_status_t { return amio::detail::release_view(payload); });
 }
 
+AMIO_API amio_status_t amio_view_data(amio_view_handle view, const void **out_data, size_t *out_size) {
+    if (out_data == nullptr || out_size == nullptr) {
+        return AMIO_ERR_INVALID_INPUT;
+    }
+    *out_data = nullptr;
+    *out_size = 0;
+    return kind_dispatch(view, HandleKind::View,
+                         [&](void *payload) -> amio_status_t { return amio::detail::view_data(payload, out_data, out_size); });
+}
+
 // amio_strerror is intentionally NOT defined in this translation
 // unit.  Its implementation lives in `amio_strerror.cpp` (task 3.3)
 // alongside the static error-code description table.

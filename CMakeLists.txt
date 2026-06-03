@@ -97,26 +97,16 @@ find_package(netCDFCxx CONFIG QUIET)
 
 # Locate the parallel netCDF runtime for the NetCDF_Driver.
 #
-# On Debian/Ubuntu two netCDF builds ship side by side: a serial build
-# (libnetcdf.so, "NC-4 Parallel Support: no") and an MPI/parallel build
-# (libnetcdf_mpi.so, "NC-4 Parallel Support: yes").  find_package(netCDF)
-# resolves to the serial CMake package (netCDF::netcdf -> libnetcdf.so).
-# The NetCDF_Driver issues nc_create_par / nc_open_par, which require the
-# parallel library at RUNTIME -- linking the serial lib yields NetCDF error
-# -114 ("Parallel operation on file opened for non-parallel access").  The
-# MPI build's own CMake package is broken in some distributions (it
-# references a non-existent include dir), so we locate the parallel library
-# directly and link it into ONLY the NetCDF_Driver target (see
-# driver_netcdf below).  The parallel lib is self-contained (it links its
-# own MPI-enabled HDF5); the parallel-only header netcdf_par.h is exposed
-# via AMIO_NETCDF_MPI_INCLUDE_DIR.  We deliberately do NOT retarget the
-# shared netCDF::netcdf imported target, because the Zarr NCZarr-fallback
-# driver and serial-path tests rely on the serial netCDF (its deflate
-# filter plugin differs from the parallel build's).
+# On Debian/Ubuntu two netCDF builds ship side by side: a serial build (libnetcdf.so, "NC-4 Parallel Support: no") and an MPI/parallel build
+# (libnetcdf_mpi.so, "NC-4 Parallel Support: yes").  find_package(netCDF) resolves to the serial CMake package (netCDF::netcdf -> libnetcdf.so). The
+# NetCDF_Driver issues nc_create_par / nc_open_par, which require the parallel library at RUNTIME -- linking the serial lib yields NetCDF error -114
+# ("Parallel operation on file opened for non-parallel access").  The MPI build's own CMake package is broken in some distributions (it references a
+# non-existent include dir), so we locate the parallel library directly and link it into ONLY the NetCDF_Driver target (see driver_netcdf below).  The
+# parallel lib is self-contained (it links its own MPI-enabled HDF5); the parallel-only header netcdf_par.h is exposed via
+# AMIO_NETCDF_MPI_INCLUDE_DIR.  We deliberately do NOT retarget the shared netCDF::netcdf imported target, because the Zarr NCZarr-fallback driver and
+# serial-path tests rely on the serial netCDF (its deflate filter plugin differs from the parallel build's).
 if(netCDF_FOUND AND MPI_C_FOUND)
-    find_library(AMIO_NETCDF_PAR_LIB
-                 NAMES netcdf_mpi
-                 HINTS /usr/lib/${CMAKE_LIBRARY_ARCHITECTURE} /usr/lib)
+    find_library(AMIO_NETCDF_PAR_LIB NAMES netcdf_mpi HINTS /usr/lib/${CMAKE_LIBRARY_ARCHITECTURE} /usr/lib)
     if(AMIO_NETCDF_PAR_LIB)
         message(STATUS "AMIO: NetCDF_Driver will link parallel netCDF: ${AMIO_NETCDF_PAR_LIB}")
     endif()
@@ -275,10 +265,8 @@ target_include_directories(driver_netcdf PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src
 target_link_libraries(driver_netcdf PRIVATE amio_public_headers)
 if(eckit_FOUND)
     target_link_libraries(driver_netcdf PRIVATE eckit)
-    # Compile against the real eckit::Configuration ABI (not the in-file
-    # shim) so the driver matches the C-Boundary, which constructs a real
-    # eckit::YAMLConfiguration and passes it across the open_read/open_write
-    # seam.  Without this the driver would use its shim Configuration whose
+    # Compile against the real eckit::Configuration ABI (not the in-file shim) so the driver matches the C-Boundary, which constructs a real
+    # eckit::YAMLConfiguration and passes it across the open_read/open_write seam.  Without this the driver would use its shim Configuration whose
     # vtable layout differs from eckit's, corrupting the returned values.
     target_compile_definitions(driver_netcdf PRIVATE AMIO_HAS_ECKIT=1)
 endif()
@@ -287,13 +275,10 @@ if(netCDFCxx_FOUND)
     target_compile_definitions(driver_netcdf PRIVATE AMIO_HAS_NETCDF=1)
 elseif(netCDF_FOUND)
     if(AMIO_NETCDF_PAR_LIB)
-        # Link the parallel netCDF runtime (libnetcdf_mpi) so nc_create_par /
-        # nc_open_par work at runtime.  Take the API include directories from
-        # the serial netCDF::netcdf imported target (the C API headers are
-        # shared between the two builds); netcdf_par.h is added separately via
-        # AMIO_NETCDF_MPI_INCLUDE_DIR.  We link the library file directly
-        # rather than the serial imported target so libnetcdf.so is not also
-        # pulled in (which would duplicate the nc_* symbols).
+        # Link the parallel netCDF runtime (libnetcdf_mpi) so nc_create_par / nc_open_par work at runtime.  Take the API include directories from the
+        # serial netCDF::netcdf imported target (the C API headers are shared between the two builds); netcdf_par.h is added separately via
+        # AMIO_NETCDF_MPI_INCLUDE_DIR.  We link the library file directly rather than the serial imported target so libnetcdf.so is not also pulled in
+        # (which would duplicate the nc_* symbols).
         get_target_property(_amio_nc_inc netCDF::netcdf INTERFACE_INCLUDE_DIRECTORIES)
         if(_amio_nc_inc)
             target_include_directories(driver_netcdf PRIVATE ${_amio_nc_inc})
@@ -319,8 +304,7 @@ target_include_directories(driver_zarr PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
 target_link_libraries(driver_zarr PRIVATE amio_public_headers)
 if(eckit_FOUND)
     target_link_libraries(driver_zarr PRIVATE eckit)
-    # Match the C-Boundary's real eckit::Configuration ABI across the
-    # open_read/open_write seam (see driver_netcdf note above).
+    # Match the C-Boundary's real eckit::Configuration ABI across the open_read/open_write seam (see driver_netcdf note above).
     target_compile_definitions(driver_zarr PRIVATE AMIO_HAS_ECKIT=1)
 endif()
 if(AMIO_HAS_TENSORSTORE)
@@ -332,13 +316,10 @@ else()
     # NCZarr fallback mode: link netCDF-c (the NCZarr capability check in the dependency-discovery block above already gated this with FATAL_ERROR if
     # neither backend is available).  The driver compiles its NCZarr variant (R8.6-R8.8, R13.5).
     #
-    # Link the SAME netCDF runtime as driver_netcdf.  Both drivers are
-    # PRIVATE-linked into the single libamio.so; if one pulled in the serial
-    # libnetcdf and the other the parallel libnetcdf_mpi, their identical
-    # nc_* symbols would collide and one build would shadow the other at
-    # load time (the serial build then breaks driver_netcdf's nc_create_par
-    # with error -114).  The parallel netCDF build also provides NCZarr +
-    # the deflate filter, so it satisfies the fallback driver too.
+    # Link the SAME netCDF runtime as driver_netcdf.  Both drivers are PRIVATE-linked into the single libamio.so; if one pulled in the serial
+    # libnetcdf and the other the parallel libnetcdf_mpi, their identical nc_* symbols would collide and one build would shadow the other at load time
+    # (the serial build then breaks driver_netcdf's nc_create_par with error -114).  The parallel netCDF build also provides NCZarr + the deflate
+    # filter, so it satisfies the fallback driver too.
     if(AMIO_NETCDF_PAR_LIB)
         get_target_property(_amio_zarr_nc_inc netCDF::netcdf INTERFACE_INCLUDE_DIRECTORIES)
         if(_amio_zarr_nc_inc)
@@ -359,8 +340,7 @@ target_include_directories(driver_grib2 PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
 target_link_libraries(driver_grib2 PRIVATE amio_public_headers)
 if(eckit_FOUND)
     target_link_libraries(driver_grib2 PRIVATE eckit)
-    # Match the C-Boundary's real eckit::Configuration ABI across the
-    # open_read/open_write seam (see driver_netcdf note above).
+    # Match the C-Boundary's real eckit::Configuration ABI across the open_read/open_write seam (see driver_netcdf note above).
     target_compile_definitions(driver_grib2 PRIVATE AMIO_HAS_ECKIT=1)
 endif()
 if(g2c_FOUND)

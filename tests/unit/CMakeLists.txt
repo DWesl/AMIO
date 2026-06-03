@@ -242,9 +242,8 @@ target_link_libraries(test_dataset_lifecycle PRIVATE AMIO::public_headers AMIO::
 if(Threads_FOUND)
     target_link_libraries(test_dataset_lifecycle PRIVATE Threads::Threads)
 endif()
-# The NetCDF-4 backend now actually opens via nc_create_par/nc_open_par,
-# which require the host to have initialized MPI.  The test main does so;
-# link MPI for the symbols.
+# The NetCDF-4 backend now actually opens via nc_create_par/nc_open_par, which require the host to have initialized MPI.  The test main does so; link
+# MPI for the symbols.
 if(MPI_C_FOUND)
     target_link_libraries(test_dataset_lifecycle PRIVATE MPI::MPI_C)
 endif()
@@ -357,8 +356,8 @@ set_tests_properties(unit.read_bbox_validation PROPERTIES LABELS "unit;read;bbox
 #
 # Tests the read-path buffer-capacity guard and prefetch failure surfacing (task 10, design §5 / Error Handling, Property 8) through the real
 # amio::detail::read coordinator + PrefetchQueue.  Compiles the c_boundary read path and its dependencies directly into the test binary so the central
-# capacity backstop in PrefetchQueue::sync_fetch is exercised via read() against mock drivers that (a) report a payload past dst.capacity_bytes,
-# (b) throw a driver-side capacity guard, and (c) read within capacity.  Also pins that a recorded fetch failure surfaces on the next read of that
+# capacity backstop in PrefetchQueue::sync_fetch is exercised via read() against mock drivers that (a) report a payload past dst.capacity_bytes, (b)
+# throw a driver-side capacity guard, and (c) read within capacity.  Also pins that a recorded fetch failure surfaces on the next read of that
 # timestep (failed_ map behavior).
 #
 # Validates: R4.4, R6.2, R6.3
@@ -392,11 +391,11 @@ set_tests_properties(unit.read_capacity_guard PROPERTIES LABELS "unit;read;capac
 # ####################################################################################################################################################
 # test_read_close_guard
 #
-# Tests the outstanding-view guard at close and read-path prefetch cancellation (task 11, design §8, Property 7) through the real
-# amio::detail::read / release_view / close_dataset coordinator + PrefetchQueue.  Compiles the c_boundary read path and its dependencies directly into
-# the test binary so the close guard and per-variable cancel_pending() are exercised via close_dataset() against a mock driver: close with an
-# outstanding view returns AMIO_ERR_VIEWS_OUTSTANDING and performs no teardown; after releasing the view close succeeds; and closing a reader with
-# completed-but-unread prefetched buffers releases them back to the Staging_Pool.
+# Tests the outstanding-view guard at close and read-path prefetch cancellation (task 11, design §8, Property 7) through the real amio::detail::read /
+# release_view / close_dataset coordinator + PrefetchQueue.  Compiles the c_boundary read path and its dependencies directly into the test binary so
+# the close guard and per-variable cancel_pending() are exercised via close_dataset() against a mock driver: close with an outstanding view returns
+# AMIO_ERR_VIEWS_OUTSTANDING and performs no teardown; after releasing the view close succeeds; and closing a reader with completed-but-unread
+# prefetched buffers releases them back to the Staging_Pool.
 #
 # Validates: R8.1, R8.2, R8.3
 # ####################################################################################################################################################
@@ -468,13 +467,13 @@ set_tests_properties(unit.read_release_view PROPERTIES LABELS "unit;read;view;re
 # ####################################################################################################################################################
 # test_read_e2e_smoke
 #
-# End-to-end public-C-ABI read smoke test (task 20, design "Testing Strategy").  Drives the COMPLETE lifecycle through the installed extern "C"
-# entry points -- amio_init -> amio_open_dataset(READ) -> amio_read -> amio_release_view -> amio_close_dataset -> amio_finalize -- and asserts the
-# read is served from the runtime Staging_Pool with AMIO_OK and explicitly NOT AMIO_ERR_STAGING_BACKPRESSURE (the original core bug: init() never
-# built the Staging_Pool, so every read failed with backpressure).  A tiny in-process mock Backend_Driver is registered under a private factory key
-# so the test is hermetic (no parallel HDF5 / TensorStore / g2c needed); the real-driver byte fidelity is covered by unit.read_netcdf4 + rp1..rp8.
-# Compiles the same c_boundary + factory + staging + workers + prefetch source set as test_read_release_view so the public symbols dispatch into the
-# real init / open_dataset / read coordinator.
+# End-to-end public-C-ABI read smoke test (task 20, design "Testing Strategy").  Drives the COMPLETE lifecycle through the installed extern "C" entry
+# points -- amio_init -> amio_open_dataset(READ) -> amio_read -> amio_release_view -> amio_close_dataset -> amio_finalize -- and asserts the read is
+# served from the runtime Staging_Pool with AMIO_OK and explicitly NOT AMIO_ERR_STAGING_BACKPRESSURE (the original core bug: init() never built the
+# Staging_Pool, so every read failed with backpressure).  A tiny in-process mock Backend_Driver is registered under a private factory key so the test
+# is hermetic (no parallel HDF5 / TensorStore / g2c needed); the real-driver byte fidelity is covered by unit.read_netcdf4 + rp1..rp8. Compiles the
+# same c_boundary + factory + staging + workers + prefetch source set as test_read_release_view so the public symbols dispatch into the real init /
+# open_dataset / read coordinator.
 #
 # Validates: Req 1.3, 2.1, 9.1
 # ####################################################################################################################################################
@@ -520,9 +519,8 @@ target_link_libraries(test_lifecycle_netcdf4 PRIVATE AMIO::public_headers AMIO::
 if(Threads_FOUND)
     target_link_libraries(test_lifecycle_netcdf4 PRIVATE Threads::Threads)
 endif()
-# The NetCDF-4 backend now actually opens via nc_create_par, which requires
-# the host to have initialized MPI.  The test main does so; link MPI for
-# the symbols.
+# The NetCDF-4 backend now actually opens via nc_create_par, which requires the host to have initialized MPI.  The test main does so; link MPI for the
+# symbols.
 if(MPI_C_FOUND)
     target_link_libraries(test_lifecycle_netcdf4 PRIVATE MPI::MPI_C)
 endif()
@@ -578,11 +576,8 @@ set_tests_properties(unit.lifecycle_grib2 PROPERTIES LABELS "unit;lifecycle;grib
 if(eckit_FOUND AND netCDF_FOUND AND NOT AMIO_HAS_TENSORSTORE)
     add_executable(
         test_cf_attributes
-        test_cf_attributes.cpp
-        ${CMAKE_SOURCE_DIR}/src/drivers/zarr/zarr_driver.cpp
-        ${CMAKE_SOURCE_DIR}/src/drivers/zarr/zarr_nczarr_fallback.cpp
-        ${CMAKE_SOURCE_DIR}/src/drivers/common/var_attributes.cpp
-        ${CMAKE_SOURCE_DIR}/src/factory/backend_factory.cpp)
+        test_cf_attributes.cpp ${CMAKE_SOURCE_DIR}/src/drivers/zarr/zarr_driver.cpp ${CMAKE_SOURCE_DIR}/src/drivers/zarr/zarr_nczarr_fallback.cpp
+        ${CMAKE_SOURCE_DIR}/src/drivers/common/var_attributes.cpp ${CMAKE_SOURCE_DIR}/src/factory/backend_factory.cpp)
 
     target_include_directories(test_cf_attributes PRIVATE ${CMAKE_SOURCE_DIR}/src)
     target_compile_definitions(test_cf_attributes PRIVATE AMIO_NCZARR_FALLBACK AMIO_HAS_ECKIT=1)
@@ -610,19 +605,14 @@ endif()
 # Validates: Req 9.1, 9.2, 9.3, 9.4 (NetCDF-4 read end-to-end).
 # ####################################################################################################################################################
 if(netCDF_FOUND AND MPI_C_FOUND AND eckit_FOUND)
-    add_executable(
-        test_read_netcdf4
-        test_read_netcdf4.cpp
-        ${CMAKE_SOURCE_DIR}/src/drivers/netcdf/netcdf_driver.cpp
-        ${CMAKE_SOURCE_DIR}/src/drivers/common/var_attributes.cpp
-        ${CMAKE_SOURCE_DIR}/src/factory/backend_factory.cpp)
+    add_executable(test_read_netcdf4 test_read_netcdf4.cpp ${CMAKE_SOURCE_DIR}/src/drivers/netcdf/netcdf_driver.cpp
+                                     ${CMAKE_SOURCE_DIR}/src/drivers/common/var_attributes.cpp ${CMAKE_SOURCE_DIR}/src/factory/backend_factory.cpp)
 
     target_include_directories(test_read_netcdf4 PRIVATE ${CMAKE_SOURCE_DIR}/src)
     target_compile_definitions(test_read_netcdf4 PRIVATE AMIO_HAS_NETCDF=1 AMIO_HAS_ECKIT=1)
     target_link_libraries(test_read_netcdf4 PRIVATE AMIO::public_headers eckit)
 
-    # Link the same parallel netCDF runtime as driver_netcdf so nc_*_par work
-    # at runtime; expose the parallel-only netcdf_par.h via its include dir.
+    # Link the same parallel netCDF runtime as driver_netcdf so nc_*_par work at runtime; expose the parallel-only netcdf_par.h via its include dir.
     if(AMIO_NETCDF_PAR_LIB)
         get_target_property(_amio_read_nc_inc netCDF::netcdf INTERFACE_INCLUDE_DIRECTORIES)
         if(_amio_read_nc_inc)
@@ -637,8 +627,7 @@ if(netCDF_FOUND AND MPI_C_FOUND AND eckit_FOUND)
     endif()
     target_link_libraries(test_read_netcdf4 PRIVATE MPI::MPI_C)
     if(MPI_CXX_FOUND)
-        # netcdf_driver.cpp includes <mpi.h> without OMPI_SKIP_MPICXX, so it
-        # references the deprecated C++ MPI bindings (libmpi_cxx); link them
+        # netcdf_driver.cpp includes <mpi.h> without OMPI_SKIP_MPICXX, so it references the deprecated C++ MPI bindings (libmpi_cxx); link them
         # exactly as driver_netcdf does.
         target_link_libraries(test_read_netcdf4 PRIVATE MPI::MPI_CXX)
     endif()
@@ -668,11 +657,8 @@ endif()
 if(AMIO_HAS_TENSORSTORE)
     add_executable(
         test_read_zarr
-        test_read_zarr.cpp
-        ${CMAKE_SOURCE_DIR}/src/drivers/zarr/zarr_driver.cpp
-        ${CMAKE_SOURCE_DIR}/src/drivers/zarr/zarr_nczarr_fallback.cpp
-        ${CMAKE_SOURCE_DIR}/src/drivers/common/var_attributes.cpp
-        ${CMAKE_SOURCE_DIR}/src/factory/backend_factory.cpp)
+        test_read_zarr.cpp ${CMAKE_SOURCE_DIR}/src/drivers/zarr/zarr_driver.cpp ${CMAKE_SOURCE_DIR}/src/drivers/zarr/zarr_nczarr_fallback.cpp
+        ${CMAKE_SOURCE_DIR}/src/drivers/common/var_attributes.cpp ${CMAKE_SOURCE_DIR}/src/factory/backend_factory.cpp)
 
     target_include_directories(test_read_zarr PRIVATE ${CMAKE_SOURCE_DIR}/src)
     target_compile_definitions(test_read_zarr PRIVATE AMIO_HAS_TENSORSTORE=1 AMIO_HAS_ECKIT=1)
@@ -699,12 +685,8 @@ endif()
 # Validates: Req 13.2, 13.3, 13.4, 13.5 (GRIB2 decode + bbox + lossless round trip).
 # ####################################################################################################################################################
 if(g2c_FOUND AND eckit_FOUND)
-    add_executable(
-        test_read_grib2
-        test_read_grib2.cpp
-        ${CMAKE_SOURCE_DIR}/src/drivers/grib2/grib2_driver.cpp
-        ${CMAKE_SOURCE_DIR}/src/factory/backend_factory.cpp
-        ${CMAKE_SOURCE_DIR}/src/staging/staging_pool.cpp)
+    add_executable(test_read_grib2 test_read_grib2.cpp ${CMAKE_SOURCE_DIR}/src/drivers/grib2/grib2_driver.cpp
+                                   ${CMAKE_SOURCE_DIR}/src/factory/backend_factory.cpp ${CMAKE_SOURCE_DIR}/src/staging/staging_pool.cpp)
 
     target_include_directories(test_read_grib2 PRIVATE ${CMAKE_SOURCE_DIR}/src)
     target_compile_definitions(test_read_grib2 PRIVATE AMIO_HAS_G2C=1 AMIO_HAS_ECKIT=1)
@@ -737,19 +719,18 @@ endif()
 #
 # Validates: Req 14.1, 14.2, 14.3 (mixed-format read -> write translation).
 # ####################################################################################################################################################
-if(netCDF_FOUND AND g2c_FOUND AND MPI_C_FOUND AND eckit_FOUND)
+if(netCDF_FOUND
+   AND g2c_FOUND
+   AND MPI_C_FOUND
+   AND eckit_FOUND)
     set(_amio_mixed_sources
-        test_read_mixed_format.cpp
-        ${CMAKE_SOURCE_DIR}/src/drivers/netcdf/netcdf_driver.cpp
-        ${CMAKE_SOURCE_DIR}/src/drivers/grib2/grib2_driver.cpp
-        ${CMAKE_SOURCE_DIR}/src/drivers/common/var_attributes.cpp
-        ${CMAKE_SOURCE_DIR}/src/factory/backend_factory.cpp
+        test_read_mixed_format.cpp ${CMAKE_SOURCE_DIR}/src/drivers/netcdf/netcdf_driver.cpp ${CMAKE_SOURCE_DIR}/src/drivers/grib2/grib2_driver.cpp
+        ${CMAKE_SOURCE_DIR}/src/drivers/common/var_attributes.cpp ${CMAKE_SOURCE_DIR}/src/factory/backend_factory.cpp
         ${CMAKE_SOURCE_DIR}/src/staging/staging_pool.cpp)
 
     # The Zarr (TensorStore) leg only compiles in the TensorStore build.
     if(AMIO_HAS_TENSORSTORE)
-        list(APPEND _amio_mixed_sources
-             ${CMAKE_SOURCE_DIR}/src/drivers/zarr/zarr_driver.cpp
+        list(APPEND _amio_mixed_sources ${CMAKE_SOURCE_DIR}/src/drivers/zarr/zarr_driver.cpp
              ${CMAKE_SOURCE_DIR}/src/drivers/zarr/zarr_nczarr_fallback.cpp)
     endif()
 
@@ -763,9 +744,8 @@ if(netCDF_FOUND AND g2c_FOUND AND MPI_C_FOUND AND eckit_FOUND)
 
     target_link_libraries(test_read_mixed_format PRIVATE AMIO::public_headers eckit g2c::g2c)
 
-    # Link the same parallel netCDF runtime as driver_netcdf so nc_*_par
-    # work at runtime; expose the parallel-only netcdf_par.h via its
-    # include dir (mirroring test_read_netcdf4).
+    # Link the same parallel netCDF runtime as driver_netcdf so nc_*_par work at runtime; expose the parallel-only netcdf_par.h via its include dir
+    # (mirroring test_read_netcdf4).
     if(AMIO_NETCDF_PAR_LIB)
         get_target_property(_amio_mixed_nc_inc netCDF::netcdf INTERFACE_INCLUDE_DIRECTORIES)
         if(_amio_mixed_nc_inc)
@@ -780,9 +760,8 @@ if(netCDF_FOUND AND g2c_FOUND AND MPI_C_FOUND AND eckit_FOUND)
     endif()
     target_link_libraries(test_read_mixed_format PRIVATE MPI::MPI_C)
     if(MPI_CXX_FOUND)
-        # netcdf_driver.cpp includes <mpi.h> without OMPI_SKIP_MPICXX, so
-        # it references the deprecated C++ MPI bindings (libmpi_cxx); link
-        # them exactly as driver_netcdf / test_read_netcdf4 do.
+        # netcdf_driver.cpp includes <mpi.h> without OMPI_SKIP_MPICXX, so it references the deprecated C++ MPI bindings (libmpi_cxx); link them
+        # exactly as driver_netcdf / test_read_netcdf4 do.
         target_link_libraries(test_read_mixed_format PRIVATE MPI::MPI_CXX)
     endif()
     if(AMIO_HAS_TENSORSTORE)
@@ -799,13 +778,13 @@ endif()
 # ####################################################################################################################################################
 # test_e2e_netcdf_roundtrip
 #
-# End-to-end public-C-API round-trip test for the NetCDF-4 backend.  Exercises the FULL lifecycle: amio_init → amio_open_dataset(WRITE) → amio_write
-# → amio_flush → amio_close_dataset → amio_open_dataset(READ) → amio_read → memcmp(written, read) → amio_release_view → amio_close_dataset →
+# End-to-end public-C-API round-trip test for the NetCDF-4 backend.  Exercises the FULL lifecycle: amio_init → amio_open_dataset(WRITE) → amio_write →
+# amio_flush → amio_close_dataset → amio_open_dataset(READ) → amio_read → memcmp(written, read) → amio_release_view → amio_close_dataset →
 # amio_finalize.  Writes a known 10x10 F32 array via the real netcdf4 driver, then reads it back and asserts byte-for-byte equality.
 #
-# Links against AMIO::amio_core (the real libamio.so with all drivers) so the write-path unstub (driver->write) and the read-path are exercised end
-# to end with no mocks.  Uses internal detail headers (handle_table, amio_core, staging_pool) to extract the view data pointer for byte comparison
-# since the public C API does not expose amio_view_data().
+# Links against AMIO::amio_core (the real libamio.so with all drivers) so the write-path unstub (driver->write) and the read-path are exercised end to
+# end with no mocks.  Uses internal detail headers (handle_table, amio_core, staging_pool) to extract the view data pointer for byte comparison since
+# the public C API does not expose amio_view_data().
 #
 # Only built when netCDF + MPI are available (the netcdf4 backend requires parallel HDF5 + MPI).
 #

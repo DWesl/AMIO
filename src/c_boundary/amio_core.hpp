@@ -230,6 +230,8 @@ amio_status_t wait(void *io_payload, std::int64_t timeout_ms);
 
 amio_status_t release_view(void *view_payload);
 
+amio_status_t view_data(void *view_payload, const void **out_data, std::size_t *out_size);
+
 }  // namespace amio::detail
 
 #endif  // AMIO_SRC_C_BOUNDARY_AMIO_CORE_HPP

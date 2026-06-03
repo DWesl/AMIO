@@ -31,6 +31,7 @@
 // do not need to link libmpi_cxx.
 #define OMPI_SKIP_MPICXX 1
 #define MPICH_SKIP_MPICXX 1
+#include <eckit/config/YAMLConfiguration.h>
 #include <mpi.h>
 
 #include <cstdio>
@@ -39,8 +40,6 @@
 #include <stdexcept>
 #include <string>
 #include <vector>
-
-#include <eckit/config/YAMLConfiguration.h>
 
 #include "drivers/netcdf/netcdf_driver.hpp"
 #include "factory/backend_driver.hpp"

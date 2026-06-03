@@ -59,6 +59,7 @@
 // THIS translation unit (the netcdf driver TU pulls them in separately).
 #define OMPI_SKIP_MPICXX 1
 #define MPICH_SKIP_MPICXX 1
+#include <eckit/config/YAMLConfiguration.h>
 #include <mpi.h>
 
 #include <cstddef>
@@ -69,8 +70,6 @@
 #include <stdexcept>
 #include <string>
 #include <vector>
-
-#include <eckit/config/YAMLConfiguration.h>
 
 #include "drivers/grib2/grib2_driver.hpp"
 #include "drivers/netcdf/netcdf_driver.hpp"

@@ -434,7 +434,10 @@ set_tests_properties(pbt.p20_invalid_write_input PROPERTIES LABELS "pbt;p20;inva
 #
 # Validates: R2.2
 # ####################################################################################################################################################
-add_executable(pbt_p21_snapshot_copy_correctness test_p21_snapshot_copy_correctness.cpp mpi_test_listener.cpp
+add_executable(
+    pbt_p21_snapshot_copy_correctness
+    test_p21_snapshot_copy_correctness.cpp
+    mpi_test_listener.cpp
     ${CMAKE_SOURCE_DIR}/src/c_boundary/amio_api.cpp
     ${CMAKE_SOURCE_DIR}/src/c_boundary/handle_table.cpp
     ${CMAKE_SOURCE_DIR}/src/c_boundary/amio_core_stubs.cpp
@@ -466,7 +469,10 @@ set_tests_properties(pbt.p21_snapshot_copy_correctness PROPERTIES LABELS "pbt;p2
 #
 # Validates: R3.9, R6.4
 # ####################################################################################################################################################
-add_executable(pbt_p22_synchronous_wait_totality test_p22_synchronous_wait_totality.cpp mpi_test_listener.cpp
+add_executable(
+    pbt_p22_synchronous_wait_totality
+    test_p22_synchronous_wait_totality.cpp
+    mpi_test_listener.cpp
     ${CMAKE_SOURCE_DIR}/src/c_boundary/amio_api.cpp
     ${CMAKE_SOURCE_DIR}/src/c_boundary/handle_table.cpp
     ${CMAKE_SOURCE_DIR}/src/c_boundary/amio_core_stubs.cpp
@@ -599,9 +605,9 @@ set_tests_properties(pbt.p27_abi_stability PROPERTIES LABELS "pbt;p27;abi;stabil
 # Validates: R7.2, R7.3
 # ####################################################################################################################################################
 add_executable(
-    pbt_p28_netcdf_data_model_validation test_p28_netcdf_data_model_validation.cpp ${CMAKE_SOURCE_DIR}/src/drivers/netcdf/netcdf_driver.cpp
-                                         ${CMAKE_SOURCE_DIR}/src/drivers/common/var_attributes.cpp
-                                         ${CMAKE_SOURCE_DIR}/src/factory/backend_factory.cpp)
+    pbt_p28_netcdf_data_model_validation
+    test_p28_netcdf_data_model_validation.cpp ${CMAKE_SOURCE_DIR}/src/drivers/netcdf/netcdf_driver.cpp
+    ${CMAKE_SOURCE_DIR}/src/drivers/common/var_attributes.cpp ${CMAKE_SOURCE_DIR}/src/factory/backend_factory.cpp)
 
 target_link_libraries(pbt_p28_netcdf_data_model_validation PRIVATE AMIO::pbt_common)
 
@@ -676,7 +682,8 @@ add_executable(
 target_link_libraries(pbt_rp6_varmeta_completeness PRIVATE AMIO::pbt_common Threads::Threads)
 
 add_test(NAME pbt.rp6_varmeta_completeness COMMAND pbt_rp6_varmeta_completeness)
-set_tests_properties(pbt.rp6_varmeta_completeness PROPERTIES LABELS "pbt;rp6;varmeta;completeness" TIMEOUT 180 ENVIRONMENT "RC_PARAMS=max_success=100")
+set_tests_properties(pbt.rp6_varmeta_completeness PROPERTIES LABELS "pbt;rp6;varmeta;completeness" TIMEOUT 180 ENVIRONMENT
+                                                             "RC_PARAMS=max_success=100")
 
 # pbt_rp7_view_buffer_conservation -- Property 7: held buffers never returned to the free list; outstanding-view count tracks reads/releases exactly.
 #

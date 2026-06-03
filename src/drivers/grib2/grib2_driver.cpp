@@ -407,8 +407,8 @@ void GRIB2_Driver::build_record_index(const eckit::Configuration& config) {
                 if (gfld != nullptr) {
                     g2_free(gfld);
                 }
-                throw eckit::Exception("GRIB2_Driver::open_read: g2_getfld (metadata) failed (code " +
-                                       std::to_string(static_cast<long long>(ret)) + ") while indexing '" + input_path_ + "'.");
+                throw eckit::Exception("GRIB2_Driver::open_read: g2_getfld (metadata) failed (code " + std::to_string(static_cast<long long>(ret)) +
+                                       ") while indexing '" + input_path_ + "'.");
             }
 
             const std::int64_t category = pdt_value(gfld, kPdtCategoryIdx);
@@ -781,8 +781,8 @@ void GRIB2_Driver::read(StagingBuffer& dst, const VarMeta& meta, std::int64_t ti
     const GribFieldIndex& entry = it->second;
 
     if (timestep < 0 || timestep >= static_cast<std::int64_t>(entry.records.size())) {
-        throw eckit::Exception("GRIB2_Driver::read: timestep " + std::to_string(static_cast<long long>(timestep)) +
-                               " out of range for field '" + meta.name + "' (" + std::to_string(entry.records.size()) + " records).");
+        throw eckit::Exception("GRIB2_Driver::read: timestep " + std::to_string(static_cast<long long>(timestep)) + " out of range for field '" +
+                               meta.name + "' (" + std::to_string(entry.records.size()) + " records).");
     }
     const GribRecordLocation& loc = entry.records[static_cast<std::size_t>(timestep)];
     if (loc.length <= 0) {
@@ -819,8 +819,8 @@ void GRIB2_Driver::read(StagingBuffer& dst, const VarMeta& meta, std::int64_t ti
         if (gfld != nullptr) {
             g2_free(gfld);
         }
-        throw eckit::Exception("GRIB2_Driver::read: g2_getfld failed (code " + std::to_string(static_cast<long long>(ret)) +
-                               ") decoding field '" + meta.name + "'.");
+        throw eckit::Exception("GRIB2_Driver::read: g2_getfld failed (code " + std::to_string(static_cast<long long>(ret)) + ") decoding field '" +
+                               meta.name + "'.");
     }
 
     // gfld->fld is a g2float* (== float*, confirmed in grib2.h) of

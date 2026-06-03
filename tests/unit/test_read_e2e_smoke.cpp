@@ -112,7 +112,9 @@ amio::detail::VariableInfo make_info() {
 class SmokeReadDriver : public amio::detail::Backend_Driver {
    public:
     void open_write(const eckit::Configuration &) override {}
-    void open_read(const eckit::Configuration &) override { opened_read_ = true; }
+    void open_read(const eckit::Configuration &) override {
+        opened_read_ = true;
+    }
 
     void write(const amio::detail::StagingBuffer &, const amio::detail::VarMeta &) override {}
 
@@ -137,7 +139,9 @@ class SmokeReadDriver : public amio::detail::Backend_Driver {
     void flush() override {}
     void close() override {}
 
-    amio::detail::VariableInfo describe_variable(const std::string &) override { return make_info(); }
+    amio::detail::VariableInfo describe_variable(const std::string &) override {
+        return make_info();
+    }
 
    private:
     bool opened_read_ = false;

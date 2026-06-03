@@ -164,7 +164,8 @@ struct SuccessTestContext {
     bool valid = false;
 
     SuccessTestContext() {
-        BackendFactory::instance().register_driver("netcdf4", []() -> std::unique_ptr<Backend_Driver> { return std::make_unique<SucceedingDriver>(); });
+        BackendFactory::instance().register_driver("netcdf4",
+                                                   []() -> std::unique_ptr<Backend_Driver> { return std::make_unique<SucceedingDriver>(); });
 
         std::string yaml = make_manifest_yaml("netcdf4", 8, 65536, 1, 5000);
         manifest_path = write_manifest(dir, yaml);

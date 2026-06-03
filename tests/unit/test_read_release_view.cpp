@@ -68,15 +68,15 @@ void report_failure(const char *expr, const char *file, int line, const std::str
         }                                                     \
     } while (0)
 
-#define EXPECT_EQ(a, b, ctx)                                                                                            \
-    do {                                                                                                                \
-        if ((a) != (b)) {                                                                                               \
-            char buf[256];                                                                                              \
+#define EXPECT_EQ(a, b, ctx)                                                                                             \
+    do {                                                                                                                 \
+        if ((a) != (b)) {                                                                                                \
+            char buf[256];                                                                                               \
             std::snprintf(buf, sizeof(buf), "%s: expected %d, got %d", (ctx), static_cast<int>(b), static_cast<int>(a)); \
-            report_failure(#a " == " #b, __FILE__, __LINE__, buf);                                                      \
-        } else {                                                                                                        \
-            ++g_result.passed;                                                                                          \
-        }                                                                                                               \
+            report_failure(#a " == " #b, __FILE__, __LINE__, buf);                                                       \
+        } else {                                                                                                         \
+            ++g_result.passed;                                                                                           \
+        }                                                                                                                \
     } while (0)
 
 // ---------------------------------------------------------------
@@ -210,8 +210,8 @@ void test_double_release_returns_invalid_handle() {
 
     // The rejected second release must not touch the dataset state.
     EXPECT_EQ(static_cast<int>(fx.record->outstanding_views.load()), 0, "outstanding_views unchanged by the rejected double release");
-    EXPECT_EQ(static_cast<int>(fx.core->staging_pool->free_buffer_count()),
-              static_cast<int>(fx.core->staging_pool->total_buffer_count()), "no buffer double-released by the rejected second release");
+    EXPECT_EQ(static_cast<int>(fx.core->staging_pool->free_buffer_count()), static_cast<int>(fx.core->staging_pool->total_buffer_count()),
+              "no buffer double-released by the rejected second release");
 }
 
 // ---------------------------------------------------------------

@@ -86,9 +86,7 @@ TEST_CASE("RP6: VarMeta completeness - every read carries the variable name, dty
 
         // Buffer capacity sized to fit the payload.
         std::size_t buffer_capacity = std::max(payload_bytes, std::size_t{64});
-        std::size_t buffer_count = static_cast<std::size_t>(std::min<std::int64_t>(
-                                       static_cast<std::int64_t>(depth), total_timesteps)) +
-                                   4;
+        std::size_t buffer_count = static_cast<std::size_t>(std::min<std::int64_t>(static_cast<std::int64_t>(depth), total_timesteps)) + 4;
         StagingPool pool(buffer_count, buffer_capacity, 5000);
 
         auto driver = std::make_shared<MockBackendDriver>();

@@ -61,13 +61,13 @@ namespace eckit {
 class Configuration {
    public:
     virtual ~Configuration() = default;
-    virtual bool has(const std::string& /*key*/) const {
+    virtual bool has(const std::string & /*key*/) const {
         return false;
     }
-    virtual std::string getString(const std::string& /*key*/, const std::string& def = "") const {
+    virtual std::string getString(const std::string & /*key*/, const std::string &def = "") const {
         return def;
     }
-    virtual std::vector<std::string> getStringVector(const std::string& /*key*/, const std::vector<std::string>& def = {}) const {
+    virtual std::vector<std::string> getStringVector(const std::string & /*key*/, const std::vector<std::string> &def = {}) const {
         return def;
     }
 };
@@ -370,12 +370,17 @@ amio_status_t close_dataset(void *dataset_payload) {
         }
     }
 
-    // Step 2: Flush pending writes (block until all complete or fail).
+    // Step 2: Drain pending writes (block until all complete or fail).
     if (record->pending_writes.load() > 0) {
-        // In the full implementation (task 9.x), this would block
-        // until the worker pool drains all tasks for this dataset.
-        // For now, pending_writes should be 0 since write path is
-        // not yet wired.
+        // Block until all pending writes for this dataset complete
+        // (timeout at 30s as a safety net; close should not hang forever).
+        auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(30);
+        while (record->pending_writes.load() > 0) {
+            if (std::chrono::steady_clock::now() >= deadline) {
+                break;  // best-effort: proceed to flush/close even if writes linger
+            }
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        }
     }
 
     // Step 3: Surface any recorded failures.
@@ -923,8 +928,31 @@ amio_status_t read(void *dataset_payload, const char *var_name, std::int64_t tim
     return AMIO_OK;
 }
 
-amio_status_t wait(void * /*io_payload*/, std::int64_t /*timeout_ms*/) {
-    return AMIO_ERR_BACKEND_FAILURE;
+amio_status_t wait(void *io_payload, std::int64_t timeout_ms) {
+    auto *io_rec = static_cast<IoRecord *>(io_payload);
+
+    // Already completed?
+    if (io_rec->completed.load()) {
+        if (io_rec->failed.load()) {
+            return static_cast<amio_status_t>(io_rec->failure_code);
+        }
+        return AMIO_OK;
+    }
+
+    // Block until completed or timeout.
+    auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(timeout_ms > 0 ? timeout_ms : 86400000);
+
+    while (!io_rec->completed.load()) {
+        if (std::chrono::steady_clock::now() >= deadline) {
+            return AMIO_ERR_TIMEOUT;
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
+
+    if (io_rec->failed.load()) {
+        return static_cast<amio_status_t>(io_rec->failure_code);
+    }
+    return AMIO_OK;
 }
 
 // ---------------------------------------------------------------
@@ -964,6 +992,16 @@ amio_status_t release_view(void *view_payload) {
 
     // Free the view record.
     delete view_rec;
+    return AMIO_OK;
+}
+
+amio_status_t view_data(void *view_payload, const void **out_data, std::size_t *out_size) {
+    auto *view_rec = static_cast<ViewRecord *>(view_payload);
+    if (view_rec == nullptr || view_rec->staging_buf == nullptr) {
+        return AMIO_ERR_INVALID_HANDLE;
+    }
+    *out_data = view_rec->staging_buf->data;
+    *out_size = view_rec->staging_buf->used_bytes;
     return AMIO_OK;
 }
 

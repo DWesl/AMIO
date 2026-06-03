@@ -37,7 +37,6 @@
 #define OMPI_SKIP_MPICXX 1
 #define MPICH_SKIP_MPICXX 1
 #include <mpi.h>
-
 #include <netcdf.h>
 
 #include "amio/amio.h"
@@ -172,8 +171,7 @@ static void verify_with_netcdf_c_api(const float source[10][10]) {
         const float *read_flat = &read_data[0][0];
         for (int k = 0; k < 100; ++k) {
             if (src_flat[k] != read_flat[k]) {
-                fprintf(stderr, "  First mismatch at element %d: wrote %f, read %f\n",
-                        k, static_cast<double>(src_flat[k]),
+                fprintf(stderr, "  First mismatch at element %d: wrote %f, read %f\n", k, static_cast<double>(src_flat[k]),
                         static_cast<double>(read_flat[k]));
                 break;
             }
@@ -210,8 +208,7 @@ static void test_write_read_roundtrip() {
     amio_status_t rc = amio_init(MANIFEST_PATH, &core);
     EXPECT_EQ(rc, AMIO_OK, "amio_init (write phase)");
     if (rc != AMIO_OK || core == nullptr) {
-        fprintf(stdout, "NOTE: amio_init failed with %d (%s), skipping test\n",
-                static_cast<int>(rc), amio_strerror(rc));
+        fprintf(stdout, "NOTE: amio_init failed with %d (%s), skipping test\n", static_cast<int>(rc), amio_strerror(rc));
         cleanup();
         return;
     }
@@ -220,8 +217,7 @@ static void test_write_read_roundtrip() {
     rc = amio_open_dataset(core, MANIFEST_PATH, AMIO_MODE_WRITE, &write_ds);
     EXPECT_EQ(rc, AMIO_OK, "amio_open_dataset(WRITE)");
     if (rc != AMIO_OK || write_ds == nullptr) {
-        fprintf(stdout, "NOTE: open_dataset(WRITE) failed with %d (%s), skipping\n",
-                static_cast<int>(rc), amio_strerror(rc));
+        fprintf(stdout, "NOTE: open_dataset(WRITE) failed with %d (%s), skipping\n", static_cast<int>(rc), amio_strerror(rc));
         amio_finalize(core);
         cleanup();
         return;
@@ -238,8 +234,7 @@ static void test_write_read_roundtrip() {
     rc = amio_write(write_ds, "temperature", source, AMIO_DTYPE_F32, &shape, &io);
     EXPECT_EQ(rc, AMIO_OK, "amio_write(temperature 10x10 F32)");
     if (rc != AMIO_OK) {
-        fprintf(stdout, "NOTE: amio_write failed with %d (%s)\n",
-                static_cast<int>(rc), amio_strerror(rc));
+        fprintf(stdout, "NOTE: amio_write failed with %d (%s)\n", static_cast<int>(rc), amio_strerror(rc));
         amio_close_dataset(write_ds);
         amio_finalize(core);
         cleanup();
@@ -252,8 +247,7 @@ static void test_write_read_roundtrip() {
     rc = amio_flush(write_ds, 30000);
     EXPECT_EQ(rc, AMIO_OK, "amio_flush (write phase)");
     if (rc != AMIO_OK) {
-        fprintf(stdout, "NOTE: amio_flush failed with %d (%s)\n",
-                static_cast<int>(rc), amio_strerror(rc));
+        fprintf(stdout, "NOTE: amio_flush failed with %d (%s)\n", static_cast<int>(rc), amio_strerror(rc));
     }
 
     // Close the write dataset.
@@ -283,8 +277,7 @@ static void test_write_read_roundtrip() {
     rc = amio_init(MANIFEST_PATH, &core);
     EXPECT_EQ(rc, AMIO_OK, "amio_init (read phase)");
     if (rc != AMIO_OK || core == nullptr) {
-        fprintf(stdout, "NOTE: amio_init (read) failed with %d (%s), skipping\n",
-                static_cast<int>(rc), amio_strerror(rc));
+        fprintf(stdout, "NOTE: amio_init (read) failed with %d (%s), skipping\n", static_cast<int>(rc), amio_strerror(rc));
         cleanup();
         return;
     }
@@ -293,8 +286,7 @@ static void test_write_read_roundtrip() {
     rc = amio_open_dataset(core, MANIFEST_PATH, AMIO_MODE_READ, &read_ds);
     EXPECT_EQ(rc, AMIO_OK, "amio_open_dataset(READ)");
     if (rc != AMIO_OK || read_ds == nullptr) {
-        fprintf(stdout, "NOTE: open_dataset(READ) failed with %d (%s), skipping\n",
-                static_cast<int>(rc), amio_strerror(rc));
+        fprintf(stdout, "NOTE: open_dataset(READ) failed with %d (%s), skipping\n", static_cast<int>(rc), amio_strerror(rc));
         amio_finalize(core);
         cleanup();
         return;
@@ -305,10 +297,23 @@ static void test_write_read_roundtrip() {
     rc = amio_read(read_ds, "temperature", /*timestep=*/0, /*bbox=*/nullptr, &view);
 
     // Key assertions: NOT AMIO_ERR_STAGING_BACKPRESSURE, and returns AMIO_OK.
-    EXPECT_TRUE(rc != AMIO_ERR_STAGING_BACKPRESSURE,
-                "amio_read does NOT return AMIO_ERR_STAGING_BACKPRESSURE");
+    EXPECT_TRUE(rc != AMIO_ERR_STAGING_BACKPRESSURE, "amio_read does NOT return AMIO_ERR_STAGING_BACKPRESSURE");
     EXPECT_EQ(rc, AMIO_OK, "amio_read returns AMIO_OK");
     EXPECT_TRUE(view != nullptr, "amio_read returns a non-null view handle");
+
+    // Retrieve the view's data pointer and compare against source.
+    if (view != nullptr) {
+        const void *view_ptr = nullptr;
+        size_t view_size = 0;
+        rc = amio_view_data(view, &view_ptr, &view_size);
+        EXPECT_EQ(rc, AMIO_OK, "amio_view_data returns AMIO_OK");
+        EXPECT_TRUE(view_ptr != nullptr, "amio_view_data returns non-null pointer");
+        EXPECT_EQ(static_cast<int>(view_size), static_cast<int>(sizeof(source)), "amio_view_data size matches source payload");
+        if (view_ptr != nullptr && view_size == sizeof(source)) {
+            int cmp = std::memcmp(view_ptr, source, sizeof(source));
+            EXPECT_EQ(cmp, 0, "amio_view_data: read payload matches written source byte-for-byte");
+        }
+    }
 
     // Release the view.
     if (view != nullptr) {

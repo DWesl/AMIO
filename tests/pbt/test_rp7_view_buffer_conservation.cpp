@@ -86,9 +86,9 @@ TEST_CASE("RP7: view-buffer conservation - held buffers never on free list, coun
         pq.schedule_initial();
 
         // Our model of the read coordinator's outstanding-view tracking.
-        std::int64_t outstanding_views = 0;             // the counter
-        std::vector<StagingBuffer*> held;               // the actual views
-        std::int64_t next_ts = 0;                       // next timestep to read
+        std::int64_t outstanding_views = 0;  // the counter
+        std::vector<StagingBuffer*> held;    // the actual views
+        std::int64_t next_ts = 0;            // next timestep to read
 
         auto num_ops = *rc::gen::inRange<std::size_t>(1, 40);
 

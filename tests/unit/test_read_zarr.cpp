@@ -37,6 +37,8 @@
 //
 // Validates: Req 10.1, 10.2, 10.3, 11.2, 11.3 (Zarr read + round trip).
 
+#include <eckit/config/YAMLConfiguration.h>
+
 #include <cstddef>
 #include <cstdint>
 #include <cstdio>
@@ -46,8 +48,6 @@
 #include <stdexcept>
 #include <string>
 #include <vector>
-
-#include <eckit/config/YAMLConfiguration.h>
 
 #include "drivers/zarr/zarr_driver.hpp"
 #include "factory/backend_driver.hpp"

@@ -23,14 +23,13 @@
 // Validates: CF-1.10 / UGRID-1.0 convention compliance + variable
 // attributes for the netCDF-c-backed drivers.
 
+#include <eckit/config/YAMLConfiguration.h>
 #include <netcdf.h>
 
 #include <cstdio>
 #include <cstring>
 #include <stdexcept>
 #include <string>
-
-#include <eckit/config/YAMLConfiguration.h>
 
 #include "drivers/common/var_attributes.hpp"
 #include "drivers/zarr/zarr_driver.hpp"
@@ -83,26 +82,25 @@ int main() {
     // Manifest declaring CF attributes on a data variable plus a UGRID
     // mesh-topology variable.  Conventions is intentionally NOT set so
     // the parser auto-upgrades to "CF-1.10 UGRID-1.0".
-    const std::string yaml =
-        "uri: " + store_path +
-        "\n"
-        "chunk_shape: [4, 5]\n"
-        "shard_shape: [4, 5]\n"
-        "array_shape: [4, 5]\n"
-        "codec: blosc\n"
-        "global_attributes:\n"
-        "  title: AMIO CF/UGRID test\n"
-        "variables:\n"
-        "  t2m:\n"
-        "    attributes:\n"
-        "      units: K\n"
-        "      long_name: 2 metre temperature\n"
-        "      standard_name: air_temperature\n"
-        "      _FillValue: -9999.0\n"
-        "  mesh:\n"
-        "    attributes:\n"
-        "      cf_role: mesh_topology\n"
-        "      topology_dimension: 2\n";
+    const std::string yaml = "uri: " + store_path +
+                             "\n"
+                             "chunk_shape: [4, 5]\n"
+                             "shard_shape: [4, 5]\n"
+                             "array_shape: [4, 5]\n"
+                             "codec: blosc\n"
+                             "global_attributes:\n"
+                             "  title: AMIO CF/UGRID test\n"
+                             "variables:\n"
+                             "  t2m:\n"
+                             "    attributes:\n"
+                             "      units: K\n"
+                             "      long_name: 2 metre temperature\n"
+                             "      standard_name: air_temperature\n"
+                             "      _FillValue: -9999.0\n"
+                             "  mesh:\n"
+                             "    attributes:\n"
+                             "      cf_role: mesh_topology\n"
+                             "      topology_dimension: 2\n";
 
     eckit::YAMLConfiguration cfg{yaml};
 
@@ -161,8 +159,7 @@ int main() {
 
     if (status == NC_NOERR) {
         // Global Conventions auto-upgraded to CF + UGRID.
-        EXPECT_TRUE(read_text_att(ncid, NC_GLOBAL, "Conventions") == "CF-1.10 UGRID-1.0",
-                    "global Conventions should be 'CF-1.10 UGRID-1.0'");
+        EXPECT_TRUE(read_text_att(ncid, NC_GLOBAL, "Conventions") == "CF-1.10 UGRID-1.0", "global Conventions should be 'CF-1.10 UGRID-1.0'");
 
         // Extra global attribute.
         EXPECT_TRUE(read_text_att(ncid, NC_GLOBAL, "title") == "AMIO CF/UGRID test", "global title attribute");
