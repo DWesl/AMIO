@@ -83,7 +83,7 @@ int main() {
 | C++20 compiler | Yes | GCC 11+, Clang 14+ |
 | Fortran 2003 compiler | Yes | gfortran 11+ |
 | eckit ≥ 1.26 | Yes | Config, threading, factory |
-| kokkos/mdspan | Yes | Header-only, Memory_View |
+| kokkos/mdspan | Yes | Header-only, std::mdspan reference impl |
 | netCDF-c (parallel) | Yes | NetCDF-4 backend |
 | nceplibs-g2c | Optional | GRIB2 backend |
 | TensorStore | Optional | Zarr v3 (cloud + sharding) |
