@@ -39,6 +39,7 @@ nav:
     - C API: user-guide/c-api.md
     - Fortran API: user-guide/fortran-api.md
     - Configuration: user-guide/configuration.md
+    - Model Integration: user-guide/model-integration.md
   - Examples:
     - NetCDF-4 (C): examples/netcdf4-c.md
     - NetCDF-4 (Fortran): examples/netcdf4-fortran.md

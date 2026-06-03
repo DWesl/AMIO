@@ -76,6 +76,7 @@ module amio_mod
     public :: amio_flush
     public :: amio_close
     public :: amio_wait
+    public :: amio_view_data
     public :: amio_release_view
     public :: amio_strerror
 
@@ -287,6 +288,20 @@ module amio_mod
             integer(c_int64_t), value, intent(in) :: timeout_ms
             integer(c_int32_t) :: status
         end function amio_wait
+
+        !> amio_view_data -- retrieve data pointer and size from a view.
+        !! C signature:
+        !!   amio_status_t amio_view_data(amio_view_handle view,
+        !!                                const void **out_data,
+        !!                                size_t *out_size);
+        function amio_view_data(view, out_data, out_size) result(status) &
+            bind(C, name="amio_view_data")
+            import :: c_ptr, c_size_t, c_int32_t
+            type(c_ptr), value, intent(in) :: view
+            type(c_ptr), intent(out) :: out_data
+            integer(c_size_t), intent(out) :: out_size
+            integer(c_int32_t) :: status
+        end function amio_view_data
 
         !> amio_release_view -- release a read-side Memory_View.
         !! C signature:
