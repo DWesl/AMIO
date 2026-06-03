@@ -1,68 +1,27 @@
-# AMIO Manifest: NetCDF-4 Backend Configuration
+# AMIO Manifest: NetCDF-4 Backend
 #
-# This manifest configures AMIO to use the NetCDF-4 backend driver
-# with parallel HDF5 for writing atmospheric model output.
+# Write a 3D atmospheric field to a NetCDF-4 file using
+# parallel HDF5 with lossless compression.
 
-amio:
-  version: "0.1.0"
+backend: netcdf4
+path: output_netcdf4.nc
+data_model: classic
 
-  # Staging pool configuration
-  staging:
-    buffer_count: 8
-    buffer_size_bytes: 52428800   # 50 MiB per buffer
+staging_pool:
+  buffer_count: 8
+  buffer_capacity_bytes: 52428800   # 50 MiB per buffer
 
-  # Worker pool configuration
-  workers:
-    thread_count: 2
-    pin_threads: false
+worker_pool:
+  threads: 2
 
-  # Backend driver selection
-  backend:
-    name: "netcdf4"
-    options:
-      parallel_io: false
-      compression:
-        algorithm: "zlib"
-        level: 4
-      chunking:
-        auto: true
+prefetch:
+  depth: 4
+  read_timeout_s: 60
 
-  # Dataset output path
-  output:
-    path: "output_netcdf4.nc"
-    overwrite: true
+staging_timeout_ms: 10000
 
-# ===================================================================
-# CF / UGRID conventions and per-variable attributes
-#
-# AMIO writes a self-describing, convention-compliant file:
-#   * the global `Conventions` attribute is written from `conventions`
-#     below (default "CF-1.10"; auto-upgraded to "CF-1.10 UGRID-1.0"
-#     when a variable declares a UGRID mesh role and `conventions` is
-#     not set explicitly);
-#   * `global_attributes` are written as file-level attributes;
-#   * each `variables.<name>.attributes` block is attached to that
-#     variable.  Numeric values are written with a matching numeric
-#     type; `_FillValue` uses the variable's own type per CF.
-# ===================================================================
-conventions: "CF-1.10"
-
-global_attributes:
-  title: "AMIO atmospheric model output"
-  institution: "NOAA/NWS"
-  source: "AMIO example"
-
-variables:
-  geopotential_height:
-    attributes:
-      units: "gpm"
-      long_name: "Geopotential Height"
-      standard_name: "geopotential_height"
-      _FillValue: -9999.0
-      coordinates: "lat lon"
-  temperature:
-    attributes:
-      units: "K"
-      long_name: "Air Temperature"
-      standard_name: "air_temperature"
-      _FillValue: -9999.0
+codec:
+  active_codec: blosc
+  lossless_allow_list:
+    - blosc
+    - zlib

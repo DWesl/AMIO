@@ -187,6 +187,40 @@ timestep loop. See the
 patterns, Fortran examples, MPI setup, bounding-box reads, and performance
 tuning.
 
+## Downstream CMake Integration
+
+After installing AMIO (`cmake --install build --prefix /opt/amio`), downstream
+projects use standard `find_package`:
+
+```cmake
+cmake_minimum_required(VERSION 3.20)
+project(MyModel LANGUAGES C Fortran)
+
+# Point to AMIO's install prefix if not in a system path
+list(APPEND CMAKE_PREFIX_PATH "/opt/amio")
+
+find_package(AMIO REQUIRED)
+
+# C/C++ target
+add_executable(my_model main.c)
+target_link_libraries(my_model PRIVATE AMIO::amio_core)
+
+# Fortran target
+add_executable(my_model_f main.f90)
+target_link_libraries(my_model_f PRIVATE AMIO::amio_fortran)
+```
+
+Exported targets:
+
+| Target | Type | Provides |
+|--------|------|----------|
+| `AMIO::amio_core` | Shared (libamio.so) | C99 API + all backends |
+| `AMIO::amio_fortran` | Static | iso_c_binding module + libamio link |
+| `AMIO::public_headers` | Interface | C99 headers only (no link) |
+
+No third-party headers (eckit, netCDF, TensorStore, g2c) leak through the
+public interface. Downstream consumers only see `<amio/amio.h>`.
+
 ## Architecture
 
 ```

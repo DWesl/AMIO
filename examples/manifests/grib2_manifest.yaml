@@ -1,71 +1,29 @@
-# AMIO Manifest: GRIB2 Backend Configuration
+# AMIO Manifest: GRIB2 Backend
 #
-# This manifest configures AMIO to use the GRIB2 backend driver
-# (nceplibs-g2c) for writing NWP model output in WMO GRIB2 format.
-#
-# GRIB2 code and template tables are NOT defined here -- they are
-# sourced directly from NCEPLIBS-g2c (the canonical NCEP tables built
-# into the library).  This manifest only supplies the *numeric* GRIB2
-# product identifiers (the WMO/NCEP code-table values themselves),
-# which AMIO forwards verbatim to g2c.
+# Write a 2D meteorological field to GRIB2 using nceplibs-g2c
+# with lossless JPEG2000 compression.
 
 backend: grib2
+path: output.grib2
+drt: jpeg2000
 
-# Output path for the GRIB2 file.
-path: output_grib2.grib2
-output_path: output_grib2.grib2
-
-# Data Representation Template (lossless only):
-#   libaec            -> DRT 5.42 (Adaptive Entropy Coding / CCSDS)
-#   lossless_jpeg2000 -> DRT 5.40 (Lossless JPEG2000)
-drt: libaec
-
-# GRIB2 product identifiers (numeric WMO/NCEP code-table values).
-# g2c supplies the matching template *layouts*; these are the values.
-grib2:
-  # Section 0 / 1 -- identification (NCEP defaults).
-  discipline: 0                 # Table 0.0  (0 = meteorological)
-  center: 7                     # Table C-1  (7 = US NWS NCEP)
-  subcenter: 0
-  master_table_version: 2       # Table 1.0
-  local_table_version: 1        # Table 1.1
-  production_status: 0          # Table 1.3  (0 = operational)
-  type_of_data: 1               # Table 1.4  (1 = forecast)
-
-  # Section 3 -- grid definition (regular lat/lon, GDT 3.0).
-  gdt_number: 0
-  lat_first: 90000000           # 90.0 N  (units: 1e-6 degrees)
-  lon_first: 0                  # 0.0 E
-  lat_last: -90000000           # 90.0 S
-  lon_last: 359000000           # 359.0 E
-
-  # Section 4 -- product definition (PDT 4.0).
-  pdt_number: 0
-  parameter_category: 3         # Table 4.1  (3 = mass / geopotential)
-  parameter_number: 5           # Table 4.2  (5 = geopotential height)
-  type_of_first_fixed_surface: 100   # Table 4.5  (100 = isobaric surface)
-  scaled_value_first_surface: 50000  # 50000 Pa  = 500 hPa
-  forecast_time: 0
-  indicator_of_unit_of_time: 1  # Table 4.4  (1 = hour)
-
-# Staging pool configuration.
 staging_pool:
   buffer_count: 4
-  buffer_capacity_bytes: 10485760   # 10 MiB per buffer
+  buffer_capacity_bytes: 20971520
 
-# Worker pool configuration.
 worker_pool:
   threads: 1
 
-# Prefetch configuration (read path).
 prefetch:
   depth: 4
   read_timeout_s: 60
 
-staging_timeout_ms: 5000
+staging_timeout_ms: 10000
 
-# Lossless codec allow-list.
-codec:
-  active_codec: libaec
-  lossless_allow_list:
-    - libaec
+grib2:
+  discipline: 0
+  center: 7
+  parameter_category: 3
+  parameter_number: 5
+  type_of_first_fixed_surface: 100
+  scaled_value_first_surface: 50000

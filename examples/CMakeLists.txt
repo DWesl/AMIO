@@ -21,6 +21,9 @@ target_link_libraries(example_zarr_write_c PRIVATE AMIO::amio_core m)
 add_executable(example_grib2_write_c c/example_grib2_write.c)
 target_link_libraries(example_grib2_write_c PRIVATE AMIO::amio_core m)
 
+add_executable(example_netcdf4_read_c c/example_netcdf4_read.c)
+target_link_libraries(example_netcdf4_read_c PRIVATE AMIO::amio_core m)
+
 # -------------------------------------------------------------------
 # Fortran Examples
 #

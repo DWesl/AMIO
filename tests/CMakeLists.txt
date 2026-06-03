@@ -32,3 +32,5 @@ if(Catch2_FOUND AND rapidcheck_FOUND)
 else()
     message(STATUS "AMIO PBT: Catch2 or RapidCheck not found; skipping tests/pbt/")
 endif()
+
+add_subdirectory(integration)
