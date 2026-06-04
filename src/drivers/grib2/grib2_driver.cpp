@@ -233,6 +233,23 @@ Grib2Settings GRIB2_Driver::read_settings(const eckit::Configuration& config) {
 
     s.decimal_scale_factor = cfg_int(config, "grib2.decimal_scale_factor", s.decimal_scale_factor);
 
+    // Composition-specific metadata (PDTs 4.8, 4.40, 4.44–4.49, GDT 3.40).
+    // All default to zero when absent (Req 1.9).
+    s.chemical_constituent_type = cfg_int(config, "grib2.chemical_constituent_type", 0);
+    s.aerosol_type = cfg_int(config, "grib2.aerosol_type", 0);
+    s.size_dist_param_first = cfg_int(config, "grib2.size_dist_param_first", 0);
+    s.size_dist_param_second = cfg_int(config, "grib2.size_dist_param_second", 0);
+    s.optical_property_type = cfg_int(config, "grib2.optical_property_type", 0);
+    s.wavelength_first_nm = cfg_int(config, "grib2.wavelength_first_nm", 0);
+    s.wavelength_last_nm = cfg_int(config, "grib2.wavelength_last_nm", 0);
+    s.ensemble_perturbation_number = cfg_int(config, "grib2.ensemble_perturbation_number", 0);
+    s.statistical_process = cfg_int(config, "grib2.statistical_process", 0);
+    s.time_range_unit = cfg_int(config, "grib2.time_range_unit", 0);
+    s.time_range_length = cfg_int(config, "grib2.time_range_length", 0);
+    s.number_of_time_range_specs = cfg_int(config, "grib2.number_of_time_range_specs", 0);
+    s.total_missing_from_statistical_process = cfg_int(config, "grib2.total_missing_from_statistical_process", 0);
+    s.n_parallel = cfg_int(config, "grib2.n_parallel", 0);
+
     return s;
 }
 
@@ -302,6 +319,142 @@ std::string GRIB2_Driver::field_identity_name(std::int64_t discipline, std::int6
 }
 
 // ---------------------------------------------------------------
+// field_identity_name (extended) -- composition-aware overload
+//
+// Builds the base name then appends PDT-specific composition suffixes.
+// Uses pdt_number to determine which segments to include, ensuring
+// PDT 4.0 records never accidentally gain segments (Req 12.7, 15.1–15.4).
+// ---------------------------------------------------------------
+
+std::string GRIB2_Driver::field_identity_name(std::int64_t discipline, std::int64_t parameter_category, std::int64_t parameter_number,
+                                              std::int64_t surface_type, std::int64_t surface_value, std::int64_t pdt_number,
+                                              std::int64_t chemical_constituent_type, std::int64_t aerosol_type, std::int64_t optical_property_type,
+                                              std::int64_t wavelength_first_nm, std::int64_t wavelength_last_nm,
+                                              std::int64_t ensemble_perturbation_number, std::int64_t statistical_process) {
+    // Base name: "d{d}_c{c}_n{n}_s{s}_l{l}" — identical to the original overload.
+    std::string name = field_identity_name(discipline, parameter_category, parameter_number, surface_type, surface_value);
+
+    // Append composition suffixes based on PDT number.
+    switch (pdt_number) {
+        case 40:
+            // PDT 4.40: chemical constituent
+            name += "_ct" + std::to_string(chemical_constituent_type);
+            break;
+        case 44:
+            // PDT 4.44: aerosol at a point in time
+            name += "_at" + std::to_string(aerosol_type);
+            break;
+        case 45:
+            // PDT 4.45: ensemble aerosol forecast
+            name += "_at" + std::to_string(aerosol_type);
+            name += "_ep" + std::to_string(ensemble_perturbation_number);
+            break;
+        case 46:
+            // PDT 4.46: statistically processed aerosol
+            name += "_at" + std::to_string(aerosol_type);
+            name += "_sp" + std::to_string(statistical_process);
+            break;
+        case 48:
+            // PDT 4.48: aerosol optical properties at a wavelength
+            name += "_at" + std::to_string(aerosol_type);
+            name += "_op" + std::to_string(optical_property_type);
+            name += "_wl" + std::to_string(wavelength_first_nm) + "_" + std::to_string(wavelength_last_nm);
+            break;
+        case 49:
+            // PDT 4.49: ensemble aerosol optical properties
+            name += "_at" + std::to_string(aerosol_type);
+            name += "_op" + std::to_string(optical_property_type);
+            name += "_wl" + std::to_string(wavelength_first_nm) + "_" + std::to_string(wavelength_last_nm);
+            name += "_ep" + std::to_string(ensemble_perturbation_number);
+            break;
+        case 8:
+            // PDT 4.8: statistically processed at a level
+            name += "_sp" + std::to_string(statistical_process);
+            break;
+        case 0:
+        default:
+            // PDT 4.0 or unknown: no suffix (backward compatible).
+            break;
+    }
+
+    return name;
+}
+
+// ---------------------------------------------------------------
+// extract_composition_metadata -- extract composition-specific
+// metadata from a PDT template array based on PDT number.
+//
+// Uses known PDT-specific index positions (WMO template layouts) to
+// extract the relevant fields.  For unsupported or PDT 4.0 records,
+// all composition fields remain zero — producing the backward-
+// compatible identity.  (Req 13.1, 13.2, 13.3, 13.4, 13.5, 13.6)
+// ---------------------------------------------------------------
+
+CompositionMetadata GRIB2_Driver::extract_composition_metadata(std::int64_t pdt_number, const std::vector<std::int64_t>& ipdtmpl) {
+    CompositionMetadata meta{};
+    meta.pdt_number = pdt_number;
+
+    // Helper to safely access an element, returning 0 if out of range.
+    auto safe_get = [&](std::size_t idx) -> std::int64_t { return idx < ipdtmpl.size() ? ipdtmpl[idx] : 0; };
+
+    switch (pdt_number) {
+        case 40:
+            // PDT 4.40: chemical_constituent_type at index 2
+            meta.chemical_constituent_type = safe_get(2);
+            break;
+        case 44:
+            // PDT 4.44: aerosol_type at index 2
+            meta.aerosol_type = safe_get(2);
+            break;
+        case 45:
+            // PDT 4.45: aerosol_type at index 2,
+            //            ensemble_perturbation_number at index 16
+            meta.aerosol_type = safe_get(2);
+            meta.ensemble_perturbation_number = safe_get(16);
+            break;
+        case 46:
+            // PDT 4.46: aerosol_type at index 2,
+            //            statistical_process at index 29
+            meta.aerosol_type = safe_get(2);
+            meta.statistical_process = safe_get(29);
+            break;
+        case 48:
+            // PDT 4.48: aerosol_type at index 2,
+            //            optical_property_type at index 8,
+            //            wavelength_first_nm at index 10,
+            //            wavelength_last_nm at index 12
+            meta.aerosol_type = safe_get(2);
+            meta.optical_property_type = safe_get(8);
+            meta.wavelength_first_nm = safe_get(10);
+            meta.wavelength_last_nm = safe_get(12);
+            break;
+        case 49:
+            // PDT 4.49: aerosol_type at index 2,
+            //            optical_property_type at index 8,
+            //            wavelength_first_nm at index 10,
+            //            wavelength_last_nm at index 12,
+            //            ensemble_perturbation_number at index 21
+            meta.aerosol_type = safe_get(2);
+            meta.optical_property_type = safe_get(8);
+            meta.wavelength_first_nm = safe_get(10);
+            meta.wavelength_last_nm = safe_get(12);
+            meta.ensemble_perturbation_number = safe_get(21);
+            break;
+        case 8:
+            // PDT 4.8: statistical_process at index 23
+            meta.statistical_process = safe_get(23);
+            break;
+        case 0:
+        default:
+            // PDT 4.0 or unsupported: all-zero metadata (no composition
+            // segments — backward compatible identity).
+            break;
+    }
+
+    return meta;
+}
+
+// ---------------------------------------------------------------
 // build_record_index -- scan the GRIB2 file and index every field
 // (Req 13.1)
 //
@@ -319,14 +472,11 @@ std::string GRIB2_Driver::field_identity_name(std::int64_t discipline, std::int6
 namespace {
 
 // PDT-relative offsets of the descriptors that make up a field identity.
-// These match the Product Definition Template 4.0 layout the encode path
-// emits (build_pdt_4_0): [0]=category, [1]=number, [9]=first surface
-// type, [11]=first surface scaled value.  Templates 4.0/4.1/4.8/... share
-// this leading layout, so the identity is stable across the common PDTs.
+// Category and number are always at indices 0 and 1 for all supported PDTs.
+// Surface type/value positions vary by PDT (the composition PDTs insert
+// extra fields between the common header and the fixed-surface section).
 constexpr int kPdtCategoryIdx = 0;
 constexpr int kPdtNumberIdx = 1;
-constexpr int kPdtSurfaceTypeIdx = 9;
-constexpr int kPdtSurfaceValueIdx = 11;
 
 // GDT-relative offsets of Ni / Nj for the templates whose layout matches
 // 3.0 (regular lat/lon) -- Ni at index 7, Nj at index 8.  Used as a
@@ -339,6 +489,37 @@ std::int64_t pdt_value(const gribfield* gfld, int idx) {
         return static_cast<std::int64_t>(gfld->ipdtmpl[idx]);
     }
     return 0;
+}
+
+// Return the PDT-specific index of the first fixed surface type field.
+// Each composition PDT inserts different fields before the surface section.
+int pdt_surface_type_index(std::int64_t pdt_number) {
+    switch (pdt_number) {
+        case 0:
+            return 9;  // PDT 4.0:  [9]
+        case 8:
+            return 9;  // PDT 4.8:  [9]
+        case 40:
+            return 10;  // PDT 4.40: [10]
+        case 44:
+            return 15;  // PDT 4.44: [15]
+        case 45:
+            return 18;  // PDT 4.45: [18]
+        case 46:
+            return 15;  // PDT 4.46: [15]
+        case 48:
+            return 20;  // PDT 4.48: [20]
+        case 49:
+            return 23;  // PDT 4.49: [23]
+        default:
+            return 9;  // Fallback to PDT 4.0 layout
+    }
+}
+
+// Return the PDT-specific index of the first fixed surface scaled value.
+// Always 2 positions after the surface type index (type, scale_factor, value).
+int pdt_surface_value_index(std::int64_t pdt_number) {
+    return pdt_surface_type_index(pdt_number) + 2;
 }
 
 }  // namespace
@@ -413,10 +594,30 @@ void GRIB2_Driver::build_record_index(const eckit::Configuration& config) {
 
             const std::int64_t category = pdt_value(gfld, kPdtCategoryIdx);
             const std::int64_t number = pdt_value(gfld, kPdtNumberIdx);
-            const std::int64_t surf_type = pdt_value(gfld, kPdtSurfaceTypeIdx);
-            const std::int64_t surf_value = pdt_value(gfld, kPdtSurfaceValueIdx);
 
-            const std::string key = field_identity_name(discipline, category, number, surf_type, surf_value);
+            // Get PDT number to determine the correct surface type/value indices.
+            const std::int64_t pdt_num = static_cast<std::int64_t>(gfld->ipdtnum);
+            const std::int64_t surf_type = pdt_value(gfld, pdt_surface_type_index(pdt_num));
+            const std::int64_t surf_value = pdt_value(gfld, pdt_surface_value_index(pdt_num));
+
+            // Convert the PDT template array to std::vector for
+            // composition metadata extraction (Req 13.1–13.5).
+            std::vector<std::int64_t> ipdtmpl_vec;
+            if (gfld->ipdtmpl != nullptr && gfld->ipdtlen > 0) {
+                ipdtmpl_vec.reserve(static_cast<std::size_t>(gfld->ipdtlen));
+                for (int i = 0; i < gfld->ipdtlen; ++i) {
+                    ipdtmpl_vec.push_back(static_cast<std::int64_t>(gfld->ipdtmpl[i]));
+                }
+            }
+
+            // Extract composition-specific metadata from the PDT template.
+            const CompositionMetadata meta = extract_composition_metadata(pdt_num, ipdtmpl_vec);
+
+            // Build the field identity key using the extended overload
+            // that includes composition suffixes (Req 12.8, 13.1–13.5).
+            const std::string key = field_identity_name(discipline, category, number, surf_type, surf_value, pdt_num, meta.chemical_constituent_type,
+                                                        meta.aerosol_type, meta.optical_property_type, meta.wavelength_first_nm,
+                                                        meta.wavelength_last_nm, meta.ensemble_perturbation_number, meta.statistical_process);
 
             // Derive grid geometry.  Ni/Nj come from the GDT for the
             // common lat/lon-style layouts; fall back to a single row of
@@ -570,6 +771,36 @@ std::vector<std::int64_t> GRIB2_Driver::build_gdt_3_0(const Grib2Settings& s, st
     return t;
 }
 
+std::vector<std::int64_t> GRIB2_Driver::build_gdt_3_40(const Grib2Settings& s, std::int64_t ni, std::int64_t nj) {
+    // Grid Definition Template 3.40 (Gaussian latitude/longitude), 19 entries.
+    // Layout per WMO GRIB2 Template 3.40 / NCEP getgridtemplate(40).
+    // Identical to GDT 3.0 except index 17 carries N (number of parallels
+    // between equator and pole) instead of Dj.
+    std::vector<std::int64_t> t(19, 0);
+    t[0] = 6;             // shape of earth (6 = sphere, radius 6,371,229 m)
+    t[1] = 0;             // scale factor of radius of spherical earth
+    t[2] = 0;             // scaled value of radius of spherical earth
+    t[3] = 0;             // scale factor of major axis
+    t[4] = 0;             // scaled value of major axis
+    t[5] = 0;             // scale factor of minor axis
+    t[6] = 0;             // scaled value of minor axis
+    t[7] = ni;            // Ni - number of points along a parallel
+    t[8] = nj;            // Nj - number of points along a meridian
+    t[9] = 0;             // basic angle of initial production domain
+    t[10] = 0;            // subdivisions of basic angle
+    t[11] = s.lat_first;  // La1 (latitude of first grid point, 1e-6 deg)
+    t[12] = s.lon_first;  // Lo1 (longitude of first grid point, 1e-6 deg)
+    t[13] = 48;           // resolution and component flags (0x30: i,j dir incr given)
+    t[14] = s.lat_last;   // La2 (latitude of last grid point, 1e-6 deg)
+    t[15] = s.lon_last;   // Lo2 (longitude of last grid point, 1e-6 deg)
+    // Di (i-direction increment, 1e-6 deg), derived from the span.
+    std::int64_t di = (ni > 1) ? ((s.lon_last - s.lon_first) / (ni - 1)) : 0;
+    t[16] = di < 0 ? -di : di;  // Di must be positive
+    t[17] = s.n_parallel;       // N - number of parallels between equator and pole
+    t[18] = 0;                  // scanning mode (0 = +i, -j, row-major from NW corner)
+    return t;
+}
+
 std::vector<std::int64_t> GRIB2_Driver::build_pdt_4_0(const Grib2Settings& s) {
     // Product Definition Template 4.0, 15 entries.
     std::vector<std::int64_t> t(15, 0);
@@ -588,6 +819,295 @@ std::vector<std::int64_t> GRIB2_Driver::build_pdt_4_0(const Grib2Settings& s) {
     t[12] = 255;                           // type of second fixed surface (255 = missing)
     t[13] = 0;                             // scale factor of second fixed surface
     t[14] = 0;                             // scaled value of second fixed surface
+    return t;
+}
+
+std::vector<std::int64_t> GRIB2_Driver::build_pdt_4_8(const Grib2Settings& s) {
+    // Product Definition Template 4.8 (statistically processed at a
+    // horizontal level), 29 entries.
+    // Indices 0–14 share the PDT 4.0 layout; indices 15–28 carry
+    // end-of-overall-time-interval and statistical processing fields.
+    std::vector<std::int64_t> t(29, 0);
+
+    // --- Indices 0–14: same as PDT 4.0 ---
+    t[0] = s.parameter_category;           // Table 4.1
+    t[1] = s.parameter_number;             // Table 4.2
+    t[2] = 2;                              // generating process type (2 = forecast)
+    t[3] = 0;                              // background generating process id
+    t[4] = 0;                              // analysis/forecast generating process id
+    t[5] = 0;                              // hours after reference time (data cutoff)
+    t[6] = 0;                              // minutes after reference time (data cutoff)
+    t[7] = s.indicator_of_unit_of_time;    // Table 4.4
+    t[8] = s.forecast_time;                // forecast time in above units
+    t[9] = s.type_of_first_fixed_surface;  // Table 4.5
+    t[10] = s.scale_factor_first_surface;  // scale factor of first fixed surface
+    t[11] = s.scaled_value_first_surface;  // scaled value of first fixed surface
+    t[12] = 255;                           // type of second fixed surface (255 = missing)
+    t[13] = 0;                             // scale factor of second fixed surface
+    t[14] = 0;                             // scaled value of second fixed surface
+
+    // --- Indices 15–20: end of overall time interval ---
+    // These are typically set by the caller or left at zero.
+    t[15] = 0;  // year of end of overall time interval
+    t[16] = 0;  // month of end
+    t[17] = 0;  // day of end
+    t[18] = 0;  // hour of end
+    t[19] = 0;  // minute of end
+    t[20] = 0;  // second of end
+
+    // --- Indices 21–28: statistical processing ---
+    t[21] = s.number_of_time_range_specs;              // n
+    t[22] = s.total_missing_from_statistical_process;  // total missing
+    t[23] = s.statistical_process;                     // Table 4.10
+    t[24] = 2;                                         // type of time increment (2 = successive times, same forecast time)
+    t[25] = s.time_range_unit;                         // Table 4.4 indicator of unit of time for range
+    t[26] = s.time_range_length;                       // time range length
+    t[27] = s.indicator_of_unit_of_time;               // indicator of unit of successive fields
+    t[28] = 0;                                         // time increment (0 = continuous/contiguous)
+
+    return t;
+}
+
+std::vector<std::int64_t> GRIB2_Driver::build_pdt_4_40(const Grib2Settings& s) {
+    // Product Definition Template 4.40 (chemical constituent at a
+    // horizontal level at a point in time), 16 entries.
+    // Layout per WMO GRIB2 Template 4.40 / NCEP getpdstemplate(40).
+    std::vector<std::int64_t> t(16, 0);
+    t[0] = s.parameter_category;            // Table 4.1
+    t[1] = s.parameter_number;              // Table 4.2
+    t[2] = s.chemical_constituent_type;     // Table 4.230
+    t[3] = 2;                               // type of generating process (2 = forecast)
+    t[4] = 0;                               // background generating process id
+    t[5] = 0;                               // analysis/forecast generating process id
+    t[6] = 0;                               // hours after reference time (data cutoff)
+    t[7] = 0;                               // minutes after reference time (data cutoff)
+    t[8] = s.indicator_of_unit_of_time;     // Table 4.4
+    t[9] = s.forecast_time;                 // forecast time in above units
+    t[10] = s.type_of_first_fixed_surface;  // Table 4.5
+    t[11] = s.scale_factor_first_surface;   // scale factor of first fixed surface
+    t[12] = s.scaled_value_first_surface;   // scaled value of first fixed surface
+    t[13] = 255;                            // type of second fixed surface (255 = missing)
+    t[14] = 0;                              // scale factor of second fixed surface
+    t[15] = 0;                              // scaled value of second fixed surface
+    return t;
+}
+
+std::vector<std::int64_t> GRIB2_Driver::build_pdt_4_44(const Grib2Settings& s) {
+    // Product Definition Template 4.44 (aerosol at a horizontal level
+    // at a point in time), 21 entries.
+    // Layout per WMO GRIB2 Template 4.44 / NCEP getpdstemplate(44).
+    std::vector<std::int64_t> t(21, 0);
+    t[0] = s.parameter_category;            // Table 4.1
+    t[1] = s.parameter_number;              // Table 4.2
+    t[2] = s.aerosol_type;                  // Table 4.233
+    t[3] = 0;                               // type of interval for size distribution (not in Grib2Settings)
+    t[4] = 0;                               // scale factor of first size (not in Grib2Settings)
+    t[5] = s.size_dist_param_first;         // scaled value of first size
+    t[6] = 0;                               // scale factor of second size (not in Grib2Settings)
+    t[7] = s.size_dist_param_second;        // scaled value of second size
+    t[8] = 2;                               // type of generating process (2 = forecast)
+    t[9] = 0;                               // background generating process id
+    t[10] = 0;                              // analysis/forecast generating process id
+    t[11] = 0;                              // hours after reference time (data cutoff)
+    t[12] = 0;                              // minutes after reference time (data cutoff)
+    t[13] = s.indicator_of_unit_of_time;    // Table 4.4
+    t[14] = s.forecast_time;                // forecast time in above units
+    t[15] = s.type_of_first_fixed_surface;  // Table 4.5
+    t[16] = s.scale_factor_first_surface;   // scale factor of first fixed surface
+    t[17] = s.scaled_value_first_surface;   // scaled value of first fixed surface
+    t[18] = 255;                            // type of second fixed surface (255 = missing)
+    t[19] = 0;                              // scale factor of second fixed surface
+    t[20] = 0;                              // scaled value of second fixed surface
+    return t;
+}
+
+std::vector<std::int64_t> GRIB2_Driver::build_pdt_4_45(const Grib2Settings& s) {
+    // Product Definition Template 4.45 (individual ensemble forecast
+    // for aerosol), 24 entries.
+    // Layout per WMO GRIB2 Template 4.45 / NCEP getpdstemplate(45).
+    std::vector<std::int64_t> t(24, 0);
+
+    // --- Indices 0–7: parameter + aerosol / size distribution ---
+    t[0] = s.parameter_category;      // Table 4.1
+    t[1] = s.parameter_number;        // Table 4.2
+    t[2] = s.aerosol_type;            // Table 4.233
+    t[3] = 0;                         // type of interval for first size distribution (not in settings)
+    t[4] = 0;                         // scale factor of first size
+    t[5] = s.size_dist_param_first;   // scaled value of first size
+    t[6] = 0;                         // scale factor of second size
+    t[7] = s.size_dist_param_second;  // scaled value of second size
+
+    // --- Indices 8–14: generating process + time ---
+    t[8] = 2;                             // type of generating process (2 = forecast)
+    t[9] = 0;                             // background generating process id
+    t[10] = 0;                            // analysis/forecast generating process id
+    t[11] = 0;                            // hours after reference time (data cutoff)
+    t[12] = 0;                            // minutes after reference time (data cutoff)
+    t[13] = s.indicator_of_unit_of_time;  // Table 4.4
+    t[14] = s.forecast_time;              // forecast time in above units
+
+    // --- Indices 15–17: ensemble ---
+    t[15] = 0;                               // type of ensemble forecast (not in settings)
+    t[16] = s.ensemble_perturbation_number;  // perturbation number
+    t[17] = 0;                               // number of forecasts in ensemble (not in settings)
+
+    // --- Indices 18–23: fixed surfaces ---
+    t[18] = s.type_of_first_fixed_surface;  // Table 4.5
+    t[19] = s.scale_factor_first_surface;   // scale factor of first fixed surface
+    t[20] = s.scaled_value_first_surface;   // scaled value of first fixed surface
+    t[21] = 255;                            // type of second fixed surface (255 = missing)
+    t[22] = 0;                              // scale factor of second fixed surface
+    t[23] = 0;                              // scaled value of second fixed surface
+
+    return t;
+}
+
+std::vector<std::int64_t> GRIB2_Driver::build_pdt_4_46(const Grib2Settings& s) {
+    // Product Definition Template 4.46 (statistically processed aerosol),
+    // 35 entries.
+    // Aerosol-specific fields at indices 2-7, common forecast fields at
+    // indices 8-14, fixed surfaces at 15-20, end-of-overall-time-interval
+    // at 21-26, statistical processing at 27-34.
+    std::vector<std::int64_t> t(35, 0);
+
+    // --- Indices 0-1: parameter identification ---
+    t[0] = s.parameter_category;  // Table 4.1
+    t[1] = s.parameter_number;    // Table 4.2
+
+    // --- Indices 2-7: aerosol-specific fields ---
+    t[2] = s.aerosol_type;            // Table 4.233
+    t[3] = 0;                         // type of interval for size distribution
+    t[4] = 0;                         // scale factor first size
+    t[5] = s.size_dist_param_first;   // scaled value first size
+    t[6] = 0;                         // scale factor second size
+    t[7] = s.size_dist_param_second;  // scaled value second size
+
+    // --- Indices 8-14: generating process + forecast time ---
+    t[8] = 2;                             // type of generating process (2 = forecast)
+    t[9] = 0;                             // background generating process id
+    t[10] = 0;                            // analysis/forecast generating process id
+    t[11] = 0;                            // hours after reference time (data cutoff)
+    t[12] = 0;                            // minutes after reference time (data cutoff)
+    t[13] = s.indicator_of_unit_of_time;  // Table 4.4
+    t[14] = s.forecast_time;              // forecast time in above units
+
+    // --- Indices 15-20: fixed surfaces ---
+    t[15] = s.type_of_first_fixed_surface;  // Table 4.5
+    t[16] = s.scale_factor_first_surface;   // scale factor of first fixed surface
+    t[17] = s.scaled_value_first_surface;   // scaled value of first fixed surface
+    t[18] = 255;                            // type of second fixed surface (255 = missing)
+    t[19] = 0;                              // scale factor of second fixed surface
+    t[20] = 0;                              // scaled value of second fixed surface
+
+    // --- Indices 21-26: end of overall time interval ---
+    t[21] = 0;  // year of end of overall time interval
+    t[22] = 0;  // month of end
+    t[23] = 0;  // day of end
+    t[24] = 0;  // hour of end
+    t[25] = 0;  // minute of end
+    t[26] = 0;  // second of end
+
+    // --- Indices 27-34: statistical processing ---
+    t[27] = s.number_of_time_range_specs;              // n
+    t[28] = s.total_missing_from_statistical_process;  // total missing
+    t[29] = s.statistical_process;                     // Table 4.10
+    t[30] = 0;                                         // type of time increment
+    t[31] = s.time_range_unit;                         // Table 4.4 indicator of unit of time for range
+    t[32] = s.time_range_length;                       // time range length
+    t[33] = 0;                                         // indicator of unit of successive fields
+    t[34] = 0;                                         // time increment
+
+    return t;
+}
+
+std::vector<std::int64_t> GRIB2_Driver::build_pdt_4_48(const Grib2Settings& s) {
+    // Product Definition Template 4.48 (aerosol optical properties at
+    // a wavelength), 26 entries.
+    // Layout per WMO GRIB2 Template 4.48 / NCEP getpdstemplate(48).
+    std::vector<std::int64_t> t(26, 0);
+
+    // --- Indices 0–7: parameter + aerosol / size distribution ---
+    t[0] = s.parameter_category;  // Table 4.1
+    t[1] = s.parameter_number;    // Table 4.2
+    t[2] = s.aerosol_type;        // Table 4.233
+    t[3] = 0;                     // type of interval for size distribution
+    t[4] = 0;                     // scale factor of first size
+    t[5] = 0;                     // scaled value of first size
+    t[6] = 0;                     // scale factor of second size
+    t[7] = 0;                     // scaled value of second size
+
+    // --- Indices 8–12: optical property + wavelength ---
+    t[8] = s.optical_property_type;  // optical property type
+    t[9] = 0;                        // scale factor of first wavelength
+    t[10] = s.wavelength_first_nm;   // scaled value of first wavelength (wavelength_first_nm)
+    t[11] = 0;                       // scale factor of second wavelength
+    t[12] = s.wavelength_last_nm;    // scaled value of second wavelength (wavelength_last_nm)
+
+    // --- Indices 13–19: generating process + time ---
+    t[13] = 2;                            // type of generating process (2 = forecast)
+    t[14] = 0;                            // background generating process id
+    t[15] = 0;                            // analysis/forecast generating process id
+    t[16] = 0;                            // hours after reference time (data cutoff)
+    t[17] = 0;                            // minutes after reference time (data cutoff)
+    t[18] = s.indicator_of_unit_of_time;  // Table 4.4
+    t[19] = s.forecast_time;              // forecast time in above units
+
+    // --- Indices 20–25: fixed surfaces ---
+    t[20] = s.type_of_first_fixed_surface;  // Table 4.5
+    t[21] = s.scale_factor_first_surface;   // scale factor of first fixed surface
+    t[22] = s.scaled_value_first_surface;   // scaled value of first fixed surface
+    t[23] = 255;                            // type of second fixed surface (255 = missing)
+    t[24] = 0;                              // scale factor of second fixed surface
+    t[25] = 0;                              // scaled value of second fixed surface
+
+    return t;
+}
+
+std::vector<std::int64_t> GRIB2_Driver::build_pdt_4_49(const Grib2Settings& s) {
+    // Product Definition Template 4.49 (individual ensemble forecast
+    // for aerosol optical properties), 29 entries.
+    // Layout per WMO GRIB2 Template 4.49 / NCEP getpdstemplate(49).
+    std::vector<std::int64_t> t(29, 0);
+
+    // --- Indices 0–7: parameter + aerosol / size distribution ---
+    t[0] = s.parameter_category;  // Table 4.1
+    t[1] = s.parameter_number;    // Table 4.2
+    t[2] = s.aerosol_type;        // Table 4.233
+    t[3] = 0;                     // type of interval for size distribution
+    t[4] = 0;                     // scale factor of first size
+    t[5] = 0;                     // scaled value of first size
+    t[6] = 0;                     // scale factor of second size
+    t[7] = 0;                     // scaled value of second size
+
+    // --- Indices 8–12: optical property + wavelength ---
+    t[8] = s.optical_property_type;  // optical property type
+    t[9] = 0;                        // scale factor of first wavelength
+    t[10] = s.wavelength_first_nm;   // scaled value of first wavelength (wavelength_first_nm)
+    t[11] = 0;                       // scale factor of second wavelength
+    t[12] = s.wavelength_last_nm;    // scaled value of second wavelength (wavelength_last_nm)
+
+    // --- Indices 13–19: generating process + time ---
+    t[13] = 2;                            // type of generating process (2 = forecast)
+    t[14] = 0;                            // background generating process id
+    t[15] = 0;                            // analysis/forecast generating process id
+    t[16] = 0;                            // hours after reference time (data cutoff)
+    t[17] = 0;                            // minutes after reference time (data cutoff)
+    t[18] = s.indicator_of_unit_of_time;  // Table 4.4
+    t[19] = s.forecast_time;              // forecast time in above units
+
+    // --- Indices 20–22: ensemble ---
+    t[20] = 0;                               // type of ensemble forecast
+    t[21] = s.ensemble_perturbation_number;  // perturbation number
+    t[22] = 0;                               // number of forecasts in ensemble
+
+    // --- Indices 23–28: fixed surfaces ---
+    t[23] = s.type_of_first_fixed_surface;  // Table 4.5
+    t[24] = s.scale_factor_first_surface;   // scale factor of first fixed surface
+    t[25] = s.scaled_value_first_surface;   // scaled value of first fixed surface
+    t[26] = 255;                            // type of second fixed surface (255 = missing)
+    t[27] = 0;                              // scale factor of second fixed surface
+    t[28] = 0;                              // scaled value of second fixed surface
+
     return t;
 }
 
@@ -699,7 +1219,20 @@ void GRIB2_Driver::write(const StagingBuffer& src, const VarMeta& meta) {
 
     // Section 3 (grid definition).  igds describes the source of the
     // grid definition and the number of data points.
-    auto gdt = build_gdt_3_0(settings_, ni, nj);
+    // GDT dispatch: select the builder based on the configured GDT number
+    // (Req 11.1, 11.2, 11.3).
+    std::vector<std::int64_t> gdt;
+    switch (settings_.gdt_number) {
+        case 0:
+            gdt = build_gdt_3_0(settings_, ni, nj);
+            break;
+        case 40:
+            gdt = build_gdt_3_40(settings_, ni, nj);
+            break;
+        default:
+            throw eckit::Exception("GRIB2_Driver::write: unsupported GDT number " + std::to_string(settings_.gdt_number) +
+                                   ". Zero record bytes emitted.");
+    }
     std::vector<g2int> igdstmpl(gdt.begin(), gdt.end());
     g2int igds[5];
     igds[0] = 0;                                         // grid defined by template (Table 3.0)
@@ -714,8 +1247,48 @@ void GRIB2_Driver::write(const StagingBuffer& src, const VarMeta& meta) {
     }
 
     // Sections 4/5/6/7 (product, data representation, bitmap, data).
-    auto pdt = build_pdt_4_0(settings_);
+    // PDT dispatch: select the correct template builder based on pdt_number.
+    std::vector<std::int64_t> pdt;
+    switch (settings_.pdt_number) {
+        case 0:
+            pdt = build_pdt_4_0(settings_);
+            break;
+        case 8:
+            pdt = build_pdt_4_8(settings_);
+            break;
+        case 40:
+            pdt = build_pdt_4_40(settings_);
+            break;
+        case 44:
+            pdt = build_pdt_4_44(settings_);
+            break;
+        case 45:
+            pdt = build_pdt_4_45(settings_);
+            break;
+        case 46:
+            pdt = build_pdt_4_46(settings_);
+            break;
+        case 48:
+            pdt = build_pdt_4_48(settings_);
+            break;
+        case 49:
+            pdt = build_pdt_4_49(settings_);
+            break;
+        default:
+            throw eckit::Exception("GRIB2_Driver::write: unsupported PDT number " + std::to_string(settings_.pdt_number) +
+                                   ". Zero record bytes emitted.");
+    }
     std::vector<g2int> ipdstmpl(pdt.begin(), pdt.end());
+
+    // Note (Req 12.8, 14.3): The encode-path field identity is implicitly
+    // consistent with the decode-path identity.  Both paths use the same
+    // settings fields → template indices → extraction logic:
+    //   - Encode: settings_.X → build_pdt_P()[idx]
+    //   - Decode: ipdtmpl[idx] → extract_composition_metadata() → field_identity_name()
+    // This round-trip equivalence is formally verified by Property 3
+    // (test_p31_identity_roundtrip).  No explicit field_identity_name call
+    // is needed here since the write path does not log or return the identity.
+
     auto drs = build_drs_template(active_drt_, settings_);
     std::vector<g2int> idrstmpl(drs.begin(), drs.end());
 

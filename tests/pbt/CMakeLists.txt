@@ -563,6 +563,23 @@ add_test(NAME pbt.p25_grib2_metadata_invariant COMMAND pbt_p25_grib2_metadata_in
 set_tests_properties(pbt.p25_grib2_metadata_invariant PROPERTIES LABELS "pbt;p25;grib2;metadata" TIMEOUT 180 ENVIRONMENT "RC_PARAMS=max_success=100")
 
 # ####################################################################################################################################################
+# pbt_p30_gdt_builder_correctness -- Property P30: GDT 3.40 template builder index correctness.
+#
+# For any valid Grib2Settings with n_parallel > 0 and positive (ni, nj): build_gdt_3_40 produces a 19-entry vector with the correct values at
+# WMO-defined indices.
+#
+# Validates: R9.1, R9.2, R9.3
+# ####################################################################################################################################################
+add_executable(pbt_p30_gdt_builder_correctness test_p30_gdt_builder_correctness.cpp ${CMAKE_SOURCE_DIR}/src/drivers/grib2/grib2_driver.cpp
+                                               ${CMAKE_SOURCE_DIR}/src/factory/backend_factory.cpp)
+
+target_link_libraries(pbt_p30_gdt_builder_correctness PRIVATE AMIO::pbt_common)
+
+add_test(NAME pbt.p30_gdt_builder_correctness COMMAND pbt_p30_gdt_builder_correctness)
+set_tests_properties(pbt.p30_gdt_builder_correctness PROPERTIES LABELS "pbt;p30;grib2;gdt;gdt_3_40" TIMEOUT 180 ENVIRONMENT
+                                                                "RC_PARAMS=max_success=100")
+
+# ####################################################################################################################################################
 # pbt_p26_zarr_cloud_failure_idempotence -- Property P26: Storage idempotence on Zarr cloud failure.
 #
 # For any Zarr_Driver write to cloud URI that fails (network, auth, unsupported scheme): target object byte content unchanged after call; driver
@@ -725,3 +742,37 @@ target_link_libraries(pbt_rp8_no_write_past_capacity PRIVATE AMIO::pbt_common Th
 
 add_test(NAME pbt.rp8_no_write_past_capacity COMMAND pbt_rp8_no_write_past_capacity)
 set_tests_properties(pbt.rp8_no_write_past_capacity PROPERTIES LABELS "pbt;rp8;capacity" TIMEOUT 180 ENVIRONMENT "RC_PARAMS=max_success=100")
+
+# ####################################################################################################################################################
+# pbt_p29_pdt_builder_correctness -- Property P29: PDT template builder index correctness.
+#
+# For any valid Grib2Settings and any supported PDT number P in {0, 8, 40, 44, 45, 46, 48, 49}: build_pdt_P(settings) produces a vector whose .size()
+# matches the WMO entry count and whose composition-relevant indices hold the corresponding Grib2Settings values.
+#
+# Validates: Requirements 2.1, 2.2, 2.3, 2.4, 3.1, 3.2, 3.3, 3.4, 4.1, 4.2, 4.3, 5.1, 5.2, 5.3, 6.1, 6.2, 6.3, 7.1, 7.2, 8.1, 8.2, 8.3
+# ####################################################################################################################################################
+add_executable(pbt_p29_pdt_builder_correctness test_p29_pdt_builder_correctness.cpp ${CMAKE_SOURCE_DIR}/src/drivers/grib2/grib2_driver.cpp
+                                               ${CMAKE_SOURCE_DIR}/src/factory/backend_factory.cpp)
+
+target_link_libraries(pbt_p29_pdt_builder_correctness PRIVATE AMIO::pbt_common)
+
+add_test(NAME pbt.p29_pdt_builder_correctness COMMAND pbt_p29_pdt_builder_correctness)
+set_tests_properties(pbt.p29_pdt_builder_correctness PROPERTIES LABELS "pbt;p29;grib2;composition;pdt_builder" TIMEOUT 180 ENVIRONMENT
+                                                                "RC_PARAMS=max_success=100")
+
+# ####################################################################################################################################################
+# pbt_p31_identity_roundtrip -- Property P31: Field_Identity_Name encode-decode round-trip.
+#
+# For any valid Grib2Settings with pdt_number in {0, 8, 40, 44, 45, 46, 48, 49}: the Field_Identity_Name computed from settings at encode time SHALL
+# equal the Field_Identity_Name extracted by extract_composition_metadata from the template array produced by build_pdt_P(settings).
+#
+# Validates: Requirements 2.5, 3.5, 4.4, 5.4, 6.4, 7.3, 8.4, 12.1, 12.2, 12.3, 12.4, 12.5, 12.6, 12.8, 13.1, 13.2, 13.3, 13.4, 13.5, 14.3
+# ####################################################################################################################################################
+add_executable(test_p31_identity_roundtrip test_p31_identity_roundtrip.cpp ${CMAKE_SOURCE_DIR}/src/drivers/grib2/grib2_driver.cpp
+                                           ${CMAKE_SOURCE_DIR}/src/factory/backend_factory.cpp)
+
+target_link_libraries(test_p31_identity_roundtrip PRIVATE AMIO::pbt_common)
+
+add_test(NAME pbt.p31_identity_roundtrip COMMAND test_p31_identity_roundtrip)
+set_tests_properties(pbt.p31_identity_roundtrip PROPERTIES LABELS "pbt;p31;grib2;composition;identity_roundtrip" TIMEOUT 180 ENVIRONMENT
+                                                           "RC_PARAMS=max_success=100")

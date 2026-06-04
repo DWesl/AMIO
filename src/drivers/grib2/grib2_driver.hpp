@@ -67,6 +67,28 @@ namespace amio::detail {
 class StagingPool;
 
 // ---------------------------------------------------------------
+// CompositionMetadata -- read-path PDT-aware metadata extraction
+// ---------------------------------------------------------------
+//
+// Holds the composition-specific fields extracted from a decoded
+// GRIB2 product definition template during open_read scanning.
+// The read path uses PDT-number-keyed index positions (WMO-defined
+// offsets) to extract the relevant fields from the ipdtmpl array.
+// For unsupported or PDT 4.0 records, all fields remain zero —
+// producing the backward-compatible identity.
+// (Req 13.1, 13.2, 13.3, 13.4, 13.5, 13.6)
+struct CompositionMetadata {
+    std::int64_t pdt_number = 0;
+    std::int64_t chemical_constituent_type = 0;
+    std::int64_t aerosol_type = 0;
+    std::int64_t optical_property_type = 0;
+    std::int64_t wavelength_first_nm = 0;
+    std::int64_t wavelength_last_nm = 0;
+    std::int64_t ensemble_perturbation_number = 0;
+    std::int64_t statistical_process = 0;
+};
+
+// ---------------------------------------------------------------
 // Read-side record index types
 // ---------------------------------------------------------------
 //
@@ -153,6 +175,23 @@ struct Grib2Settings {
 
     // Section 5 (Data Representation) packing precision.
     std::int64_t decimal_scale_factor = 0;
+
+    // Composition-specific metadata (PDTs 4.8, 4.40, 4.44–4.49, GDT 3.40).
+    // All default to zero (neutral/missing in WMO tables) when absent from manifest.
+    std::int64_t chemical_constituent_type = 0;               // Table 4.230 (PDT 4.40)
+    std::int64_t aerosol_type = 0;                            // Table 4.233 (PDT 4.44–4.49)
+    std::int64_t size_dist_param_first = 0;                   // Size distribution first param (PDT 4.44–4.46)
+    std::int64_t size_dist_param_second = 0;                  // Size distribution second param (PDT 4.44–4.46)
+    std::int64_t optical_property_type = 0;                   // Optical property code (PDT 4.48, 4.49)
+    std::int64_t wavelength_first_nm = 0;                     // First wavelength in nm (PDT 4.48, 4.49)
+    std::int64_t wavelength_last_nm = 0;                      // Last wavelength in nm (PDT 4.48, 4.49)
+    std::int64_t ensemble_perturbation_number = 0;            // Ensemble member index (PDT 4.45, 4.49)
+    std::int64_t statistical_process = 0;                     // Table 4.10 (PDT 4.8, 4.46)
+    std::int64_t time_range_unit = 0;                         // Table 4.4 (PDT 4.8, 4.46)
+    std::int64_t time_range_length = 0;                       // Time range length (PDT 4.8, 4.46)
+    std::int64_t number_of_time_range_specs = 0;              // Number of time range specs (PDT 4.8, 4.46)
+    std::int64_t total_missing_from_statistical_process = 0;  // Missing data count (PDT 4.8, 4.46)
+    std::int64_t n_parallel = 0;                              // Gaussian grid parallels equator-to-pole (GDT 3.40)
 };
 
 // GRIB2_Driver -- concrete Backend_Driver for GRIB2 encoding via
@@ -233,7 +272,37 @@ class GRIB2_Driver : public Backend_Driver {
     // write-then-read round trip resolves to the same identity (Req 13.4).
     static std::string field_identity_name(std::int64_t discipline, std::int64_t parameter_category, std::int64_t parameter_number,
                                            std::int64_t surface_type, std::int64_t surface_value);
+
+    // Extended field_identity_name overload with composition metadata.
+    // Builds the base name "d{d}_c{c}_n{n}_s{s}_l{l}" then appends
+    // PDT-specific composition suffixes:
+    //   PDT 4.40: + "_ct{chemical_constituent_type}"
+    //   PDT 4.44: + "_at{aerosol_type}"
+    //   PDT 4.45: + "_at{aerosol_type}_ep{ensemble_perturbation_number}"
+    //   PDT 4.46: + "_at{aerosol_type}_sp{statistical_process}"
+    //   PDT 4.48: + "_at{aerosol_type}_op{optical_property_type}_wl{first}_{last}"
+    //   PDT 4.49: + "_at{aerosol_type}_op{optical_property_type}_wl{first}_{last}_ep{ensemble_perturbation_number}"
+    //   PDT 4.8:  + "_sp{statistical_process}"
+    //   PDT 4.0:  (no suffix — backward compatible)
+    static std::string field_identity_name(std::int64_t discipline, std::int64_t parameter_category, std::int64_t parameter_number,
+                                           std::int64_t surface_type, std::int64_t surface_value, std::int64_t pdt_number,
+                                           std::int64_t chemical_constituent_type, std::int64_t aerosol_type, std::int64_t optical_property_type,
+                                           std::int64_t wavelength_first_nm, std::int64_t wavelength_last_nm,
+                                           std::int64_t ensemble_perturbation_number, std::int64_t statistical_process);
     // ----- Static utility methods (public for testability) -----
+
+    // extract_composition_metadata -- extract composition-specific metadata
+    // from a PDT template array based on PDT number.
+    //
+    // Uses known PDT-specific index positions (WMO template layouts) to
+    // extract the relevant fields.  For unsupported or PDT 4.0 records,
+    // all composition fields remain zero — producing the backward-
+    // compatible identity.  (Req 13.1, 13.2, 13.3, 13.4, 13.5, 13.6)
+    //
+    // Takes a std::vector<std::int64_t> (not a gribfield*) so it can be
+    // tested without g2c dependency.  The caller in build_record_index
+    // converts g2c arrays to this vector before calling.
+    static CompositionMetadata extract_composition_metadata(std::int64_t pdt_number, const std::vector<std::int64_t>& ipdtmpl);
 
     // Check if a buffer described by shape is contiguous and row-major.
     // Returns true if the data can be passed directly to g2c (fast path).
@@ -265,9 +334,51 @@ class GRIB2_Driver : public Backend_Driver {
     // meridian (latitudes).
     static std::vector<std::int64_t> build_gdt_3_0(const Grib2Settings& s, std::int64_t ni, std::int64_t nj);
 
+    // Grid Definition Template 3.40 (Gaussian latitude/longitude),
+    // 19 entries.  Identical to GDT 3.0 except index 17 carries N
+    // (number of parallels between equator and pole) instead of Dj.
+    static std::vector<std::int64_t> build_gdt_3_40(const Grib2Settings& s, std::int64_t ni, std::int64_t nj);
+
     // Product Definition Template 4.0 (analysis/forecast at a level),
     // 15 entries.
     static std::vector<std::int64_t> build_pdt_4_0(const Grib2Settings& s);
+
+    // Product Definition Template 4.40 (chemical constituent at a
+    // horizontal level at a point in time), 16 entries.
+    static std::vector<std::int64_t> build_pdt_4_40(const Grib2Settings& s);
+
+    // Product Definition Template 4.44 (aerosol at a horizontal level
+    // at a point in time), 21 entries.  Carries aerosol type at index 2
+    // and size distribution parameters at indices 5/7.
+    static std::vector<std::int64_t> build_pdt_4_44(const Grib2Settings& s);
+
+    // Product Definition Template 4.8 (statistically processed at a
+    // level), 29 entries.  Indices 0–14 share PDT 4.0 layout; indices
+    // 15–28 carry the statistical processing interval fields.
+    static std::vector<std::int64_t> build_pdt_4_8(const Grib2Settings& s);
+
+    // Product Definition Template 4.46 (statistically processed aerosol),
+    // 35 entries.  Aerosol fields at indices 2–7, common forecast fields
+    // at 8–20, end-of-time-interval at 21–26, statistical processing at
+    // 27–34.
+    static std::vector<std::int64_t> build_pdt_4_46(const Grib2Settings& s);
+
+    // Product Definition Template 4.45 (individual ensemble forecast
+    // for aerosol), 24 entries.  Aerosol fields at indices 2–7,
+    // ensemble fields at indices 15–17, fixed surfaces at 18–23.
+    static std::vector<std::int64_t> build_pdt_4_45(const Grib2Settings& s);
+
+    // Product Definition Template 4.48 (aerosol optical properties at
+    // a wavelength), 26 entries.  Aerosol type at index 2, optical
+    // property type at index 8, wavelength values at indices 10/12,
+    // common forecast fields at 13–19, fixed surfaces at 20–25.
+    static std::vector<std::int64_t> build_pdt_4_48(const Grib2Settings& s);
+
+    // Product Definition Template 4.49 (individual ensemble forecast
+    // for aerosol optical properties), 29 entries.  Aerosol/optical
+    // fields at indices 2–12, common forecast fields at 13–19,
+    // ensemble fields at 20–22, fixed surfaces at 23–28.
+    static std::vector<std::int64_t> build_pdt_4_49(const Grib2Settings& s);
 
     // Data Representation Template values for the selected DRT.
     // DRT 40 (JPEG2000) -> 7 entries; DRT 42 (AEC/CCSDS) -> 8 entries.

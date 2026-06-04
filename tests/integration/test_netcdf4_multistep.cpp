@@ -89,9 +89,8 @@ int main() {
     for (int t = 0; t < NTIMES; ++t) {
         for (int lat = 0; lat < NLAT; ++lat) {
             for (int lon = 0; lon < NLON; ++lon) {
-                const std::size_t idx = static_cast<std::size_t>(t) * POINTS_PER_STEP +
-                                        static_cast<std::size_t>(lat) * NLON +
-                                        static_cast<std::size_t>(lon);
+                const std::size_t idx =
+                    static_cast<std::size_t>(t) * POINTS_PER_STEP + static_cast<std::size_t>(lat) * NLON + static_cast<std::size_t>(lon);
                 source[idx] = source_value(t, lat, lon);
             }
         }
@@ -176,8 +175,7 @@ int main() {
                 reader.read(dst, meta, /*timestep=*/0, std::optional<BoundingBox>{box});
 
                 const std::size_t expected_bytes = POINTS_PER_STEP * sizeof(float);
-                EXPECT_TRUE(dst.used_bytes == expected_bytes,
-                            "timestep " + std::to_string(t) + " used_bytes == expected");
+                EXPECT_TRUE(dst.used_bytes == expected_bytes, "timestep " + std::to_string(t) + " used_bytes == expected");
 
                 // Compare against the corresponding source slice.
                 const float* src_slice = source.data() + static_cast<std::size_t>(t) * POINTS_PER_STEP;
@@ -194,8 +192,7 @@ int main() {
     std::remove(OUTPUT_PATH);
 
     std::fprintf(stdout, "test_netcdf4_multistep: passed=%d failed=%d\n", g_passed, g_failed);
-    std::fprintf(stdout, "  grid: [%d timesteps, %d lat, %d lon] = %zu floats/step (%.1f KiB/step)\n",
-                 NTIMES, NLAT, NLON, POINTS_PER_STEP,
+    std::fprintf(stdout, "  grid: [%d timesteps, %d lat, %d lon] = %zu floats/step (%.1f KiB/step)\n", NTIMES, NLAT, NLON, POINTS_PER_STEP,
                  static_cast<double>(POINTS_PER_STEP * sizeof(float)) / 1024.0);
 
     int mpi_init_flag = 0;

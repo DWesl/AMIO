@@ -167,8 +167,7 @@ int main() {
                 reader.read(dst, meta, /*timestep=*/t, std::nullopt);
 
                 const std::size_t expected_bytes = POINTS_PER_STEP * sizeof(float);
-                EXPECT_TRUE(dst.used_bytes == expected_bytes,
-                            "timestep " + std::to_string(t) + " used_bytes == expected");
+                EXPECT_TRUE(dst.used_bytes == expected_bytes, "timestep " + std::to_string(t) + " used_bytes == expected");
 
                 const bool eq = std::memcmp(out.data(), source[t].data(), expected_bytes) == 0;
                 EXPECT_TRUE(eq, "timestep " + std::to_string(t) + " byte-equal to source");
@@ -183,8 +182,7 @@ int main() {
     std::remove(OUTPUT_PATH);
 
     std::fprintf(stdout, "test_grib2_multistep: passed=%d failed=%d\n", g_passed, g_failed);
-    std::fprintf(stdout, "  grid: [%d timesteps, %d lat, %d lon] = %zu floats/step (%.1f KiB/step)\n",
-                 NTIMES, NLAT, NLON, POINTS_PER_STEP,
+    std::fprintf(stdout, "  grid: [%d timesteps, %d lat, %d lon] = %zu floats/step (%.1f KiB/step)\n", NTIMES, NLAT, NLON, POINTS_PER_STEP,
                  static_cast<double>(POINTS_PER_STEP * sizeof(float)) / 1024.0);
 
     return g_failed == 0 ? 0 : 1;

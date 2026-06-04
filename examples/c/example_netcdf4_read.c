@@ -9,8 +9,7 @@
 
 static void check_amio(amio_status_t rc, const char *context) {
     if (rc != AMIO_OK) {
-        fprintf(stderr, "AMIO error in %s: %s (code %d)\n",
-                context, amio_strerror(rc), (int)rc);
+        fprintf(stderr, "AMIO error in %s: %s (code %d)\n", context, amio_strerror(rc), (int)rc);
         exit(EXIT_FAILURE);
     }
 }
@@ -28,9 +27,7 @@ int main(void) {
     check_amio(rc, "amio_init");
 
     /* Open dataset for reading */
-    rc = amio_open_dataset(core,
-        "examples/manifests/netcdf4_manifest.yaml",
-        AMIO_MODE_READ, &dataset);
+    rc = amio_open_dataset(core, "examples/manifests/netcdf4_manifest.yaml", AMIO_MODE_READ, &dataset);
     check_amio(rc, "amio_open_dataset(READ)");
 
     /* Read temperature at timestep 0 (full field, no bounding box) */
