@@ -120,6 +120,97 @@ backend:
 | `discipline` | 0–255 | WMO GRIB2 discipline code |
 | `compression.algorithm` | `jpeg2000`, `aec` | Lossless DRT |
 
+### GRIB2 Product Definition Templates (PDTs)
+
+The GRIB2 driver supports multiple Product Definition Templates for
+atmospheric composition variables. Set `pdt_number` in the `grib2:` block
+to select the template:
+
+| `pdt_number` | Template | Use Case |
+|--------------|----------|----------|
+| 0 | PDT 4.0 | Analysis/forecast at a level (default) |
+| 8 | PDT 4.8 | Statistically processed (average, accumulation) |
+| 40 | PDT 4.40 | Chemical constituent (trace gases) |
+| 44 | PDT 4.44 | Aerosol at a point in time |
+| 45 | PDT 4.45 | Individual ensemble forecast for aerosol |
+| 46 | PDT 4.46 | Statistically processed aerosol |
+| 48 | PDT 4.48 | Aerosol optical properties at a wavelength |
+| 49 | PDT 4.49 | Ensemble aerosol optical properties |
+
+### GRIB2 Grid Definition Templates (GDTs)
+
+| `gdt_number` | Template | Use Case |
+|--------------|----------|----------|
+| 0 | GDT 3.0 | Regular latitude/longitude (default) |
+| 40 | GDT 3.40 | Gaussian latitude/longitude |
+
+### GRIB2 Composition Fields
+
+These optional manifest fields carry WMO code-table integers for composition
+PDTs. All default to 0 (neutral/missing) when absent.
+
+| Field | WMO Table | Used By |
+|-------|-----------|---------|
+| `chemical_constituent_type` | 4.230 | PDT 4.40 |
+| `aerosol_type` | 4.233 | PDT 4.44, 4.45, 4.46, 4.48, 4.49 |
+| `size_dist_param_first` | — | PDT 4.44, 4.45, 4.46 |
+| `size_dist_param_second` | — | PDT 4.44, 4.45, 4.46 |
+| `optical_property_type` | — | PDT 4.48, 4.49 |
+| `wavelength_first_nm` | — | PDT 4.48, 4.49 |
+| `wavelength_last_nm` | — | PDT 4.48, 4.49 |
+| `ensemble_perturbation_number` | — | PDT 4.45, 4.49 |
+| `statistical_process` | 4.10 | PDT 4.8, 4.46 |
+| `time_range_unit` | 4.4 | PDT 4.8, 4.46 |
+| `time_range_length` | — | PDT 4.8, 4.46 |
+| `number_of_time_range_specs` | — | PDT 4.8, 4.46 |
+| `total_missing_from_statistical_process` | — | PDT 4.8, 4.46 |
+| `n_parallel` | — | GDT 3.40 |
+
+### GRIB2 Field Identity Naming
+
+On read, the GRIB2 driver synthesizes a unique field name from WMO
+descriptors:
+
+```text
+d{discipline}_c{category}_n{number}_s{surface_type}_l{surface_value}
+```
+
+Composition PDTs append additional suffixes to distinguish species:
+
+| PDT | Suffix Example |
+|-----|----------------|
+| 4.40 | `_ct7` (chemical constituent type 7) |
+| 4.44 | `_at5` (aerosol type 5) |
+| 4.45 | `_at5_ep3` (aerosol + ensemble member 3) |
+| 4.46 | `_at5_sp2` (aerosol + statistical process 2) |
+| 4.48 | `_at5_op1_wl550_600` (aerosol + optical + wavelength) |
+| 4.49 | `_at5_op1_wl550_600_ep3` (+ ensemble) |
+| 4.8 | `_sp2` (statistical process 2) |
+| 4.0 | (no suffix) |
+
+### GRIB2 Composition Example
+
+```yaml
+backend: grib2
+path: aerosol_od.grib2
+drt: jpeg2000
+
+grib2:
+  discipline: 0
+  center: 7
+  parameter_category: 3
+  parameter_number: 5
+  type_of_first_fixed_surface: 100
+  scaled_value_first_surface: 50000
+  pdt_number: 48
+  gdt_number: 40
+  aerosol_type: 5
+  optical_property_type: 1
+  wavelength_first_nm: 550
+  wavelength_last_nm: 600
+  n_parallel: 48
+```
+
 ## Validation Rules
 
 AMIO validates the manifest on `amio_init`. Invalid configurations return

@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/bbakernoaa/amio/actions/workflows/ci.yml/badge.svg)](https://github.com/bbakernoaa/amio/actions/workflows/ci.yml)
 [![License: CC0-1.0](https://img.shields.io/badge/License-CC0_1.0-lightgrey.svg)](https://creativecommons.org/publicdomain/zero/1.0/)
-[![Tests](https://img.shields.io/badge/tests-66%20passing-brightgreen)](https://github.com/bbakernoaa/amio/actions/workflows/ci.yml)
+[![Tests](https://img.shields.io/badge/tests-72%20passing-brightgreen)](https://github.com/bbakernoaa/amio/actions/workflows/ci.yml)
 [![C Standard](https://img.shields.io/badge/API-C99-blue)](include/amio/amio.h)
 [![Fortran](https://img.shields.io/badge/Fortran-2003%20iso__c__binding-blue)](fortran/amio_mod.f90)
 [![NOAA Disclaimer](https://img.shields.io/badge/NOAA-Disclaimer-yellow)](DISCLAIMER)
@@ -21,7 +21,8 @@ Zarr v3, GRIB2), hiding storage complexity from host model code.
   buffer; upcoming timesteps are fetched in the background so reads are
   typically zero-latency.
 - **Three backends** — NetCDF-4 (parallel HDF5 / MPI-IO), Zarr v3
-  (TensorStore or NCZarr fallback), and GRIB2 (nceplibs-g2c).
+  (TensorStore or NCZarr fallback), and GRIB2 (nceplibs-g2c) with
+  composition-aware PDTs for aerosol, chemistry, and optical properties.
 - **Mixed-format translation** — Read from one format, write to another in
   the same run with no external ETL.
 - **Selective reads** — Bounding-box + stride descriptors fetch only the
@@ -248,6 +249,7 @@ Key test categories:
 - `pbt.*` — Correctness properties (round-trip fidelity, subset-equals-slice,
   view conservation, no-write-past-capacity, etc.)
 - `unit.read_netcdf4`, `unit.read_grib2` — Driver integration with byte equality
+- `integration.grib2_composition_roundtrip` — Composition PDT encode-decode
 - `unit.e2e_netcdf_roundtrip` — Full public-API write→read round trip
 
 ## Documentation
