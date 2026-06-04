@@ -100,7 +100,8 @@ std::string expected_identity_name(int pdt_number) {
 
 // Build YAML configuration for a given PDT number.
 std::string build_yaml(const char* path, int pdt_number, int gdt_number = 0) {
-    std::string yaml = std::string("path: ") + path + "\n"
+    std::string yaml = std::string("path: ") + path +
+                       "\n"
                        "drt: jpeg2000\n"
                        "grib2:\n"
                        "  discipline: 0\n"
@@ -109,52 +110,61 @@ std::string build_yaml(const char* path, int pdt_number, int gdt_number = 0) {
                        "  parameter_number: 5\n"
                        "  type_of_first_fixed_surface: 100\n"
                        "  scaled_value_first_surface: 50000\n"
-                       "  pdt_number: " + std::to_string(pdt_number) + "\n"
-                       "  gdt_number: " + std::to_string(gdt_number) + "\n";
+                       "  pdt_number: " +
+                       std::to_string(pdt_number) +
+                       "\n"
+                       "  gdt_number: " +
+                       std::to_string(gdt_number) + "\n";
 
     // Add composition-specific fields based on PDT.
     switch (pdt_number) {
         case 8:
-            yaml += "  statistical_process: 2\n"
-                    "  time_range_unit: 1\n"
-                    "  time_range_length: 6\n"
-                    "  number_of_time_range_specs: 1\n";
+            yaml +=
+                "  statistical_process: 2\n"
+                "  time_range_unit: 1\n"
+                "  time_range_length: 6\n"
+                "  number_of_time_range_specs: 1\n";
             break;
         case 40:
             yaml += "  chemical_constituent_type: 7\n";
             break;
         case 44:
-            yaml += "  aerosol_type: 5\n"
-                    "  size_dist_param_first: 100\n"
-                    "  size_dist_param_second: 200\n";
+            yaml +=
+                "  aerosol_type: 5\n"
+                "  size_dist_param_first: 100\n"
+                "  size_dist_param_second: 200\n";
             break;
         case 45:
-            yaml += "  aerosol_type: 5\n"
-                    "  size_dist_param_first: 100\n"
-                    "  size_dist_param_second: 200\n"
-                    "  ensemble_perturbation_number: 3\n";
+            yaml +=
+                "  aerosol_type: 5\n"
+                "  size_dist_param_first: 100\n"
+                "  size_dist_param_second: 200\n"
+                "  ensemble_perturbation_number: 3\n";
             break;
         case 46:
-            yaml += "  aerosol_type: 5\n"
-                    "  size_dist_param_first: 100\n"
-                    "  size_dist_param_second: 200\n"
-                    "  statistical_process: 2\n"
-                    "  time_range_unit: 1\n"
-                    "  time_range_length: 6\n"
-                    "  number_of_time_range_specs: 1\n";
+            yaml +=
+                "  aerosol_type: 5\n"
+                "  size_dist_param_first: 100\n"
+                "  size_dist_param_second: 200\n"
+                "  statistical_process: 2\n"
+                "  time_range_unit: 1\n"
+                "  time_range_length: 6\n"
+                "  number_of_time_range_specs: 1\n";
             break;
         case 48:
-            yaml += "  aerosol_type: 5\n"
-                    "  optical_property_type: 1\n"
-                    "  wavelength_first_nm: 550\n"
-                    "  wavelength_last_nm: 600\n";
+            yaml +=
+                "  aerosol_type: 5\n"
+                "  optical_property_type: 1\n"
+                "  wavelength_first_nm: 550\n"
+                "  wavelength_last_nm: 600\n";
             break;
         case 49:
-            yaml += "  aerosol_type: 5\n"
-                    "  optical_property_type: 1\n"
-                    "  wavelength_first_nm: 550\n"
-                    "  wavelength_last_nm: 600\n"
-                    "  ensemble_perturbation_number: 3\n";
+            yaml +=
+                "  aerosol_type: 5\n"
+                "  optical_property_type: 1\n"
+                "  wavelength_first_nm: 550\n"
+                "  wavelength_last_nm: 600\n"
+                "  ensemble_perturbation_number: 3\n";
             break;
         default:
             break;
@@ -200,8 +210,7 @@ bool test_pdt_roundtrip(int pdt_number) {
         writer.flush();
         writer.close();
     } catch (const std::exception& e) {
-        std::fprintf(stdout, "NOTE: %s write path unavailable (encoder not in this g2c build), skipping: %s\n",
-                     label.c_str(), e.what());
+        std::fprintf(stdout, "NOTE: %s write path unavailable (encoder not in this g2c build), skipping: %s\n", label.c_str(), e.what());
         std::remove(tmp_path.c_str());
         return false;
     }
@@ -291,8 +300,7 @@ bool test_gdt_3_40_roundtrip() {
         writer.flush();
         writer.close();
     } catch (const std::exception& e) {
-        std::fprintf(stdout, "NOTE: %s write path unavailable (encoder not in this g2c build), skipping: %s\n",
-                     label.c_str(), e.what());
+        std::fprintf(stdout, "NOTE: %s write path unavailable (encoder not in this g2c build), skipping: %s\n", label.c_str(), e.what());
         std::remove(tmp_path);
         return false;
     }
@@ -354,7 +362,8 @@ bool test_backward_compatibility_pdt_4_0() {
 
     // Minimal YAML: pdt_number=0, gdt_number=0, NO composition fields set.
     // This mimics a pre-feature manifest that only uses basic PDT 4.0.
-    std::string yaml = std::string("path: ") + tmp_path + "\n"
+    std::string yaml = std::string("path: ") + tmp_path +
+                       "\n"
                        "drt: jpeg2000\n"
                        "grib2:\n"
                        "  discipline: 0\n"
@@ -409,8 +418,7 @@ bool test_backward_compatibility_pdt_4_0() {
         writer.flush();
         writer.close();
     } catch (const std::exception& e) {
-        std::fprintf(stdout, "NOTE: %s write path unavailable (encoder not in this g2c build), skipping: %s\n",
-                     label.c_str(), e.what());
+        std::fprintf(stdout, "NOTE: %s write path unavailable (encoder not in this g2c build), skipping: %s\n", label.c_str(), e.what());
         std::remove(tmp_path);
         return false;
     }
@@ -480,8 +488,7 @@ int main() {
     test_backward_compatibility_pdt_4_0();
 
     std::fprintf(stdout, "test_grib2_composition_roundtrip: passed=%d failed=%d\n", g_passed, g_failed);
-    std::fprintf(stdout, "  grid: [%d lat, %d lon] = %zu floats (%.1f KiB)\n",
-                 NLAT, NLON, NPOINTS,
+    std::fprintf(stdout, "  grid: [%d lat, %d lon] = %zu floats (%.1f KiB)\n", NLAT, NLON, NPOINTS,
                  static_cast<double>(NPOINTS * sizeof(float)) / 1024.0);
 
     return g_failed == 0 ? 0 : 1;

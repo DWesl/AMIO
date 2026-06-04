@@ -86,8 +86,7 @@ rc::Gen<Grib2Settings> genGrib2Settings() {
 //      Grib2Settings field values.
 // ===================================================================
 
-TEST_CASE("Feature: grib2-composition-templates, Property 1: PDT template builder index correctness",
-          "[pbt][p29][grib2][composition][pdt_builder]") {
+TEST_CASE("Feature: grib2-composition-templates, Property 1: PDT template builder index correctness", "[pbt][p29][grib2][composition][pdt_builder]") {
     auto result = rc::check("PDT builder produces correct size and index values for all supported PDTs", []() {
         auto s = *genGrib2Settings();
 

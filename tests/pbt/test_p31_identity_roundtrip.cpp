@@ -82,15 +82,24 @@ rc::Gen<Grib2Settings> genGrib2Settings() {
 // in the PDT template array for the given PDT number.
 std::pair<std::size_t, std::size_t> surface_indices(std::int64_t pdt_number) {
     switch (pdt_number) {
-        case 0:  return {9, 11};
-        case 8:  return {9, 11};
-        case 40: return {10, 12};
-        case 44: return {15, 17};
-        case 45: return {18, 20};
-        case 46: return {15, 17};
-        case 48: return {20, 22};
-        case 49: return {23, 25};
-        default: return {9, 11};
+        case 0:
+            return {9, 11};
+        case 8:
+            return {9, 11};
+        case 40:
+            return {10, 12};
+        case 44:
+            return {15, 17};
+        case 45:
+            return {18, 20};
+        case 46:
+            return {15, 17};
+        case 48:
+            return {20, 22};
+        case 49:
+            return {23, 25};
+        default:
+            return {9, 11};
     }
 }
 
@@ -115,32 +124,40 @@ TEST_CASE("Feature: grib2-composition-templates, Property 3: Field_Identity_Name
 
         // Step 2: Compute the "encode-time" identity from settings.
         std::string encode_identity = GRIB2_Driver::field_identity_name(
-            s.discipline,
-            s.parameter_category,
-            s.parameter_number,
-            s.type_of_first_fixed_surface,
-            s.scaled_value_first_surface,
-            s.pdt_number,
-            s.chemical_constituent_type,
-            s.aerosol_type,
-            s.optical_property_type,
-            s.wavelength_first_nm,
-            s.wavelength_last_nm,
-            s.ensemble_perturbation_number,
-            s.statistical_process);
+            s.discipline, s.parameter_category, s.parameter_number, s.type_of_first_fixed_surface, s.scaled_value_first_surface, s.pdt_number,
+            s.chemical_constituent_type, s.aerosol_type, s.optical_property_type, s.wavelength_first_nm, s.wavelength_last_nm,
+            s.ensemble_perturbation_number, s.statistical_process);
 
         // Step 3: Build the PDT template array using the appropriate builder.
         std::vector<std::int64_t> pdt_template;
         switch (s.pdt_number) {
-            case 0:  pdt_template = GRIB2_Driver::build_pdt_4_0(s);  break;
-            case 8:  pdt_template = GRIB2_Driver::build_pdt_4_8(s);  break;
-            case 40: pdt_template = GRIB2_Driver::build_pdt_4_40(s); break;
-            case 44: pdt_template = GRIB2_Driver::build_pdt_4_44(s); break;
-            case 45: pdt_template = GRIB2_Driver::build_pdt_4_45(s); break;
-            case 46: pdt_template = GRIB2_Driver::build_pdt_4_46(s); break;
-            case 48: pdt_template = GRIB2_Driver::build_pdt_4_48(s); break;
-            case 49: pdt_template = GRIB2_Driver::build_pdt_4_49(s); break;
-            default: RC_FAIL("Unexpected pdt_number"); break;
+            case 0:
+                pdt_template = GRIB2_Driver::build_pdt_4_0(s);
+                break;
+            case 8:
+                pdt_template = GRIB2_Driver::build_pdt_4_8(s);
+                break;
+            case 40:
+                pdt_template = GRIB2_Driver::build_pdt_4_40(s);
+                break;
+            case 44:
+                pdt_template = GRIB2_Driver::build_pdt_4_44(s);
+                break;
+            case 45:
+                pdt_template = GRIB2_Driver::build_pdt_4_45(s);
+                break;
+            case 46:
+                pdt_template = GRIB2_Driver::build_pdt_4_46(s);
+                break;
+            case 48:
+                pdt_template = GRIB2_Driver::build_pdt_4_48(s);
+                break;
+            case 49:
+                pdt_template = GRIB2_Driver::build_pdt_4_49(s);
+                break;
+            default:
+                RC_FAIL("Unexpected pdt_number");
+                break;
         }
 
         // Step 4: Extract composition metadata from the template.
@@ -157,19 +174,9 @@ TEST_CASE("Feature: grib2-composition-templates, Property 3: Field_Identity_Name
         std::int64_t decoded_number = pdt_template[1];
 
         std::string decode_identity = GRIB2_Driver::field_identity_name(
-            s.discipline,
-            decoded_category,
-            decoded_number,
-            decoded_surface_type,
-            decoded_surface_value,
-            meta.pdt_number,
-            meta.chemical_constituent_type,
-            meta.aerosol_type,
-            meta.optical_property_type,
-            meta.wavelength_first_nm,
-            meta.wavelength_last_nm,
-            meta.ensemble_perturbation_number,
-            meta.statistical_process);
+            s.discipline, decoded_category, decoded_number, decoded_surface_type, decoded_surface_value, meta.pdt_number,
+            meta.chemical_constituent_type, meta.aerosol_type, meta.optical_property_type, meta.wavelength_first_nm, meta.wavelength_last_nm,
+            meta.ensemble_perturbation_number, meta.statistical_process);
 
         // Step 6: Assert the two identity strings are equal.
         RC_ASSERT(encode_identity == decode_identity);

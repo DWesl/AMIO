@@ -38,8 +38,7 @@ using namespace amio::pbt;
 // Validates: Requirements 9.1, 9.2, 9.3
 // ===================================================================
 
-TEST_CASE("Feature: grib2-composition-templates, Property 2: GDT 3.40 template builder index correctness",
-           "[pbt][p30][grib2][gdt][gdt_3_40]") {
+TEST_CASE("Feature: grib2-composition-templates, Property 2: GDT 3.40 template builder index correctness", "[pbt][p30][grib2][gdt][gdt_3_40]") {
     auto result = rc::check("build_gdt_3_40 places fields at correct WMO-defined indices", []() {
         // Generate random valid Grib2Settings with n_parallel > 0.
         Grib2Settings s{};
