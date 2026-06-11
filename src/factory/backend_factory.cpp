@@ -1,7 +1,7 @@
 // backend_factory.cpp -- AMIO Backend_Factory implementation.
 //
-// Implements the singleton string-keyed registry for Backend_Driver
-// implementations.  Mimics eckit::Factory<Backend_Driver> semantics:
+// Implements AMIO's own string-keyed singleton registry for
+// Backend_Driver implementations:
 //
 //   * Case-sensitive exact-match lookup (R4.1).
 //   * Static-init registration via BackendRegistrar<T> (R4.2).

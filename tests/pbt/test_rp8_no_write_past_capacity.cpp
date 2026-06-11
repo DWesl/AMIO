@@ -47,8 +47,8 @@ namespace {
 // When required_bytes <= capacity it writes exactly required_bytes.
 class CapacityDriver : public Backend_Driver {
    public:
-    void open_write(const eckit::Configuration&) override {}
-    void open_read(const eckit::Configuration&) override {}
+    void open_write(const conf::Config&) override {}
+    void open_read(const conf::Config&) override {}
     void flush() override {}
     void close() override {}
     void write(const StagingBuffer&, const VarMeta&) override {}

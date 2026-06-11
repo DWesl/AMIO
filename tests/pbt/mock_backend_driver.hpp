@@ -77,13 +77,13 @@ class MockBackendDriver : public amio::detail::Backend_Driver {
 
     // ----- Backend_Driver interface implementation -----
 
-    void open_write(const eckit::Configuration& /*config*/) override {
+    void open_write(const conf::Config& /*config*/) override {
         std::lock_guard<std::mutex> lock(mu_);
         record_call(CallRecord::Method::OpenWrite);
         check_and_throw(CallRecord::Method::OpenWrite);
     }
 
-    void open_read(const eckit::Configuration& /*config*/) override {
+    void open_read(const conf::Config& /*config*/) override {
         std::lock_guard<std::mutex> lock(mu_);
         record_call(CallRecord::Method::OpenRead);
         check_and_throw(CallRecord::Method::OpenRead);

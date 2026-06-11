@@ -44,11 +44,11 @@ class FailingDriver : public Backend_Driver {
    public:
     explicit FailingDriver(const std::string& failure_msg = "injected serialization failure") : failure_msg_(failure_msg) {}
 
-    void open_write(const eckit::Configuration& /*config*/) override {
+    void open_write(const conf::Config& /*config*/) override {
         // No-op: driver is "open" immediately.
     }
 
-    void open_read(const eckit::Configuration& /*config*/) override {}
+    void open_read(const conf::Config& /*config*/) override {}
 
     void write(const StagingBuffer& /*src*/, const VarMeta& /*meta*/) override {
         g_write_call_count.fetch_add(1);
@@ -80,8 +80,8 @@ class FailingDriver : public Backend_Driver {
 
 class SucceedingDriver : public Backend_Driver {
    public:
-    void open_write(const eckit::Configuration& /*config*/) override {}
-    void open_read(const eckit::Configuration& /*config*/) override {}
+    void open_write(const conf::Config& /*config*/) override {}
+    void open_read(const conf::Config& /*config*/) override {}
     void write(const StagingBuffer& /*src*/, const VarMeta& /*meta*/) override {
         // No-op: driver succeeds.
     }

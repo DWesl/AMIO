@@ -14,7 +14,7 @@
 //   * Tests link against AMIO::amio_core (the real libamio.so with
 //     all drivers registered).
 //   * Tests run inside the amio-dev Docker container with all
-//     dependencies available (eckit, netCDF, g2c, etc.).
+//     dependencies available (CONF, HALO, LOGS, netCDF, g2c, etc.).
 //   * RC_PARAMS max_success=100 is configured via test environment.
 //
 // Validates: R11.2 (testing infrastructure)

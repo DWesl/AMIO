@@ -76,7 +76,7 @@ constexpr const char *kAmioErrorTable[] = {
     "AMIO_ERR_STAGING_BACKPRESSURE: no staging buffer became available within the configured staging timeout",
     /*  8 = AMIO_ERR_INVALID_BINDING       */ "AMIO_ERR_INVALID_BINDING: requested CPU core or NUMA domain is not present or not permitted",
     /*  9 = AMIO_ERR_COMM_SPLIT_FAILED     */
-    "AMIO_ERR_COMM_SPLIT_FAILED: eckit::mpi communicator split failed or I/O rank set is not a subset of world",
+    "AMIO_ERR_COMM_SPLIT_FAILED: MPI communicator split failed or I/O rank set is not a subset of world",
     /* 10 = AMIO_ERR_THREADING_UNSUPPORTED */ "AMIO_ERR_THREADING_UNSUPPORTED: host did not initialize MPI with at least MPI_THREAD_MULTIPLE",
     /* 11 = AMIO_ERR_UNKNOWN_BACKEND       */ "AMIO_ERR_UNKNOWN_BACKEND: configuration backend key does not match any registered driver",
     /* 12 = AMIO_ERR_LOSSY_CODEC_FORBIDDEN */ "AMIO_ERR_LOSSY_CODEC_FORBIDDEN: requested codec is not on the lossless allow-list",

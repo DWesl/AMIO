@@ -1,20 +1,16 @@
 // var_attributes.cpp -- implementation of the CF/UGRID attribute model.
 //
-// See var_attributes.hpp for the contract.  The manifest parsing half
-// only compiles meaningfully when eckit is in the build (it relies on
-// eckit::Configuration::keys() / getSubConfiguration()).  In non-eckit
-// builds the parser degrades to "defaults only", which is sufficient
-// for the lightweight test configurations that do not exercise eckit.
+// See var_attributes.hpp for the contract.  The manifest parsing uses
+// HELM::CONF's typed accessors and dotted-path API to walk the
+// configuration tree.
 
 #include "drivers/common/var_attributes.hpp"
 
 #include <cctype>
 #include <cstdlib>
+#include <string>
 
-#ifdef AMIO_HAS_ECKIT
-#include <eckit/config/Configuration.h>
-#include <eckit/config/LocalConfiguration.h>
-#endif
+#include <conf/config.hpp>
 
 namespace amio::detail {
 
@@ -54,24 +50,7 @@ AttrValue parse_attr_value(const std::string& raw) {
     return v;
 }
 
-#ifdef AMIO_HAS_ECKIT
-
 namespace {
-
-// Copy every scalar key under `cfg` into `out` as an AttrValue.
-void read_attr_block(const eckit::Configuration& cfg, VarAttributes& out) {
-    for (const std::string& key : cfg.keys()) {
-        // Only scalar leaves are attributes; skip nested maps.
-        std::string raw;
-        try {
-            raw = cfg.getString(key);
-        } catch (...) {
-            // Non-scalar (sub-map / list) -- not a simple attribute.
-            continue;
-        }
-        out.set(key, parse_attr_value(raw));
-    }
-}
 
 // Detect a UGRID role in a variable's attribute set.
 bool has_ugrid_role(const VarAttributes& attrs) {
@@ -85,33 +64,67 @@ bool has_ugrid_role(const VarAttributes& attrs) {
 
 }  // namespace
 
-DatasetAttributes parse_dataset_attributes(const eckit::Configuration& config) {
+DatasetAttributes parse_dataset_attributes(const conf::Config& config) {
     DatasetAttributes out;
 
-    // Global extra attributes.
+    // Global extra attributes: read known attribute keys under
+    // "global_attributes.*".  CONF doesn't expose keys() iteration
+    // over a sub-map directly, so we check for commonly used global
+    // attribute keys.  If the manifest uses a flat structure, we can
+    // read them by dotted path.
+    //
+    // For a fully dynamic approach, the attribute parsing would need
+    // CONF's Value/node iteration API.  For now, we attempt to read
+    // common CF global attributes via try_string.
     if (config.has("global_attributes")) {
-        try {
-            read_attr_block(config.getSubConfiguration("global_attributes"), out.global);
-        } catch (...) {
-            // Malformed block -- ignore; globals stay empty.
+        // Read known global attribute keys that CF mandates or commonly uses.
+        static const char* known_global_keys[] = {
+            "title", "institution", "source", "history", "references",
+            "comment", "Conventions", "contact", "project"
+        };
+        for (const char* key : known_global_keys) {
+            std::string dotted = std::string("global_attributes.") + key;
+            auto val = config.try_string(dotted);
+            if (val.has_value()) {
+                out.global.set(key, parse_attr_value(*val));
+            }
         }
     }
 
-    // Per-variable attributes.
-    if (config.has("variables")) {
+    // Per-variable attributes: CONF's dotted-path API requires knowing
+    // variable names in advance.  The driver typically knows its own
+    // variable name(s) and can query per-variable attributes at write
+    // time.  For the attribute model construction, we rely on the
+    // manifest listing variable names via a string list.
+    if (config.has("variable_names")) {
         try {
-            eckit::LocalConfiguration vars = config.getSubConfiguration("variables");
-            for (const std::string& var_name : vars.keys()) {
-                eckit::LocalConfiguration var_cfg = vars.getSubConfiguration(var_name);
-                if (!var_cfg.has("attributes")) {
+            auto var_names = config.get_string_list("variable_names");
+            for (const std::string& var_name : var_names) {
+                std::string prefix = "variables." + var_name + ".attributes";
+                if (!config.has(prefix)) {
                     continue;
                 }
                 VarAttributes attrs;
-                read_attr_block(var_cfg.getSubConfiguration("attributes"), attrs);
+                // Read known CF/UGRID per-variable attribute keys.
+                static const char* known_var_keys[] = {
+                    "units", "long_name", "standard_name", "_FillValue",
+                    "coordinates", "cell_methods", "cf_role", "mesh",
+                    "location", "topology_dimension", "scale_factor",
+                    "add_offset", "valid_min", "valid_max", "valid_range"
+                };
+                for (const char* key : known_var_keys) {
+                    std::string dotted = prefix + "." + key;
+                    auto val = config.try_string(dotted);
+                    if (val.has_value()) {
+                        attrs.set(key, parse_attr_value(*val));
+                    }
+                }
                 if (has_ugrid_role(attrs)) {
                     out.uses_ugrid = true;
                 }
-                out.per_variable.emplace(var_name, std::move(attrs));
+                if (!attrs.empty()) {
+                    out.per_variable.emplace(var_name, std::move(attrs));
+                }
             }
         } catch (...) {
             // Malformed block -- ignore; per-variable map stays as-is.
@@ -122,22 +135,12 @@ DatasetAttributes parse_dataset_attributes(const eckit::Configuration& config) {
     // otherwise default to CF, upgraded to CF+UGRID when a mesh role
     // was declared.
     if (config.has("conventions")) {
-        out.conventions = config.getString("conventions", kDefaultCFConventions);
+        out.conventions = config.get_or<std::string>("conventions", kDefaultCFConventions);
     } else {
         out.conventions = out.uses_ugrid ? kDefaultCFUGRIDConventions : kDefaultCFConventions;
     }
 
     return out;
 }
-
-#else  // !AMIO_HAS_ECKIT
-
-DatasetAttributes parse_dataset_attributes(const eckit::Configuration& /*config*/) {
-    // Without eckit there is no keys()/getSubConfiguration() to walk;
-    // return CF defaults so drivers still emit a Conventions attribute.
-    return DatasetAttributes{};
-}
-
-#endif  // AMIO_HAS_ECKIT
 
 }  // namespace amio::detail

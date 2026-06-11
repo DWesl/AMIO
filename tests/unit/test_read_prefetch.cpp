@@ -54,8 +54,8 @@ static const VariableInfo kVarInfo = make_var_info(AMIO_DTYPE_F32, {256});
 // ---------------------------------------------------------------
 class MockBackendDriver : public Backend_Driver {
    public:
-    void open_write(const eckit::Configuration&) override {}
-    void open_read(const eckit::Configuration&) override {}
+    void open_write(const conf::Config&) override {}
+    void open_read(const conf::Config&) override {}
 
     void write(const StagingBuffer& /*src*/, const VarMeta& /*meta*/) override {}
 
@@ -260,8 +260,8 @@ void test_schedule_next_bounds_check() {
 // ---------------------------------------------------------------
 class FailingDriver : public Backend_Driver {
    public:
-    void open_write(const eckit::Configuration&) override {}
-    void open_read(const eckit::Configuration&) override {}
+    void open_write(const conf::Config&) override {}
+    void open_read(const conf::Config&) override {}
     void write(const StagingBuffer&, const VarMeta&) override {}
 
     void read(StagingBuffer& /*dst*/, const VarMeta& /*meta*/, std::int64_t timestep, const std::optional<BoundingBox>&) override {

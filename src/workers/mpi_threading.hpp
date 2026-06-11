@@ -88,9 +88,10 @@ amio_err_t validate_mpi_threading(const MpiThreadingConfig& config);
 // query_mpi_thread_level -- query the MPI thread level that was
 // provided by MPI_Init_thread.
 //
-// When MPI is available, calls MPI_Query_thread to determine the
-// provided level.  When MPI is not available (standalone build),
-// returns -1.
+// When MPI is available, delegates to
+// halo::Environment::thread_support_level() which internally
+// queries the MPI thread level detected during HALO initialization.
+// When MPI is not available (standalone build), returns -1.
 //
 // This is a convenience function for use during amio_init to
 // populate MpiThreadingConfig::mpi_thread_level_provided.

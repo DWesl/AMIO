@@ -23,12 +23,10 @@
 // parameter category/number, template numbers, fixed-surface
 // descriptors) from the manifest.  Those values ARE the WMO/NCEP
 // table entries and are forwarded to g2c verbatim -- there is no
-// eckit-authored string->code map anymore.
+// external string->code map anymore.
 //
 // Conditional compilation:
 //   - AMIO_HAS_G2C: when defined, uses the real g2c API.
-//   - AMIO_HAS_ECKIT: when defined, uses eckit::Exception and
-//     eckit::Configuration.  Otherwise falls back to std::runtime_error.
 //   - When g2c is not defined, the driver compiles but throws on
 //     construction indicating g2c is not available.
 //
@@ -60,70 +58,8 @@ extern "C" {
 }
 #endif
 
-// When eckit is available, use eckit::Exception and eckit::Configuration.
-// Otherwise, fall back to std::runtime_error for exception semantics.
-#ifdef AMIO_HAS_ECKIT
-#include <eckit/config/Configuration.h>
-#include <eckit/config/LocalConfiguration.h>
-#include <eckit/exception/Exceptions.h>
-#include <eckit/log/Log.h>
-#else
-// Minimal shim: eckit::Configuration is forward-declared in
-// backend_driver.hpp.  For compilation without eckit, we provide a
-// minimal local configuration stub that satisfies the interface.
-namespace eckit {
-
-class Exception : public std::runtime_error {
-   public:
-    using std::runtime_error::runtime_error;
-};
-
-class Configuration {
-   public:
-    virtual ~Configuration() = default;
-    virtual bool has(const std::string& /*key*/) const {
-        return false;
-    }
-    virtual bool getBool(const std::string& /*key*/, bool def) const {
-        return def;
-    }
-    virtual int getInt(const std::string& /*key*/, int def) const {
-        return def;
-    }
-    virtual long getLong(const std::string& /*key*/, long def) const {
-        return def;
-    }
-    virtual long long getLong(const std::string& /*key*/, long long def) const {
-        return def;
-    }
-    virtual std::string getString(const std::string& key) const {
-        throw Exception("Key not found: " + key);
-    }
-    virtual std::string getString(const std::string& /*key*/, const std::string& def) const {
-        return def;
-    }
-    virtual std::vector<std::string> getStringVector(const std::string& /*key*/) const {
-        return {};
-    }
-    virtual std::vector<std::string> getStringVector(const std::string& /*key*/, const std::vector<std::string>& def) const {
-        return def;
-    }
-};
-
-namespace Log {
-inline std::ostream& info() {
-    return std::cerr;
-}
-inline std::ostream& warning() {
-    return std::cerr;
-}
-inline std::ostream& error() {
-    return std::cerr;
-}
-}  // namespace Log
-
-}  // namespace eckit
-#endif
+#include <conf/config.hpp>
+#include <conf/error.hpp>
 
 namespace amio::detail {
 
@@ -137,13 +73,13 @@ namespace {
 BackendRegistrar<GRIB2_Driver> grib2_registrar("grib2");
 
 // Read a single int64 manifest field, falling back to `def` when the
-// key is absent.  Centralizes the long/int getter quirks across the
-// eckit and shim Configuration variants.
-std::int64_t cfg_int(const eckit::Configuration& config, const std::string& key, std::int64_t def) {
+// key is absent.  Centralizes the integer getter pattern for the CONF
+// configuration interface.
+std::int64_t cfg_int(const conf::Config& config, const std::string& key, std::int64_t def) {
     if (!config.has(key)) {
         return def;
     }
-    return static_cast<std::int64_t>(config.getLong(key, static_cast<long>(def)));
+    return static_cast<std::int64_t>(config.get_or<int>(key, static_cast<int>(def)));
 }
 }  // anonymous namespace
 
@@ -165,7 +101,7 @@ GRIB2_DRT parse_drt_name(const std::string& name) {
     }
 
     // Not in the allowed set -- this is an unrecognized DRT (R9.6, R9.7).
-    throw eckit::Exception("GRIB2_Driver: unrecognized Data Representation Template: '" + name +
+    throw std::runtime_error("GRIB2_Driver: unrecognized Data Representation Template: '" + name +
                            "'. DRT name is not recognized. "
                            "Allowed values: {Adaptive Entropy Coding via libaec, "
                            "Lossless JPEG2000}. Zero record bytes emitted.");
@@ -179,7 +115,7 @@ GRIB2_Driver::GRIB2_Driver() {
 #ifndef AMIO_HAS_G2C
     // g2c is not available in this build.  Throw on construction
     // so the factory knows this driver cannot be used.
-    throw eckit::Exception(
+    throw std::runtime_error(
         "GRIB2_Driver: nceplibs-g2c is not available in this build. "
         "Rebuild AMIO with AMIO_HAS_G2C=ON to use the GRIB2 backend.");
 #endif
@@ -200,7 +136,7 @@ GRIB2_Driver::~GRIB2_Driver() {
 // read_settings -- pull the numeric GRIB2 identifiers from manifest
 // ---------------------------------------------------------------
 
-Grib2Settings GRIB2_Driver::read_settings(const eckit::Configuration& config) {
+Grib2Settings GRIB2_Driver::read_settings(const conf::Config& config) {
     Grib2Settings s{};  // start from NCEP-flavored defaults
 
     s.discipline = cfg_int(config, "grib2.discipline", s.discipline);
@@ -257,18 +193,18 @@ Grib2Settings GRIB2_Driver::read_settings(const eckit::Configuration& config) {
 // open_write / open_read
 // ---------------------------------------------------------------
 
-void GRIB2_Driver::open_write(const eckit::Configuration& config) {
+void GRIB2_Driver::open_write(const conf::Config& config) {
     active_drt_ = validate_drt(config);
     initialize(config);
 }
 
-void GRIB2_Driver::open_read(const eckit::Configuration& config) {
+void GRIB2_Driver::open_read(const conf::Config& config) {
 #ifndef AMIO_HAS_G2C
     // g2c is not available in this build.  A read open must fail so the
     // C-boundary cordon translates the throw to AMIO_ERR_BACKEND_FAILURE
     // (Req 13.7).
     (void)config;
-    throw eckit::Exception(
+    throw std::runtime_error(
         "GRIB2_Driver::open_read: nceplibs-g2c is not available in this build. "
         "Rebuild AMIO with AMIO_HAS_G2C=ON to use the GRIB2 read path.");
 #else
@@ -284,14 +220,14 @@ void GRIB2_Driver::open_read(const eckit::Configuration& config) {
     // Resolve the input path.  Accept the same key aliases the rest of
     // the toolchain emits (path / input_path / output_path).
     if (config.has("path")) {
-        input_path_ = config.getString("path");
+        input_path_ = config.get_string("path");
     } else if (config.has("input_path")) {
-        input_path_ = config.getString("input_path");
+        input_path_ = config.get_string("input_path");
     } else if (config.has("output_path")) {
-        input_path_ = config.getString("output_path");
+        input_path_ = config.get_string("output_path");
     }
     if (input_path_.empty()) {
-        throw eckit::Exception("GRIB2_Driver::open_read: 'path' (or 'input_path') field is required.");
+        throw std::runtime_error("GRIB2_Driver::open_read: 'path' (or 'input_path') field is required.");
     }
 
     // Scan the file and build the in-memory record index (Req 13.1).
@@ -525,17 +461,17 @@ int pdt_surface_value_index(std::int64_t pdt_number) {
 }  // namespace
 #endif  // AMIO_HAS_G2C
 
-void GRIB2_Driver::build_record_index(const eckit::Configuration& config) {
+void GRIB2_Driver::build_record_index(const conf::Config& config) {
 #ifndef AMIO_HAS_G2C
     (void)config;
-    throw eckit::Exception("GRIB2_Driver::build_record_index: nceplibs-g2c not available");
+    throw std::runtime_error("GRIB2_Driver::build_record_index: nceplibs-g2c not available");
 #else
     (void)config;
     records_.clear();
 
     std::FILE* fp = std::fopen(input_path_.c_str(), "rb");
     if (fp == nullptr) {
-        throw eckit::Exception("GRIB2_Driver::open_read: failed to open input file '" + input_path_ + "' for reading.");
+        throw std::runtime_error("GRIB2_Driver::open_read: failed to open input file '" + input_path_ + "' for reading.");
     }
 
     // RAII-ish guard: ensure the scan handle is closed on every path.
@@ -560,11 +496,11 @@ void GRIB2_Driver::build_record_index(const eckit::Configuration& config) {
         // Read the full message into memory.
         std::vector<unsigned char> cgrib(static_cast<std::size_t>(lgrib));
         if (std::fseek(fp, static_cast<long>(lskip), SEEK_SET) != 0) {
-            throw eckit::Exception("GRIB2_Driver::open_read: seek failed while indexing '" + input_path_ + "'.");
+            throw std::runtime_error("GRIB2_Driver::open_read: seek failed while indexing '" + input_path_ + "'.");
         }
         std::size_t got = std::fread(cgrib.data(), 1, static_cast<std::size_t>(lgrib), fp);
         if (got != static_cast<std::size_t>(lgrib)) {
-            throw eckit::Exception("GRIB2_Driver::open_read: short read while indexing '" + input_path_ + "'.");
+            throw std::runtime_error("GRIB2_Driver::open_read: short read while indexing '" + input_path_ + "'.");
         }
 
         // Enumerate the fields in this message.
@@ -574,7 +510,7 @@ void GRIB2_Driver::build_record_index(const eckit::Configuration& config) {
         g2int numlocal = 0;
         g2int ret = g2_info(cgrib.data(), listsec0, listsec1, &numfields, &numlocal);
         if (ret != 0) {
-            throw eckit::Exception("GRIB2_Driver::open_read: g2_info failed (code " + std::to_string(static_cast<long long>(ret)) +
+            throw std::runtime_error("GRIB2_Driver::open_read: g2_info failed (code " + std::to_string(static_cast<long long>(ret)) +
                                    ") while indexing '" + input_path_ + "'.");
         }
 
@@ -588,7 +524,7 @@ void GRIB2_Driver::build_record_index(const eckit::Configuration& config) {
                 if (gfld != nullptr) {
                     g2_free(gfld);
                 }
-                throw eckit::Exception("GRIB2_Driver::open_read: g2_getfld (metadata) failed (code " + std::to_string(static_cast<long long>(ret)) +
+                throw std::runtime_error("GRIB2_Driver::open_read: g2_getfld (metadata) failed (code " + std::to_string(static_cast<long long>(ret)) +
                                        ") while indexing '" + input_path_ + "'.");
             }
 
@@ -703,14 +639,14 @@ VariableInfo GRIB2_Driver::describe_variable(const std::string& name) {
 // initialize -- read product identifiers + open output file
 // ---------------------------------------------------------------
 
-void GRIB2_Driver::initialize(const eckit::Configuration& config) {
+void GRIB2_Driver::initialize(const conf::Config& config) {
     if (initialized_) {
         return;  // Already initialized.
     }
 
 #ifndef AMIO_HAS_G2C
     (void)config;
-    throw eckit::Exception("GRIB2_Driver: nceplibs-g2c is not available in this build.");
+    throw std::runtime_error("GRIB2_Driver: nceplibs-g2c is not available in this build.");
 #else
     // The GRIB2 tables are provided by g2c itself; AMIO only needs the
     // numeric product identifiers from the manifest.
@@ -718,15 +654,15 @@ void GRIB2_Driver::initialize(const eckit::Configuration& config) {
 
     // Resolve the output path (write mode only).
     if (config.has("path")) {
-        output_path_ = config.getString("path");
+        output_path_ = config.get_string("path");
     } else if (config.has("output_path")) {
-        output_path_ = config.getString("output_path");
+        output_path_ = config.get_string("output_path");
     }
 
     if (!output_path_.empty()) {
         out_file_ = std::fopen(output_path_.c_str(), "wb");
         if (out_file_ == nullptr) {
-            throw eckit::Exception("GRIB2_Driver: failed to open output file '" + output_path_ + "' for writing.");
+            throw std::runtime_error("GRIB2_Driver: failed to open output file '" + output_path_ + "' for writing.");
         }
     }
 
@@ -1142,14 +1078,14 @@ std::vector<std::int64_t> GRIB2_Driver::build_drs_template(GRIB2_DRT drt, const 
 
 void GRIB2_Driver::write(const StagingBuffer& src, const VarMeta& meta) {
     if (!initialized_) {
-        throw eckit::Exception("GRIB2_Driver::write called before successful initialization");
+        throw std::runtime_error("GRIB2_Driver::write called before successful initialization");
     }
 
     // GRIB2 grid-point encoding operates on float fields.  Only F32
     // payloads are supported; anything else is rejected before any
     // bytes are emitted (R9.8).
     if (meta.dtype != AMIO_DTYPE_F32) {
-        throw eckit::Exception(
+        throw std::runtime_error(
             "GRIB2_Driver::write: only AMIO_DTYPE_F32 fields can be encoded "
             "to GRIB2 grid-point data. Zero record bytes emitted.");
     }
@@ -1157,7 +1093,7 @@ void GRIB2_Driver::write(const StagingBuffer& src, const VarMeta& meta) {
     const std::size_t elem_size = dtype_size(meta.dtype);
     const std::size_t num_elements = total_elements(meta.shape);
     if (num_elements == 0 || elem_size == 0) {
-        throw eckit::Exception("GRIB2_Driver::write: empty or invalid field shape. Zero record bytes emitted.");
+        throw std::runtime_error("GRIB2_Driver::write: empty or invalid field shape. Zero record bytes emitted.");
     }
 
     // Contiguity check gates fast vs slow path (R9.4, R9.5).
@@ -1214,7 +1150,7 @@ void GRIB2_Driver::write(const StagingBuffer& src, const VarMeta& meta) {
 
     g2int ierr = g2_create(cgrib.data(), listsec0, listsec1);
     if (ierr <= 0) {
-        throw eckit::Exception("GRIB2_Driver::write: g2_create failed (Section 0/1). Zero record bytes emitted.");
+        throw std::runtime_error("GRIB2_Driver::write: g2_create failed (Section 0/1). Zero record bytes emitted.");
     }
 
     // Section 3 (grid definition).  igds describes the source of the
@@ -1230,7 +1166,7 @@ void GRIB2_Driver::write(const StagingBuffer& src, const VarMeta& meta) {
             gdt = build_gdt_3_40(settings_, ni, nj);
             break;
         default:
-            throw eckit::Exception("GRIB2_Driver::write: unsupported GDT number " + std::to_string(settings_.gdt_number) +
+            throw std::runtime_error("GRIB2_Driver::write: unsupported GDT number " + std::to_string(settings_.gdt_number) +
                                    ". Zero record bytes emitted.");
     }
     std::vector<g2int> igdstmpl(gdt.begin(), gdt.end());
@@ -1243,7 +1179,7 @@ void GRIB2_Driver::write(const StagingBuffer& src, const VarMeta& meta) {
 
     ierr = g2_addgrid(cgrib.data(), igds, igdstmpl.data(), nullptr, 0);
     if (ierr <= 0) {
-        throw eckit::Exception("GRIB2_Driver::write: g2_addgrid failed (Section 3). Zero record bytes emitted.");
+        throw std::runtime_error("GRIB2_Driver::write: g2_addgrid failed (Section 3). Zero record bytes emitted.");
     }
 
     // Sections 4/5/6/7 (product, data representation, bitmap, data).
@@ -1275,7 +1211,7 @@ void GRIB2_Driver::write(const StagingBuffer& src, const VarMeta& meta) {
             pdt = build_pdt_4_49(settings_);
             break;
         default:
-            throw eckit::Exception("GRIB2_Driver::write: unsupported PDT number " + std::to_string(settings_.pdt_number) +
+            throw std::runtime_error("GRIB2_Driver::write: unsupported PDT number " + std::to_string(settings_.pdt_number) +
                                    ". Zero record bytes emitted.");
     }
     std::vector<g2int> ipdstmpl(pdt.begin(), pdt.end());
@@ -1306,24 +1242,24 @@ void GRIB2_Driver::write(const StagingBuffer& src, const VarMeta& meta) {
                        255,       // ibmap = 255 -> bitmap does not apply (no bmap); 0/254 would dereference bmap
                        nullptr);  // bmap (none -- no missing-value grid points)
     if (ierr <= 0) {
-        throw eckit::Exception("GRIB2_Driver::write: g2_addfield failed (Section 4/5/7). Zero record bytes emitted.");
+        throw std::runtime_error("GRIB2_Driver::write: g2_addfield failed (Section 4/5/7). Zero record bytes emitted.");
     }
 
     g2int msglen = g2_gribend(cgrib.data());
     if (msglen <= 0) {
-        throw eckit::Exception("GRIB2_Driver::write: g2_gribend failed (Section 8). Zero record bytes emitted.");
+        throw std::runtime_error("GRIB2_Driver::write: g2_gribend failed (Section 8). Zero record bytes emitted.");
     }
 
     // Commit the complete GRIB2 message to the output file.
     if (out_file_ != nullptr) {
         std::size_t written = std::fwrite(cgrib.data(), 1, static_cast<std::size_t>(msglen), out_file_);
         if (written != static_cast<std::size_t>(msglen)) {
-            throw eckit::Exception("GRIB2_Driver::write: short write committing GRIB2 message to disk.");
+            throw std::runtime_error("GRIB2_Driver::write: short write committing GRIB2 message to disk.");
         }
     }
 #else
     (void)encode_ptr;
-    throw eckit::Exception("GRIB2_Driver::write: nceplibs-g2c not available");
+    throw std::runtime_error("GRIB2_Driver::write: nceplibs-g2c not available");
 #endif
 }
 
@@ -1333,12 +1269,12 @@ void GRIB2_Driver::write(const StagingBuffer& src, const VarMeta& meta) {
 
 void GRIB2_Driver::read(StagingBuffer& dst, const VarMeta& meta, std::int64_t timestep, const std::optional<BoundingBox>& bbox) {
     if (!initialized_) {
-        throw eckit::Exception("GRIB2_Driver::read called before successful initialization");
+        throw std::runtime_error("GRIB2_Driver::read called before successful initialization");
     }
 
 #ifdef AMIO_HAS_G2C
     if (!read_mode_) {
-        throw eckit::Exception("GRIB2_Driver::read: driver was not opened for reading.");
+        throw std::runtime_error("GRIB2_Driver::read: driver was not opened for reading.");
     }
 
     // ---- Locate the indexed record for (variable, timestep) ----
@@ -1349,23 +1285,23 @@ void GRIB2_Driver::read(StagingBuffer& dst, const VarMeta& meta, std::int64_t ti
     // (Req 13.6).
     auto it = records_.find(meta.name);
     if (it == records_.end() || it->second.records.empty()) {
-        throw eckit::Exception("GRIB2_Driver::read: field '" + meta.name + "' not found in the GRIB2 record index.");
+        throw std::runtime_error("GRIB2_Driver::read: field '" + meta.name + "' not found in the GRIB2 record index.");
     }
     const GribFieldIndex& entry = it->second;
 
     if (timestep < 0 || timestep >= static_cast<std::int64_t>(entry.records.size())) {
-        throw eckit::Exception("GRIB2_Driver::read: timestep " + std::to_string(static_cast<long long>(timestep)) + " out of range for field '" +
+        throw std::runtime_error("GRIB2_Driver::read: timestep " + std::to_string(static_cast<long long>(timestep)) + " out of range for field '" +
                                meta.name + "' (" + std::to_string(entry.records.size()) + " records).");
     }
     const GribRecordLocation& loc = entry.records[static_cast<std::size_t>(timestep)];
     if (loc.length <= 0) {
-        throw eckit::Exception("GRIB2_Driver::read: invalid record length for field '" + meta.name + "'.");
+        throw std::runtime_error("GRIB2_Driver::read: invalid record length for field '" + meta.name + "'.");
     }
 
     // ---- Read the GRIB2 message bytes from the source file ----
     std::FILE* fp = std::fopen(input_path_.c_str(), "rb");
     if (fp == nullptr) {
-        throw eckit::Exception("GRIB2_Driver::read: failed to open input file '" + input_path_ + "' for reading.");
+        throw std::runtime_error("GRIB2_Driver::read: failed to open input file '" + input_path_ + "' for reading.");
     }
     struct FileGuard {
         std::FILE* f;
@@ -1376,11 +1312,11 @@ void GRIB2_Driver::read(StagingBuffer& dst, const VarMeta& meta, std::int64_t ti
 
     std::vector<unsigned char> cgrib(static_cast<std::size_t>(loc.length));
     if (std::fseek(fp, static_cast<long>(loc.offset), SEEK_SET) != 0) {
-        throw eckit::Exception("GRIB2_Driver::read: seek failed decoding field '" + meta.name + "'.");
+        throw std::runtime_error("GRIB2_Driver::read: seek failed decoding field '" + meta.name + "'.");
     }
     std::size_t got = std::fread(cgrib.data(), 1, static_cast<std::size_t>(loc.length), fp);
     if (got != static_cast<std::size_t>(loc.length)) {
-        throw eckit::Exception("GRIB2_Driver::read: short read decoding field '" + meta.name + "'.");
+        throw std::runtime_error("GRIB2_Driver::read: short read decoding field '" + meta.name + "'.");
     }
 
     // ---- Decode the requested record (unpack=1, expand=1) ----
@@ -1392,7 +1328,7 @@ void GRIB2_Driver::read(StagingBuffer& dst, const VarMeta& meta, std::int64_t ti
         if (gfld != nullptr) {
             g2_free(gfld);
         }
-        throw eckit::Exception("GRIB2_Driver::read: g2_getfld failed (code " + std::to_string(static_cast<long long>(ret)) + ") decoding field '" +
+        throw std::runtime_error("GRIB2_Driver::read: g2_getfld failed (code " + std::to_string(static_cast<long long>(ret)) + ") decoding field '" +
                                meta.name + "'.");
     }
 
@@ -1403,7 +1339,7 @@ void GRIB2_Driver::read(StagingBuffer& dst, const VarMeta& meta, std::int64_t ti
     const std::int64_t ngrdpts = static_cast<std::int64_t>(gfld->ngrdpts);
     if (ngrdpts <= 0 || gfld->fld == nullptr) {
         g2_free(gfld);
-        throw eckit::Exception("GRIB2_Driver::read: decoded field '" + meta.name + "' has no grid-point data.");
+        throw std::runtime_error("GRIB2_Driver::read: decoded field '" + meta.name + "' has no grid-point data.");
     }
 
     std::vector<float> full(static_cast<std::size_t>(ngrdpts));
@@ -1437,31 +1373,31 @@ void GRIB2_Driver::read(StagingBuffer& dst, const VarMeta& meta, std::int64_t ti
     if (!bbox.has_value()) {
         payload_bytes = static_cast<std::size_t>(ngrdpts) * sizeof(float);
         if (payload_bytes > dst.capacity_bytes) {
-            throw eckit::Exception("GRIB2_Driver::read: decoded payload exceeds staging buffer capacity.");
+            throw std::runtime_error("GRIB2_Driver::read: decoded payload exceeds staging buffer capacity.");
         }
         std::memcpy(dst.data, full.data(), payload_bytes);
     } else {
         const BoundingBox& b = *bbox;
         if (b.rank != grid_rank) {
-            throw eckit::Exception("GRIB2_Driver::read: bounding-box rank does not match field rank.");
+            throw std::runtime_error("GRIB2_Driver::read: bounding-box rank does not match field rank.");
         }
 
         // Validate the box against the decoded grid and count elements.
         std::size_t sub_elems = 1;
         for (std::int32_t d = 0; d < grid_rank; ++d) {
             if (b.extents[d] < 1 || b.strides[d] < 1 || b.offsets[d] < 0) {
-                throw eckit::Exception("GRIB2_Driver::read: invalid bounding box for field '" + meta.name + "'.");
+                throw std::runtime_error("GRIB2_Driver::read: invalid bounding box for field '" + meta.name + "'.");
             }
             const std::int64_t last = b.offsets[d] + (b.extents[d] - 1) * b.strides[d];
             if (last >= grid_extents[d]) {
-                throw eckit::Exception("GRIB2_Driver::read: bounding box exceeds field extents for '" + meta.name + "'.");
+                throw std::runtime_error("GRIB2_Driver::read: bounding box exceeds field extents for '" + meta.name + "'.");
             }
             sub_elems *= static_cast<std::size_t>(b.extents[d]);
         }
 
         payload_bytes = sub_elems * sizeof(float);
         if (payload_bytes > dst.capacity_bytes) {
-            throw eckit::Exception("GRIB2_Driver::read: sub-region exceeds staging buffer capacity.");
+            throw std::runtime_error("GRIB2_Driver::read: sub-region exceeds staging buffer capacity.");
         }
 
         // Full-grid row-major strides (in elements).
@@ -1498,7 +1434,7 @@ void GRIB2_Driver::read(StagingBuffer& dst, const VarMeta& meta, std::int64_t ti
     (void)meta;
     (void)timestep;
     (void)bbox;
-    throw eckit::Exception("GRIB2_Driver::read: nceplibs-g2c not available");
+    throw std::runtime_error("GRIB2_Driver::read: nceplibs-g2c not available");
 #endif
 }
 
@@ -1544,10 +1480,10 @@ void GRIB2_Driver::close() {
 // (R9.6, R9.7)
 // ---------------------------------------------------------------
 
-GRIB2_DRT GRIB2_Driver::validate_drt(const eckit::Configuration& config) const {
+GRIB2_DRT GRIB2_Driver::validate_drt(const conf::Config& config) const {
     // Check if DRT field is present (R9.7 - "missing" case).
     if (!config.has("data_representation_template") && !config.has("drt")) {
-        throw eckit::Exception(
+        throw std::runtime_error(
             "GRIB2_Driver: Data Representation Template field is missing "
             "from configuration. Required field: 'data_representation_"
             "template' or 'drt'. The field was missing. "
@@ -1557,13 +1493,13 @@ GRIB2_DRT GRIB2_Driver::validate_drt(const eckit::Configuration& config) const {
     // Get the DRT name.
     std::string drt_name;
     if (config.has("data_representation_template")) {
-        drt_name = config.getString("data_representation_template");
+        drt_name = config.get_string("data_representation_template");
     } else {
-        drt_name = config.getString("drt");
+        drt_name = config.get_string("drt");
     }
 
     if (drt_name.empty()) {
-        throw eckit::Exception(
+        throw std::runtime_error(
             "GRIB2_Driver: Data Representation Template field is present "
             "but empty. The field value is missing. "
             "Required: one of {Adaptive Entropy Coding via libaec, "

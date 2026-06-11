@@ -172,8 +172,8 @@ TEST_CASE("P26: Zarr cloud failure idempotence - no artifacts on failure", "[pbt
         // path is otherwise invalid for Zarr output).
         //
         // We test this through the driver's static utility methods
-        // and the open_write path.  Since open_write requires an
-        // eckit::Configuration, we verify the invariant by checking
+        // and the open_write path.  Since open_write requires a
+        // conf::Config, we verify the invariant by checking
         // that no artifacts are created at the target.
 
         // After any failed attempt, the target should still not exist.

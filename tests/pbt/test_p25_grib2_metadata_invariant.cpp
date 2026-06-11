@@ -2,12 +2,12 @@
 // metadata / table-sourcing invariant.
 //
 // GRIB2 code and template tables are sourced from NCEPLIBS-g2c, not
-// from an eckit-authored code map.  The manifest supplies the numeric
+// from a legacy code map.  The manifest supplies the numeric
 // GRIB2 product identifiers (discipline, parameter category/number,
 // template numbers, fixed-surface descriptors) which AMIO forwards to
 // g2c verbatim.  The remaining string-level invariant is the DRT:
 // it must name one of {Adaptive Entropy Coding via libaec, Lossless
-// JPEG2000}; anything else -> eckit::Exception, zero output bytes.
+// JPEG2000}; anything else -> std::runtime_error, zero output bytes.
 //
 // This test verifies:
 //   * valid DRT names parse to a GRIB2_DRT enum (R9.6)
@@ -102,14 +102,14 @@ TEST_CASE("P25: GRIB2 metadata invariant - valid DRT names accepted", "[pbt][p25
 // Property Test P25b: Invalid DRT names are rejected with exception.
 //
 // For any DRT name NOT in {Adaptive Entropy Coding via libaec,
-// Lossless JPEG2000}: parse_drt_name throws eckit::Exception.
+// Lossless JPEG2000}: parse_drt_name throws std::runtime_error.
 // Zero output bytes (no encoding occurs).
 //
 // Validates: R9.6, R9.7
 // ===================================================================
 
 TEST_CASE("P25: GRIB2 metadata invariant - invalid DRT names rejected", "[pbt][p25][grib2][metadata][drt_invalid]") {
-    auto result = rc::check("invalid DRT names throw eckit::Exception", []() {
+    auto result = rc::check("invalid DRT names throw std::runtime_error", []() {
         auto drt_name = *genInvalidDRT();
 
         // Must throw for invalid DRT names.

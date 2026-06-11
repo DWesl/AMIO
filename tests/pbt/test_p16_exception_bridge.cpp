@@ -1,7 +1,7 @@
 // test_p16_exception_bridge.cpp -- Property test P16: Exception bridge
 // invariant.
 //
-// For any exception on Worker_Pool thread (eckit::Exception, std::exception,
+// For any exception on Worker_Pool thread (std::exception,
 // unknown): C boundary catches, records AMIO_ERR_* against handle, ensures
 // parallel stack-trace emission completes before surfacing, surfaces on next
 // flush/close/wait without remapping, preserves trace for AMIO_Core lifetime.
@@ -33,12 +33,12 @@ using namespace amio::pbt;
 
 namespace {
 
-// A custom exception type simulating eckit::Exception behavior.
-// Since we may not have eckit linked in all test builds, we use
-// std::runtime_error as the base for "eckit-like" exceptions.
-class SimulatedEckitException : public std::runtime_error {
+// A custom exception type simulating a domain-specific exception.
+// Uses std::runtime_error as the base for testing exception bridge
+// handling of derived exception types.
+class DomainSpecificException : public std::runtime_error {
    public:
-    explicit SimulatedEckitException(const std::string& msg) : std::runtime_error(msg) {}
+    explicit DomainSpecificException(const std::string& msg) : std::runtime_error(msg) {}
 };
 
 // A standard library exception.
@@ -51,7 +51,7 @@ class StandardException : public std::logic_error {
 enum class ExceptionKind {
     StdRuntimeError,
     StdLogicError,
-    SimulatedEckit,
+    DomainSpecific,
     UnknownThrow  // throw an int (non-std::exception)
 };
 
@@ -62,8 +62,8 @@ enum class ExceptionKind {
             throw std::runtime_error(msg);
         case ExceptionKind::StdLogicError:
             throw StandardException(msg);
-        case ExceptionKind::SimulatedEckit:
-            throw SimulatedEckitException(msg);
+        case ExceptionKind::DomainSpecific:
+            throw DomainSpecificException(msg);
         case ExceptionKind::UnknownThrow:
             throw 42;  // non-std::exception type
     }
@@ -91,7 +91,7 @@ TEST_CASE("P16: Exception bridge - exception recorded against handle", "[pbt][p1
     auto result = rc::check("exceptions on worker threads are recorded against originating handle", []() {
         // Generate exception kind.
         auto kind = *rc::gen::elementOf(std::vector<ExceptionKind>{ExceptionKind::StdRuntimeError, ExceptionKind::StdLogicError,
-                                                                   ExceptionKind::SimulatedEckit, ExceptionKind::UnknownThrow});
+                                                                   ExceptionKind::DomainSpecific, ExceptionKind::UnknownThrow});
 
         // Generate handle_id.
         auto handle_id = *rc::gen::inRange<std::uint64_t>(1, 10000);

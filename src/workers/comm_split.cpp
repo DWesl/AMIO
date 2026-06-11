@@ -1,9 +1,8 @@
 // comm_split.cpp -- AMIO MPI communicator split implementation.
 //
-// When eckit::mpi is available (AMIO_HAS_ECKIT and MPI linked),
-// delegates to eckit::mpi::comm("world").split(...).  When MPI is
-// available directly (AMIO_HAS_MPI), uses MPI_Comm_split.  When
-// neither is available, the functions still compile: default configs
+// When MPI is available (AMIO_HAS_MPI), delegates to
+// halo::Communicator::split() for RAII-managed communicator splitting.
+// When MPI is not available, the functions still compile: default configs
 // succeed, non-default configs return AMIO_ERR_COMM_SPLIT_FAILED.
 //
 // Validates: R3.5, R3.6
@@ -16,11 +15,7 @@
 // MPI availability detection.
 // In a full build, AMIO_HAS_MPI would be set by CMake when MPI is found.
 // For standalone compilation without MPI, the functions degrade gracefully.
-#if defined(AMIO_HAS_ECKIT) && defined(AMIO_HAS_MPI)
-#include <eckit/mpi/Comm.h>
-#define AMIO_CAN_SPLIT 1
-#elif defined(AMIO_HAS_MPI)
-#include <mpi.h>
+#ifdef AMIO_HAS_MPI
 #define AMIO_CAN_SPLIT 1
 #else
 #define AMIO_CAN_SPLIT 0
@@ -64,8 +59,7 @@ amio_err_t split_communicator(const CommConfig& config, int my_rank, IOCommunica
     if (config.is_default()) {
         result.valid = true;
         result.is_io_rank = true;
-        result.io_comm_id = 0;  // Represents "world" / no split
-        result.compute_comm_id = 0;
+        // io_comm remains nullopt -- accessors return MPI_COMM_WORLD / 0 / 1.
         return AMIO_OK;
     }
 
@@ -84,42 +78,25 @@ amio_err_t split_communicator(const CommConfig& config, int my_rank, IOCommunica
     bool is_io = std::find(config.io_ranks.begin(), config.io_ranks.end(), my_rank) != config.io_ranks.end();
 
 #if AMIO_CAN_SPLIT
-
-#if defined(AMIO_HAS_ECKIT)
-    // Use eckit::mpi for the split.
+    // Use HALO's RAII Communicator for the split.
     // Color: 0 = I/O ranks, 1 = compute ranks.
     int color = is_io ? 0 : 1;
     try {
-        eckit::mpi::Comm& world = eckit::mpi::comm("world");
-        eckit::mpi::Comm& split_comm = world.split(color, my_rank);
+        // Wrap MPI_COMM_WORLD non-owning (predefined comms are never freed).
+        halo::Communicator world(MPI_COMM_WORLD);
+        // split() returns a new RAII-owned Communicator.
+        halo::Communicator split_comm = world.split(color, my_rank);
 
         result.valid = true;
         result.is_io_rank = is_io;
-        // Store the communicator identifier.  In eckit, the Comm
-        // object is managed by the library; we store a sentinel.
-        result.io_comm_id = is_io ? 1 : 0;
-        result.compute_comm_id = is_io ? 0 : 1;
+        result.io_comm = std::move(split_comm);
         return AMIO_OK;
+    } catch (const std::runtime_error&) {
+        // HALO split failed -- RAII guarantees no handle leak.
+        return AMIO_ERR_COMM_SPLIT_FAILED;
     } catch (...) {
-        // eckit split failed -- leave world communicator unmodified.
         return AMIO_ERR_COMM_SPLIT_FAILED;
     }
-
-#else  // AMIO_HAS_MPI but not eckit
-    // Use raw MPI_Comm_split.
-    int color = is_io ? 0 : 1;
-    MPI_Comm new_comm = MPI_COMM_NULL;
-    int rc = MPI_Comm_split(MPI_COMM_WORLD, color, my_rank, &new_comm);
-    if (rc != MPI_SUCCESS || new_comm == MPI_COMM_NULL) {
-        return AMIO_ERR_COMM_SPLIT_FAILED;
-    }
-
-    result.valid = true;
-    result.is_io_rank = is_io;
-    result.io_comm_id = static_cast<int64_t>(new_comm);
-    result.compute_comm_id = static_cast<int64_t>(new_comm);
-    return AMIO_OK;
-#endif
 
 #else  // !AMIO_CAN_SPLIT
     // MPI is not available.  Non-default configs cannot be split.

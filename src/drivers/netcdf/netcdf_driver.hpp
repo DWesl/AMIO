@@ -13,12 +13,12 @@
 //
 // On construction, the driver verifies that the linked netCDF-cxx4
 // library was built with Parallel HDF5 + MPI-IO support.  If that
-// capability is absent, construction raises eckit::Exception (R7.1).
+// capability is absent, construction raises std::runtime_error (R7.1).
 //
 // Data model support:
 //   - NetCDF-4 Classic (default)  -- NC_CLASSIC_MODEL | NC_NETCDF4
 //   - NetCDF-4 Enhanced           -- NC_NETCDF4 (no classic flag)
-//   - Any other data model raises eckit::Exception (R7.2, R7.3).
+//   - Any other data model raises std::runtime_error (R7.2, R7.3).
 //
 // Compression:
 //   - Only lossless filters/compression from the manifest allow-list
@@ -29,7 +29,7 @@
 //     operations for multi-rank writes (R7.4).
 //
 // Error handling:
-//   - All NetCDF/HDF5 errors are wrapped in eckit::Exception with
+//   - All NetCDF/HDF5 errors are wrapped in std::runtime_error with
 //     the underlying error codes (R7.6).
 //
 // Thread safety
@@ -75,12 +75,19 @@ class NetCDF_Driver : public Backend_Driver {
     ~NetCDF_Driver() override;
 
     // Backend_Driver interface.
-    void open_write(const eckit::Configuration& config) override;
-    void open_read(const eckit::Configuration& config) override;
+    void open_write(const conf::Config& config) override;
+    void open_read(const conf::Config& config) override;
     void write(const StagingBuffer& src, const VarMeta& meta) override;
     void read(StagingBuffer& dst, const VarMeta& meta, std::int64_t timestep, const std::optional<BoundingBox>& bbox) override;
     void flush() override;
     void close() override;
+
+#ifdef AMIO_HAS_MPI
+    // Override set_communicator to receive the I/O communicator
+    // handle from the Worker_Pool's IOCommunicator (R3.3, R10.4).
+    // Must be called before open_write / open_read.
+    void set_communicator(MPI_Comm comm_handle) override;
+#endif
 
     // Report a variable's element type, shape, and timestep count by
     // introspecting the open NetCDF file (nc_inq_varid / nc_inq_var /

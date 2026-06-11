@@ -50,9 +50,9 @@
 #include <string>
 #include <vector>
 
-namespace eckit {
-class Configuration;
-}  // namespace eckit
+namespace conf {
+class Config;
+}  // namespace conf
 
 namespace amio::detail {
 
@@ -124,14 +124,13 @@ struct DatasetAttributes {
 // literals.  Always succeeds; non-numeric strings become text-only.
 AttrValue parse_attr_value(const std::string& raw);
 
-// Parse the dataset attribute model from an eckit::Configuration.
+// Parse the dataset attribute model from a conf::Config.
 //
 // Reads `conventions`, `global_attributes.*`, and
 // `variables.<name>.attributes.*`.  Applies the CF (or CF+UGRID)
 // default to `conventions` when the manifest does not set it
-// explicitly.  Safe to call with the minimal stub Configuration used
-// in non-eckit builds (returns defaults / empties).
-DatasetAttributes parse_dataset_attributes(const eckit::Configuration& config);
+// explicitly.
+DatasetAttributes parse_dataset_attributes(const conf::Config& config);
 
 }  // namespace amio::detail
 

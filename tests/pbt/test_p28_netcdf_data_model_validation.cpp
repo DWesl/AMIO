@@ -112,13 +112,13 @@ TEST_CASE("P28: NetCDF data model validation - valid models accepted", "[pbt][p2
 // Property Test P28b: Invalid data model strings are rejected.
 //
 // For any data model string NOT in {"classic", "enhanced", and their
-// aliases}: NetCDF_Driver::parse_data_model throws eckit::Exception.
+// aliases}: NetCDF_Driver::parse_data_model throws std::runtime_error.
 //
 // Validates: R7.2, R7.3
 // ===================================================================
 
 TEST_CASE("P28: NetCDF data model validation - invalid models rejected", "[pbt][p28][netcdf][data_model][invalid]") {
-    auto result = rc::check("invalid data model strings throw eckit::Exception", []() {
+    auto result = rc::check("invalid data model strings throw std::runtime_error", []() {
         auto model_str = *genInvalidDataModel();
 
         // Must throw for invalid data model strings.

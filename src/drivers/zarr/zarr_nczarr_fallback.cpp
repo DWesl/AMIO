@@ -33,42 +33,11 @@
 #include "staging/staging_pool.hpp"
 
 // ===================================================================
-// eckit compatibility layer for NCZarr fallback.
+// CONF configuration layer for NCZarr fallback.
 // ===================================================================
 
-#ifdef AMIO_HAS_ECKIT
-#include <eckit/config/Configuration.h>
-#include <eckit/exception/Exceptions.h>
-#include <eckit/log/Log.h>
-#else
-// Minimal eckit shims for compilation without eckit.
-#ifndef AMIO_ECKIT_CONFIG_DEFINED
-namespace eckit {
-class Configuration {
-   public:
-    virtual ~Configuration() = default;
-    virtual bool has(const std::string& /*key*/) const {
-        return false;
-    }
-    virtual std::string getString(const std::string& /*key*/) const {
-        return "";
-    }
-    virtual std::string getString(const std::string& /*key*/, const std::string& def) const {
-        return def;
-    }
-    virtual long getLong(const std::string& /*key*/, long def = 0) const {
-        return def;
-    }
-    virtual std::vector<long> getLongVector(const std::string& /*key*/) const {
-        return {};
-    }
-    virtual bool getBool(const std::string& /*key*/, bool def = false) const {
-        return def;
-    }
-};
-}  // namespace eckit
-#endif  // AMIO_ECKIT_CONFIG_DEFINED
-#endif
+#include <conf/config.hpp>
+#include <conf/error.hpp>
 
 namespace amio::detail {
 
@@ -86,16 +55,8 @@ void nczarr_check(int status, const std::string& context) {
 }
 
 // Emit a one-shot diagnostic that sharding is unavailable (R8.8).
-// Uses eckit::Log when available, falls back to std::cerr.
+// Falls back to std::cerr until LOGS integration (task 8.4).
 void emit_sharding_unavailable_diagnostic() {
-#ifdef AMIO_HAS_ECKIT
-    eckit::Log::warning() << "Zarr_Driver [NCZarr fallback]: sharding is unavailable. "
-                             "The zarr3_sharding_indexed codec requires TensorStore. "
-                             "This build uses netCDF-c NCZarr mode with flat chunk "
-                             "layout only. Rebuild with AMIO_HAS_TENSORSTORE=ON to "
-                             "enable sharding and cloud KvStore support."
-                          << std::endl;
-#else
     std::cerr << "[AMIO WARNING] Zarr_Driver [NCZarr fallback]: sharding is "
                  "unavailable. The zarr3_sharding_indexed codec requires "
                  "TensorStore. This build uses netCDF-c NCZarr mode with "
@@ -103,7 +64,6 @@ void emit_sharding_unavailable_diagnostic() {
                  "AMIO_HAS_TENSORSTORE=ON to enable sharding and cloud "
                  "KvStore support."
               << std::endl;
-#endif
 }
 
 // Map amio_dtype_t to netCDF type constant.
@@ -223,7 +183,7 @@ std::string to_nczarr_uri(const std::string& path) {
 // diagnostic, and opens the NCZarr store for writing.
 // ===================================================================
 
-void Zarr_Driver::open_write(const eckit::Configuration& config) {
+void Zarr_Driver::open_write(const conf::Config& config) {
     if (is_open_) {
         throw std::runtime_error("Zarr_Driver: already open");
     }
@@ -281,7 +241,7 @@ void Zarr_Driver::open_write(const eckit::Configuration& config) {
 // open_read -- NCZarr fallback: open for reading via netCDF-c.
 // ===================================================================
 
-void Zarr_Driver::open_read(const eckit::Configuration& config) {
+void Zarr_Driver::open_read(const conf::Config& config) {
     if (is_open_) {
         throw std::runtime_error("Zarr_Driver: already open");
     }

@@ -10,7 +10,7 @@
 # * `amio_public_headers` is the only target that downstream consumers of `libamio` ever see on their include path.  Its INTERFACE_INCLUDE_DIRECTORIES
 #   is restricted to the C99-only include tree (R10.1, R10.2, R13.6).
 #
-# * `amio_core` (SHARED, libamio.so) PRIVATE-links every C++ dependency (eckit, kokkos/mdspan, MPI, optionally TensorStore, netCDF-cxx4,
+# * `amio_core` (SHARED, libamio.so) PRIVATE-links every C++ dependency (HELM::CONF, HELM::HALO, HELM::LOGS, kokkos/mdspan, MPI, optionally TensorStore, netCDF-cxx4,
 #   nceplibs-g2c).  None of those headers leak through the public surface.
 #
 # * `driver_netcdf`, `driver_zarr`, `driver_grib2` are STATIC archives that are PRIVATE-linked into `amio_core`.  They are never installed and never
@@ -82,13 +82,15 @@ endif()
 # single configure-time flow with FATAL_ERROR semantics, and task 1.3 declares the closure in the Spack recipe.
 # ####################################################################################################################################################
 
-# eckit - infrastructure dependency (config, threads, MPI wrapping, Factory, exceptions, logging).  Required for AMIO_Core.
-find_package(eckit CONFIG QUIET)
+# HELM micro-libraries - CONF (config parsing), HALO (MPI communicators), LOGS (diagnostics). All PRIVATE to amio_core.
+find_package(CONF REQUIRED)
+find_package(HALO REQUIRED)
+find_package(LOGS REQUIRED)
 
 # kokkos/mdspan - reference implementation of std::experimental::mdspan used for Memory_View.  Header-only; PRIVATE to amio_core.
 find_package(mdspan CONFIG QUIET)
 
-# MPI - required for parallel I/O paths (NetCDF-4 Parallel HDF5, eckit::mpi communicator splits).
+# MPI - required for parallel I/O paths (NetCDF-4 Parallel HDF5, HALO communicator splits).
 find_package(MPI QUIET COMPONENTS C CXX Fortran)
 
 # NetCDF-cxx4 + Parallel HDF5 - NetCDF_Driver.
@@ -230,7 +232,7 @@ endif()
 # Target 1: amio_public_headers (INTERFACE, C99-only)
 #
 # This target's INTERFACE_INCLUDE_DIRECTORIES exposes ONLY the `include/` tree, which is constrained to C99 headers.  No transitive include directory
-# from eckit, TensorStore, netCDF, or g2c is allowed to reach this target -- the header-isolation CI check (task 1.4) verifies this with `gcc -std=c99
+# from CONF, HALO, LOGS, TensorStore, netCDF, or g2c is allowed to reach this target -- the header-isolation CI check (task 1.4) verifies this with `gcc -std=c99
 # -pedantic -Werror -c amio.h` compiled with no other include flags.
 # ####################################################################################################################################################
 
@@ -262,14 +264,7 @@ add_library(driver_netcdf STATIC src/drivers/netcdf/netcdf_driver.cpp)
 add_library(AMIO::driver_netcdf ALIAS driver_netcdf)
 
 target_include_directories(driver_netcdf PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
-target_link_libraries(driver_netcdf PRIVATE amio_public_headers)
-if(eckit_FOUND)
-    target_link_libraries(driver_netcdf PRIVATE eckit)
-    # Compile against the real eckit::Configuration ABI (not the in-file shim) so the driver matches the C-Boundary, which constructs a real
-    # eckit::YAMLConfiguration and passes it across the open_read/open_write seam.  Without this the driver would use its shim Configuration whose
-    # vtable layout differs from eckit's, corrupting the returned values.
-    target_compile_definitions(driver_netcdf PRIVATE AMIO_HAS_ECKIT=1)
-endif()
+target_link_libraries(driver_netcdf PRIVATE amio_public_headers HELM::CONF)
 if(netCDFCxx_FOUND)
     target_link_libraries(driver_netcdf PRIVATE netCDF::netcdf-cxx4)
     target_compile_definitions(driver_netcdf PRIVATE AMIO_HAS_NETCDF=1)
@@ -301,12 +296,7 @@ add_library(driver_zarr STATIC src/drivers/zarr/zarr_driver.cpp src/drivers/zarr
 add_library(AMIO::driver_zarr ALIAS driver_zarr)
 
 target_include_directories(driver_zarr PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
-target_link_libraries(driver_zarr PRIVATE amio_public_headers)
-if(eckit_FOUND)
-    target_link_libraries(driver_zarr PRIVATE eckit)
-    # Match the C-Boundary's real eckit::Configuration ABI across the open_read/open_write seam (see driver_netcdf note above).
-    target_compile_definitions(driver_zarr PRIVATE AMIO_HAS_ECKIT=1)
-endif()
+target_link_libraries(driver_zarr PRIVATE amio_public_headers HELM::CONF)
 if(AMIO_HAS_TENSORSTORE)
     # TensorStore mode: link the TensorStore CONFIG-imported target. No -DAMIO_NCZARR_FALLBACK is set; the driver compiles its TensorStore variant
     # (R8.1-R8.5).
@@ -337,12 +327,7 @@ add_library(driver_grib2 STATIC src/drivers/grib2/grib2_driver.cpp)
 add_library(AMIO::driver_grib2 ALIAS driver_grib2)
 
 target_include_directories(driver_grib2 PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
-target_link_libraries(driver_grib2 PRIVATE amio_public_headers)
-if(eckit_FOUND)
-    target_link_libraries(driver_grib2 PRIVATE eckit)
-    # Match the C-Boundary's real eckit::Configuration ABI across the open_read/open_write seam (see driver_netcdf note above).
-    target_compile_definitions(driver_grib2 PRIVATE AMIO_HAS_ECKIT=1)
-endif()
+target_link_libraries(driver_grib2 PRIVATE amio_public_headers HELM::CONF)
 if(g2c_FOUND)
     target_link_libraries(driver_grib2 PRIVATE g2c::g2c)
     target_compile_definitions(driver_grib2 PRIVATE AMIO_HAS_G2C=1)
@@ -377,13 +362,6 @@ add_library(AMIO::amio_core ALIAS amio_core)
 # ELF / Mach-O targets visibility is governed by `__attribute__((visibility("default")))` and this define is a harmless no-op.
 target_compile_definitions(amio_core PRIVATE AMIO_BUILDING_LIBRARY=1)
 
-# When eckit is part of the build closure, expose AMIO_HAS_ECKIT to the C-Boundary translation unit so it can install a dedicated `catch
-# (eckit::Exception &)` arm ahead of the generic `std::exception` handler (R12.2).  When eckit is absent the `std::exception` handler still covers
-# eckit::Exception by inheritance, so correctness is preserved either way.
-if(eckit_FOUND)
-    target_compile_definitions(amio_core PRIVATE AMIO_HAS_ECKIT=1)
-endif()
-
 set_target_properties(
     amio_core
     PROPERTIES OUTPUT_NAME amio
@@ -402,9 +380,10 @@ target_include_directories(amio_core PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
 # PUBLIC link to the public-headers target so that downstream consumers transitively pick up the C99 include path.  Every other dependency is PRIVATE
 # so its headers do not leak (R13.6).
 target_link_libraries(amio_core PUBLIC amio_public_headers PRIVATE driver_netcdf driver_zarr driver_grib2)
-if(eckit_FOUND)
-    target_link_libraries(amio_core PRIVATE eckit)
-endif()
+
+# HELM micro-libraries — PRIVATE so no header/symbol leaks to consumers (R7.2, R7.3, R7.4, R7.5, R7.6).
+target_link_libraries(amio_core PRIVATE HELM::CONF HELM::HALO HELM::LOGS)
+
 if(TARGET std::mdspan)
     target_link_libraries(amio_core PRIVATE std::mdspan)
 elseif(TARGET mdspan::mdspan)
@@ -500,7 +479,7 @@ endif()
 # archive + .mod files * AMIOConfig.cmake + AMIOConfigVersion.cmake + AMIOTargets.cmake
 #
 # Backend driver static archives (`driver_netcdf`, `driver_zarr`, `driver_grib2`) are PRIVATE to libamio and are NOT installed - they are not part of
-# AMIO's public coupling surface (R4.8).  Likewise, none of eckit / TensorStore / netCDF / g2c are exported as transitive requirements of
+# AMIO's public coupling surface (R4.8).  Likewise, none of CONF / HALO / LOGS / TensorStore / netCDF / g2c are exported as transitive requirements of
 # AMIOConfig.cmake (R13.6).
 # ####################################################################################################################################################
 
@@ -553,6 +532,9 @@ message(STATUS "  C   standard          : C${CMAKE_C_STANDARD}")
 message(STATUS "  Build testing         : ${AMIO_BUILD_TESTING}")
 message(STATUS "  Build documentation   : ${AMIO_BUILD_DOCS}")
 message(STATUS "  Build examples        : ${AMIO_BUILD_EXAMPLES}")
+message(STATUS "  HELM::CONF found      : ${CONF_FOUND}")
+message(STATUS "  HELM::HALO found      : ${HALO_FOUND}")
+message(STATUS "  HELM::LOGS found      : ${LOGS_FOUND}")
 message(STATUS "  TensorStore available : ${AMIO_HAS_TENSORSTORE}")
 message(STATUS "  Force NCZarr fallback : ${AMIO_FORCE_NCZARR}")
 message(STATUS "  Install prefix        : ${CMAKE_INSTALL_PREFIX}")

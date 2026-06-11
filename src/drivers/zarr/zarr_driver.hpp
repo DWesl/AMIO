@@ -105,10 +105,10 @@ class Zarr_Driver : public Backend_Driver {
     //   - Cloud URIs route through TensorStore KvStore (R8.2)
     //
     // Throws on validation failure or if TensorStore is not available.
-    void open_write(const eckit::Configuration& config) override;
+    void open_write(const conf::Config& config) override;
 
     // open_read -- validate config and open TensorStore for reading.
-    void open_read(const eckit::Configuration& config) override;
+    void open_read(const conf::Config& config) override;
 
     // write -- serialize StagingBuffer through TensorStore with
     // sharding + compression.
@@ -147,10 +147,10 @@ class Zarr_Driver : public Backend_Driver {
     static std::size_t dtype_size(amio_dtype_t dtype);
 
    private:
-    // Parse and validate Zarr-specific configuration from eckit config.
+    // Parse and validate Zarr-specific configuration from conf::Config.
     // Returns the parsed ZarrConfig.
     // Throws on missing required fields (R8.10) or invalid values (R8.3).
-    ZarrConfig parse_zarr_config(const eckit::Configuration& config);
+    ZarrConfig parse_zarr_config(const conf::Config& config);
 
     // Validate that chunk dims divide shard dims.
     // Throws on violation (R8.3).

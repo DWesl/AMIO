@@ -37,42 +37,17 @@
 
 // Open-time dataset configuration source.
 //
-// The Backend_Driver open_write/open_read methods take an
-// eckit::Configuration carrying the dataset-level keys (path / uri /
+// The Backend_Driver open_write/open_read methods take a
+// `const conf::Config&` carrying the dataset-level keys (path / uri /
 // data_model / codec / ...) that the drivers parse directly from the
 // manifest file.  Those keys are NOT captured in the loader's `Config`
 // struct, so the configuration must be built from the manifest file
 // itself at open time (task 5, design §2).
 //
-// When eckit is in the build closure (the production configuration),
-// the manifest is wrapped in an eckit::YAMLConfiguration built from the
-// file path.  When eckit is absent, amio_core is a compile-only
-// configuration (eckit is required for AMIO_Core); a minimal standalone
-// adapter is supplied so the open is still invoked rather than silently
-// skipped.
-#ifdef AMIO_HAS_ECKIT
-#include <eckit/config/YAMLConfiguration.h>
-#include <eckit/filesystem/PathName.h>
-#else
-namespace eckit {
-// Minimal standalone Configuration adapter for builds without eckit.
-// AMIO_Core requires eckit at runtime, so this exists only to keep the
-// open path well-formed (and invoked) in compile-only configurations.
-class Configuration {
-   public:
-    virtual ~Configuration() = default;
-    virtual bool has(const std::string & /*key*/) const {
-        return false;
-    }
-    virtual std::string getString(const std::string & /*key*/, const std::string &def = "") const {
-        return def;
-    }
-    virtual std::vector<std::string> getStringVector(const std::string & /*key*/, const std::vector<std::string> &def = {}) const {
-        return def;
-    }
-};
-}  // namespace eckit
-#endif  // AMIO_HAS_ECKIT
+// The manifest is parsed into a `conf::Config` via `from_file` and
+// stored in the DatasetRecord so it outlives the driver (Req 13.1,
+// 13.3).  The driver receives it by const reference (Req 13.2).
+#include <conf/config.hpp>
 
 namespace amio::detail {
 
@@ -124,6 +99,26 @@ amio_status_t init(const char *manifest_path, amio_core_handle *out_core) {
     }
 
     core->staging_timeout_ms = static_cast<std::int64_t>(cfg.staging_timeout_ms);
+
+    // ---- Step 2b: Initialize LOGS after communicator split (Req 6.5, 6.8) ----
+    //
+    // The WorkerPool has been constructed with the IOCommunicator from
+    // the comm_split result.  Configure the Logger with the I/O
+    // communicator handle so that MPI rank stamps reflect the I/O
+    // sub-communicator rank rather than the world rank.
+    //
+    // memory_order_release ensures all prior writes to the logger
+    // (configure_communicator, set_threshold) are visible to other
+    // threads that load logs_initialized with memory_order_acquire.
+#ifdef AMIO_HAS_MPI
+    core->logger.configure_communicator(core->worker_pool->io_communicator().handle());
+#else
+    // Without MPI the Logger receives MPI_COMM_NULL (a no-op
+    // configuration that leaves the rank as the sentinel -1).
+    core->logger.configure_communicator(MPI_COMM_NULL);
+#endif
+    core->logger.set_threshold(logs::Severity_Level::INFO);
+    core->logs_initialized.store(true, std::memory_order_release);
 
     // ---- Step 3: Mint the core handle (Req 1) ----
     auto token = process_handle_table().insert(HandleKind::Core, core.get());
@@ -215,9 +210,9 @@ amio_status_t finalize(void *core_payload) {
 //
 // Validates core handle → extracts backend key from config →
 // calls BackendFactory::build() → opens the driver in the requested
-// mode (open_write / open_read) with an eckit::YAMLConfiguration
-// built from config_path → on success creates the dataset handle in
-// the handle table → returns the dataset handle.
+// mode (open_write / open_read) with a conf::Config built from
+// config_path → on success creates the dataset handle in the handle
+// table → returns the dataset handle.
 //
 // On factory lookup failure → AMIO_ERR_UNKNOWN_BACKEND, no handle.
 // On driver open failure → AMIO_ERR_BACKEND_FAILURE, no handle.
@@ -251,33 +246,34 @@ amio_status_t open_dataset(void *core_payload, const char *config_path, std::int
         return static_cast<amio_status_t>(factory_err);
     }
 
+    // Build a conf::Config from the manifest file for the driver's
+    // open_write / open_read (Req 13.1, 13.2).  The dataset-level
+    // configuration (path / uri / data_model / codec / ...) is parsed
+    // by each driver directly from this Config.
+    conf::Config manifest_cfg = conf::Config::from_file(std::string(config_path));
+
     // Attempt to open the driver in the requested mode (Req 2.1).
-    //
-    // The dataset-level configuration (path / uri / data_model / codec
-    // / ...) is parsed by each driver directly from the manifest file,
-    // so it is wrapped in an eckit::YAMLConfiguration built from
-    // `config_path` (or the standalone adapter when eckit is absent).
     // On any open failure the driver throws; the catch below translates
     // to AMIO_ERR_BACKEND_FAILURE and returns no dataset handle
     // (Req 2.2).
     try {
-#ifdef AMIO_HAS_ECKIT
-        eckit::YAMLConfiguration driver_cfg{eckit::PathName{std::string(config_path)}};
-#else
-        eckit::Configuration driver_cfg{};
-#endif
         if (mode == AMIO_MODE_WRITE) {
-            driver->open_write(driver_cfg);
+            driver->open_write(manifest_cfg);
         } else /* AMIO_MODE_READ */ {
-            driver->open_read(driver_cfg);
+            driver->open_read(manifest_cfg);
         }
     } catch (...) {
         // Open failed -- AMIO_ERR_BACKEND_FAILURE, no handle (Req 2.2).
         return AMIO_ERR_BACKEND_FAILURE;
     }
 
-    // Create the dataset record.
+    // Create the dataset record.  manifest_config is declared before
+    // driver in DatasetRecord so that in C++ member destruction order
+    // (reverse of declaration) the driver is destroyed first, ensuring
+    // the driver's destructor can still safely access config values
+    // during teardown (Req 13.4).
     auto record = std::make_unique<DatasetRecord>();
+    record->manifest_config = std::move(manifest_cfg);
     record->driver = std::move(driver);
     record->mode = mode;
     record->dataset_id = core->next_dataset_id.fetch_add(1);

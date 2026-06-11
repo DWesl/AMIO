@@ -15,16 +15,18 @@
 //     diagnostic emission on the I/O communicator BEFORE recording
 //     the outcome (R12.3, R12.4).
 //
-//   * Exception translation logic:
-//       - eckit::Exception → appropriate AMIO_ERR_* (when available)
-//       - std::exception   → AMIO_ERR_BACKEND_FAILURE
-//       - unknown (...)    → AMIO_ERR_BACKEND_FAILURE
+//   * Exception translation logic (ordered most-specific first):
+//       - conf::Conf_Error  → AMIO_ERR_MANIFEST_NOT_FOUND,
+//                              AMIO_ERR_MANIFEST_INVALID, or
+//                              AMIO_ERR_INVALID_INPUT (by Error_Code)
+//       - std::invalid_argument → AMIO_ERR_INVALID_INPUT
+//       - std::exception        → AMIO_ERR_BACKEND_FAILURE
+//       - catch(...)            → AMIO_ERR_BACKEND_FAILURE
 //
 //   * An OutcomeRegistry that records task outcomes against opaque
 //     handles for later retrieval by flush/close/wait.
 //
 // Conditional compilation:
-//   - eckit::Exception handling is gated on AMIO_HAS_ECKIT.
 //   - MPI collective stack trace emission is gated on AMIO_HAS_MPI.
 //     Without MPI, emit_parallel_stacktrace logs locally only.
 //
@@ -47,6 +49,10 @@
 
 #include "amio/amio_errors.h"
 #include "workers/comm_split.hpp"
+
+// Forward declaration -- avoids pulling in <logs/logger.hpp> from this
+// internal header.  The full definition is only needed in the .cpp.
+namespace logs { class Logger; }
 
 namespace amio::detail {
 
@@ -71,9 +77,12 @@ struct TaskOutcome {
 // This function is called from within a catch block.  It examines
 // the current exception and returns the appropriate error code.
 //
-// When AMIO_HAS_ECKIT is defined, eckit::Exception is caught first
-// and mapped to a specific AMIO_ERR_* code based on the exception
-// type.  Otherwise, all exceptions map to AMIO_ERR_BACKEND_FAILURE.
+// The catch hierarchy is ordered from most-specific to least-specific:
+//   1. conf::Conf_Error   → mapped by Error_Code to AMIO_ERR_MANIFEST_*
+//                           or AMIO_ERR_INVALID_INPUT
+//   2. std::invalid_argument → AMIO_ERR_INVALID_INPUT
+//   3. std::exception        → AMIO_ERR_BACKEND_FAILURE
+//   4. catch(...)            → AMIO_ERR_BACKEND_FAILURE
 //
 // Parameters:
 //   out_message - if non-null, receives the exception's what() string
@@ -92,13 +101,23 @@ amio_err_t translate_exception_to_error(std::string* out_message = nullptr);
 // on the I/O communicator to gather stack traces from all ranks.
 // Without MPI, it logs the local stack trace only.
 //
+// Diagnostics routing (Req 6.1, 6.4, 6.7):
+//   If `logger` is non-null (meaning LOGS is initialized), the
+//   diagnostic is emitted via logs::Logger::log at FATAL severity
+//   for unrecoverable errors, ERROR severity otherwise.
+//   If `logger` is null (pre-initialization), falls back to
+//   fprintf(stderr, ...).
+//
 // Parameters:
 //   io_comm     - the I/O communicator for collective operations
 //   error_code  - the AMIO_ERR_* code being reported
 //   message     - the exception message
+//   logger      - optional pointer to the LOGS Logger instance;
+//                 nullptr means LOGS is not yet initialized (Req 6.7)
 //
 // Returns: the formatted stack trace string (retained for R12.10).
-std::string emit_parallel_stacktrace(const IOCommunicator& io_comm, amio_err_t error_code, const std::string& message);
+std::string emit_parallel_stacktrace(const IOCommunicator& io_comm, amio_err_t error_code, const std::string& message,
+                                     logs::Logger* logger = nullptr);
 
 // OutcomeRegistry -- thread-safe registry of task outcomes keyed by
 // opaque handle identifier.
@@ -157,10 +176,12 @@ class OutcomeRegistry {
 //   handle_id  - the originating opaque handle identifier
 //   io_comm    - the I/O communicator for parallel stack trace
 //   registry   - the outcome registry to record against
+//   logger     - optional pointer to the LOGS Logger instance;
+//                nullptr means LOGS is not yet initialized (Req 6.7)
 //
 // Returns: the TaskOutcome (AMIO_OK on success, error code on failure)
 TaskOutcome execute_with_exception_cordon(const std::function<void()>& callback, std::uint64_t handle_id, const IOCommunicator& io_comm,
-                                          OutcomeRegistry& registry);
+                                          OutcomeRegistry& registry, logs::Logger* logger = nullptr);
 
 }  // namespace amio::detail
 

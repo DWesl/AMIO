@@ -48,8 +48,8 @@ class FailingDriver : public Backend_Driver {
     FailingDriver() = default;
     ~FailingDriver() override = default;
 
-    void open_write(const eckit::Configuration& /*config*/) override {}
-    void open_read(const eckit::Configuration& /*config*/) override {}
+    void open_write(const conf::Config& /*config*/) override {}
+    void open_read(const conf::Config& /*config*/) override {}
     void flush() override {}
     void close() override {}
 

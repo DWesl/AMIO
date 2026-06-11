@@ -41,8 +41,8 @@ const std::set<amio_status_t> kFlushTrichotomy = {AMIO_OK, AMIO_ERR_BACKEND_FAIL
 // trichotomy, NOT driver serialization behavior.
 class NoOpDriver : public Backend_Driver {
    public:
-    void open_write(const eckit::Configuration& /*config*/) override {}
-    void open_read(const eckit::Configuration& /*config*/) override {}
+    void open_write(const conf::Config& /*config*/) override {}
+    void open_read(const conf::Config& /*config*/) override {}
     void write(const StagingBuffer& /*src*/, const VarMeta& /*meta*/) override {}
     void read(StagingBuffer& /*dst*/, const VarMeta& /*meta*/, std::int64_t /*timestep*/, const std::optional<BoundingBox>& /*bbox*/) override {}
     void flush() override {}

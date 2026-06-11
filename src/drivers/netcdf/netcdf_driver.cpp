@@ -7,7 +7,7 @@
 //   - When AMIO_HAS_NETCDF is defined: full implementation using
 //     netCDF-cxx4 API with Parallel HDF5 + MPI-IO.
 //   - When AMIO_HAS_NETCDF is NOT defined: the driver still registers
-//     with the factory but raises eckit::Exception on any operation
+//     with the factory but raises std::runtime_error on any operation
 //     (graceful degradation for builds without netCDF).
 //
 // Validates: R7.1, R7.2, R7.3, R7.4, R7.5, R7.6
@@ -17,6 +17,9 @@
 #include "drivers/common/var_attributes.hpp"
 #include "factory/backend_factory.hpp"
 #include "staging/staging_pool.hpp"
+
+#include <conf/config.hpp>
+#include <conf/error.hpp>
 
 #ifdef AMIO_HAS_NETCDF
 #include <mpi.h>
@@ -30,48 +33,6 @@
 #include <stdexcept>
 #include <string>
 
-// ===================================================================
-// eckit::Exception compatibility layer.
-//
-// When eckit is available, we use eckit::Exception directly.
-// Otherwise, we fall back to std::runtime_error which eckit::Exception
-// inherits from in practice.
-// ===================================================================
-
-#ifdef AMIO_HAS_ECKIT
-#include <eckit/config/Configuration.h>
-#include <eckit/config/LocalConfiguration.h>
-#include <eckit/exception/Exceptions.h>
-#else
-// Minimal shim when eckit is not available (for compilation only).
-namespace eckit {
-class Exception : public std::runtime_error {
-   public:
-    using std::runtime_error::runtime_error;
-};
-class Configuration {
-   public:
-    virtual ~Configuration() = default;
-    virtual bool has(const std::string& /*name*/) const {
-        return false;
-    }
-    virtual bool getString(const std::string& /*name*/, std::string& /*out*/) const {
-        return false;
-    }
-    virtual bool getStringVector(const std::string& /*name*/, std::vector<std::string>& /*out*/) const {
-        return false;
-    }
-    virtual std::string getString(const std::string& /*key*/, const std::string& def = "") const {
-        return def;
-    }
-    virtual std::vector<std::string> getStringVector(const std::string& /*key*/, const std::vector<std::string>& def = {}) const {
-        return def;
-    }
-};
-using LocalConfiguration = Configuration;
-}  // namespace eckit
-#endif
-
 namespace amio::detail {
 
 // ===================================================================
@@ -80,11 +41,11 @@ namespace amio::detail {
 
 #ifdef AMIO_HAS_NETCDF
 
-// Check a netCDF return code and throw eckit::Exception on failure.
+// Check a netCDF return code and throw std::runtime_error on failure.
 static void nc_check(int status, const std::string& context) {
     if (status != NC_NOERR) {
         std::string msg = "NetCDF error in " + context + ": " + nc_strerror(status) + " (nc_errno=" + std::to_string(status) + ")";
-        throw eckit::Exception(msg);
+        throw std::runtime_error(msg);
     }
 }
 
@@ -177,13 +138,13 @@ void NetCDF_Driver::verify_parallel_support() {
     // Parallel HDF5 + MPI-IO is available.
     return;
 #else
-    throw eckit::Exception(
+    throw std::runtime_error(
         "NetCDF_Driver: linked netCDF-cxx4 library does not have "
         "Parallel HDF5 + MPI-IO support. Rebuild netCDF with "
         "--enable-parallel4 (R7.1)");
 #endif
 #else
-    throw eckit::Exception(
+    throw std::runtime_error(
         "NetCDF_Driver: AMIO was built without netCDF support "
         "(AMIO_HAS_NETCDF not defined). Cannot use netcdf4 backend.");
 #endif
@@ -200,7 +161,7 @@ NetCDF4DataModel NetCDF_Driver::parse_data_model(const std::string& model_str) {
     if (model_str == "enhanced" || model_str == "netcdf4_enhanced" || model_str == "NC4") {
         return NetCDF4DataModel::Enhanced;
     }
-    throw eckit::Exception("NetCDF_Driver: invalid data model '" + model_str +
+    throw std::runtime_error("NetCDF_Driver: invalid data model '" + model_str +
                            "'. "
                            "Supported values: 'classic' (default), 'enhanced' (R7.2, R7.3)");
 }
@@ -218,7 +179,7 @@ void NetCDF_Driver::validate_codec(const std::string& codec, const std::vector<s
     // Check against the allow-list.
     auto it = std::find(allow_list.begin(), allow_list.end(), codec);
     if (it == allow_list.end()) {
-        throw eckit::Exception("NetCDF_Driver: codec '" + codec +
+        throw std::runtime_error("NetCDF_Driver: codec '" + codec +
                                "' is not on the "
                                "lossless compression allow-list. Only lossless filters "
                                "are permitted for NetCDF-4 output (R7.5)");
@@ -229,7 +190,7 @@ void NetCDF_Driver::validate_codec(const std::string& codec, const std::vector<s
     static const std::vector<std::string> lossy_codecs = {"lossy", "sz", "zfp_lossy", "fpzip_lossy"};
     for (const auto& lossy : lossy_codecs) {
         if (codec == lossy) {
-            throw eckit::Exception("NetCDF_Driver: codec '" + codec +
+            throw std::runtime_error("NetCDF_Driver: codec '" + codec +
                                    "' is a lossy codec "
                                    "and cannot be used with NetCDF-4 output (R7.5)");
         }
@@ -264,11 +225,11 @@ int NetCDF_Driver::dtype_to_nc_type(amio_dtype_t dtype) {
         case AMIO_DTYPE_U64:
             return NC_UINT64;
         default:
-            throw eckit::Exception("NetCDF_Driver: unsupported dtype " + std::to_string(static_cast<int>(dtype)));
+            throw std::runtime_error("NetCDF_Driver: unsupported dtype " + std::to_string(static_cast<int>(dtype)));
     }
 #else
     (void)dtype;
-    throw eckit::Exception("NetCDF_Driver: built without netCDF support");
+    throw std::runtime_error("NetCDF_Driver: built without netCDF support");
 #endif
 }
 
@@ -283,7 +244,7 @@ std::size_t NetCDF_Driver::dtype_byte_size(amio_dtype_t dtype) {
     // returns 0 as its unknown-dtype sentinel).
     const std::size_t size = element_size(dtype);
     if (size == 0) {
-        throw eckit::Exception("NetCDF_Driver: unsupported dtype " + std::to_string(static_cast<int>(dtype)));
+        throw std::runtime_error("NetCDF_Driver: unsupported dtype " + std::to_string(static_cast<int>(dtype)));
     }
     return size;
 }
@@ -297,12 +258,12 @@ std::size_t NetCDF_Driver::dtype_byte_size(amio_dtype_t dtype) {
 // against the same key the rest of the toolchain emits.  Returns an empty
 // string when neither key is present.
 // ===================================================================
-static std::string resolve_dataset_path(const eckit::Configuration& config) {
+static std::string resolve_dataset_path(const conf::Config& config) {
     if (config.has("path")) {
-        return config.getString("path");
+        return config.get_string("path");
     }
     if (config.has("output_path")) {
-        return config.getString("output_path");
+        return config.get_string("output_path");
     }
     return std::string{};
 }
@@ -311,21 +272,21 @@ static std::string resolve_dataset_path(const eckit::Configuration& config) {
 // open_write -- prepare for parallel write operations (R7.1, R7.4).
 // ===================================================================
 
-void NetCDF_Driver::open_write(const eckit::Configuration& config) {
+void NetCDF_Driver::open_write(const conf::Config& config) {
     if (is_open_) {
-        throw eckit::Exception("NetCDF_Driver::open_write: driver is already open");
+        throw std::runtime_error("NetCDF_Driver::open_write: driver is already open");
     }
 
 #ifdef AMIO_HAS_NETCDF
     // Extract configuration parameters.
     std::string path = resolve_dataset_path(config);
     if (path.empty()) {
-        throw eckit::Exception("NetCDF_Driver::open_write: 'path' (or 'output_path') field is required");
+        throw std::runtime_error("NetCDF_Driver::open_write: 'path' (or 'output_path') field is required");
     }
     file_path_ = path;
 
     // Parse data model (R7.2, R7.3).
-    std::string model_str = config.getString("data_model", "classic");
+    std::string model_str = config.get_or<std::string>("data_model", "classic");
     data_model_ = parse_data_model(model_str);
 
     // Parse and validate compression codec (R7.5).
@@ -333,17 +294,15 @@ void NetCDF_Driver::open_write(const eckit::Configuration& config) {
     // The manifest nests the codec settings under a `codec:` map
     // (`codec.active_codec` + `codec.lossless_allow_list`), matching the
     // ConfigLoader schema and the example manifests.  Read those nested
-    // keys via eckit's dotted-key access.  Fall back to the legacy flat
+    // keys via CONF's dotted-path access.  Fall back to the legacy flat
     // keys (`codec` / `codec_allow_list`) when the nested form is absent
-    // so older configs keep working.  `getString("codec")` is NOT used
-    // directly because `codec` is a map node (eckit throws Bad Conversion
-    // converting a map to a string).
+    // so older configs keep working.
     if (config.has("codec.active_codec") || config.has("codec.lossless_allow_list")) {
-        active_codec_ = config.getString("codec.active_codec", "");
-        codec_allow_list_ = config.getStringVector("codec.lossless_allow_list", std::vector<std::string>{});
+        active_codec_ = config.get_or<std::string>("codec.active_codec", "");
+        codec_allow_list_ = config.has("codec.lossless_allow_list") ? config.get_string_list("codec.lossless_allow_list") : std::vector<std::string>{};
     } else {
-        codec_allow_list_ = config.getStringVector("codec_allow_list", std::vector<std::string>{});
-        active_codec_ = config.getString("codec", "");
+        codec_allow_list_ = config.has("codec_allow_list") ? config.get_string_list("codec_allow_list") : std::vector<std::string>{};
+        active_codec_ = config.get_or<std::string>("codec", "");
     }
     validate_codec(active_codec_, codec_allow_list_);
 
@@ -384,7 +343,7 @@ void NetCDF_Driver::open_write(const eckit::Configuration& config) {
 
 #else
     (void)config;
-    throw eckit::Exception("NetCDF_Driver::open_write: AMIO built without netCDF support");
+    throw std::runtime_error("NetCDF_Driver::open_write: AMIO built without netCDF support");
 #endif
 }
 
@@ -392,21 +351,21 @@ void NetCDF_Driver::open_write(const eckit::Configuration& config) {
 // open_read -- prepare for parallel read operations.
 // ===================================================================
 
-void NetCDF_Driver::open_read(const eckit::Configuration& config) {
+void NetCDF_Driver::open_read(const conf::Config& config) {
     if (is_open_) {
-        throw eckit::Exception("NetCDF_Driver::open_read: driver is already open");
+        throw std::runtime_error("NetCDF_Driver::open_read: driver is already open");
     }
 
 #ifdef AMIO_HAS_NETCDF
     // Extract configuration parameters.
     std::string path = resolve_dataset_path(config);
     if (path.empty()) {
-        throw eckit::Exception("NetCDF_Driver::open_read: 'path' (or 'output_path') field is required");
+        throw std::runtime_error("NetCDF_Driver::open_read: 'path' (or 'output_path') field is required");
     }
     file_path_ = path;
 
     // Parse data model for validation (R7.2, R7.3).
-    std::string model_str = config.getString("data_model", "classic");
+    std::string model_str = config.get_or<std::string>("data_model", "classic");
     data_model_ = parse_data_model(model_str);
 
     // MPI communicator for parallel reads.
@@ -422,7 +381,7 @@ void NetCDF_Driver::open_read(const eckit::Configuration& config) {
 
 #else
     (void)config;
-    throw eckit::Exception("NetCDF_Driver::open_read: AMIO built without netCDF support");
+    throw std::runtime_error("NetCDF_Driver::open_read: AMIO built without netCDF support");
 #endif
 }
 
@@ -432,7 +391,7 @@ void NetCDF_Driver::open_read(const eckit::Configuration& config) {
 
 void NetCDF_Driver::write(const StagingBuffer& src, const VarMeta& meta) {
     if (!is_open_ || !is_write_mode_) {
-        throw eckit::Exception("NetCDF_Driver::write: driver not open for writing");
+        throw std::runtime_error("NetCDF_Driver::write: driver not open for writing");
     }
 
 #ifdef AMIO_HAS_NETCDF
@@ -533,7 +492,7 @@ void NetCDF_Driver::write(const StagingBuffer& src, const VarMeta& meta) {
 #else
     (void)src;
     (void)meta;
-    throw eckit::Exception("NetCDF_Driver::write: AMIO built without netCDF support");
+    throw std::runtime_error("NetCDF_Driver::write: AMIO built without netCDF support");
 #endif
 }
 
@@ -543,7 +502,7 @@ void NetCDF_Driver::write(const StagingBuffer& src, const VarMeta& meta) {
 
 void NetCDF_Driver::read(StagingBuffer& dst, const VarMeta& meta, std::int64_t timestep, const std::optional<BoundingBox>& bbox) {
     if (!is_open_ || is_write_mode_) {
-        throw eckit::Exception("NetCDF_Driver::read: driver not open for reading");
+        throw std::runtime_error("NetCDF_Driver::read: driver not open for reading");
     }
 
 #ifdef AMIO_HAS_NETCDF
@@ -584,7 +543,7 @@ void NetCDF_Driver::read(StagingBuffer& dst, const VarMeta& meta, std::int64_t t
     std::size_t total_bytes = total_elems * elem_size;
 
     if (total_bytes > dst.capacity_bytes) {
-        throw eckit::Exception("NetCDF_Driver::read: required " + std::to_string(total_bytes) + " bytes but buffer capacity is " +
+        throw std::runtime_error("NetCDF_Driver::read: required " + std::to_string(total_bytes) + " bytes but buffer capacity is " +
                                std::to_string(dst.capacity_bytes));
     }
 
@@ -622,7 +581,7 @@ void NetCDF_Driver::read(StagingBuffer& dst, const VarMeta& meta, std::int64_t t
     (void)meta;
     (void)timestep;
     (void)bbox;
-    throw eckit::Exception("NetCDF_Driver::read: AMIO built without netCDF support");
+    throw std::runtime_error("NetCDF_Driver::read: AMIO built without netCDF support");
 #endif
 }
 
@@ -632,14 +591,14 @@ void NetCDF_Driver::read(StagingBuffer& dst, const VarMeta& meta, std::int64_t t
 
 void NetCDF_Driver::flush() {
     if (!is_open_) {
-        throw eckit::Exception("NetCDF_Driver::flush: driver is not open");
+        throw std::runtime_error("NetCDF_Driver::flush: driver is not open");
     }
 
 #ifdef AMIO_HAS_NETCDF
     int status = nc_sync(ncid_);
     nc_check(status, "nc_sync");
 #else
-    throw eckit::Exception("NetCDF_Driver::flush: AMIO built without netCDF support");
+    throw std::runtime_error("NetCDF_Driver::flush: AMIO built without netCDF support");
 #endif
 }
 

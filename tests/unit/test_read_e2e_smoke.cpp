@@ -111,8 +111,8 @@ amio::detail::VariableInfo make_info() {
 // ---------------------------------------------------------------
 class SmokeReadDriver : public amio::detail::Backend_Driver {
    public:
-    void open_write(const eckit::Configuration &) override {}
-    void open_read(const eckit::Configuration &) override {
+    void open_write(const conf::Config &) override {}
+    void open_read(const conf::Config &) override {
         opened_read_ = true;
     }
 

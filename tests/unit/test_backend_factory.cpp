@@ -50,8 +50,8 @@ using amio::detail::VarMeta;
 // A minimal concrete driver for testing factory dispatch.
 class MockNetCDF_Driver : public Backend_Driver {
    public:
-    void open_write(const eckit::Configuration &) override {}
-    void open_read(const eckit::Configuration &) override {}
+    void open_write(const conf::Config &) override {}
+    void open_read(const conf::Config &) override {}
     void write(const StagingBuffer &, const VarMeta &) override {}
     void read(StagingBuffer &, const VarMeta &, std::int64_t, const std::optional<BoundingBox> &) override {}
     void flush() override {}
@@ -60,8 +60,8 @@ class MockNetCDF_Driver : public Backend_Driver {
 
 class MockZarr_Driver : public Backend_Driver {
    public:
-    void open_write(const eckit::Configuration &) override {}
-    void open_read(const eckit::Configuration &) override {}
+    void open_write(const conf::Config &) override {}
+    void open_read(const conf::Config &) override {}
     void write(const StagingBuffer &, const VarMeta &) override {}
     void read(StagingBuffer &, const VarMeta &, std::int64_t, const std::optional<BoundingBox> &) override {}
     void flush() override {}
@@ -70,8 +70,8 @@ class MockZarr_Driver : public Backend_Driver {
 
 class MockGRIB2_Driver : public Backend_Driver {
    public:
-    void open_write(const eckit::Configuration &) override {}
-    void open_read(const eckit::Configuration &) override {}
+    void open_write(const conf::Config &) override {}
+    void open_read(const conf::Config &) override {}
     void write(const StagingBuffer &, const VarMeta &) override {}
     void read(StagingBuffer &, const VarMeta &, std::int64_t, const std::optional<BoundingBox> &) override {}
     void flush() override {}
@@ -280,7 +280,7 @@ void test_backend_registrar() {
     // Use BackendRegistrar to register a driver.
     { BackendRegistrar<MockNetCDF_Driver> reg("test_driver"); }
     // The registrar registered the driver; it should persist even
-    // after the registrar object is destroyed (consistent with eckit
+    // after the registrar object is destroyed (consistent with
     // factory behavior).
 
     EXPECT_TRUE(BackendFactory::instance().has("test_driver"), "BackendRegistrar should register the driver");

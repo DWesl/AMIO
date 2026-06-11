@@ -14,7 +14,7 @@
 //                                       -> AMIO_ERR_INVALID_HANDLE
 //   4. invoke the private C++ entry in `amio::detail::*`
 //        wrapped in a try / catch cordon that translates any
-//        thrown exception (eckit::Exception, std::exception, ...)
+//        thrown exception (conf::Conf_Error, std::exception, ...)
 //        into a documented AMIO_ERR_* code (R12.2).
 //
 // This shape is captured in the `kind_dispatch` template below so
@@ -42,16 +42,11 @@
 #include "c_boundary/amio_core.hpp"
 #include "c_boundary/handle_table.hpp"
 
-// AMIO_HAS_ECKIT is conditionally enabled by the CMake target so the
-// C-Boundary can catch `eckit::Exception` ahead of `std::exception`
-// when eckit is part of the build closure (the steady state).  When
-// eckit is absent (the early-task scaffolding configuration) the
-// catch falls through to `std::exception`, which still covers
-// eckit::Exception by inheritance.  Either way the host application
-// never observes a C++ exception (R12.2).
-#if defined(AMIO_HAS_ECKIT)
-#include <eckit/exception/Exceptions.h>
-#endif
+// The exception cordon translates any C++ exception thrown from
+// the private implementation into a documented AMIO_ERR_* code so
+// the host application never observes a C++ throw (R12.2).  The
+// Exception_Bridge (task 6) handles fine-grained conf::Conf_Error
+// mapping; the C-Boundary's cordon is a coarse safety net.
 
 namespace {
 
@@ -90,15 +85,10 @@ amio_status_t kind_dispatch(void *handle, HandleKind expected, Op &&op) noexcept
         return lookup_rc;
     }
 
-    // Exception cordon.  Order matters: more-specific catch handlers
-    // come first so eckit::Exception is preferred over the generic
-    // std::exception base class (R12.2).
+    // Exception cordon.  The catch hierarchy translates C++ exceptions
+    // to AMIO_ERR_* codes so the host never observes a C++ throw (R12.2).
     try {
         return std::forward<Op>(op)(payload);
-#if defined(AMIO_HAS_ECKIT)
-    } catch (const eckit::Exception &) {
-        return AMIO_ERR_BACKEND_FAILURE;
-#endif
     } catch (const std::bad_alloc &) {
         // Out-of-memory in the C++ core surfaces as a backend
         // failure; AMIO_Core does not currently differentiate
@@ -152,10 +142,6 @@ AMIO_API amio_status_t amio_init(const char *manifest_path, amio_core_handle *ou
     // host never observes a C++ throw.
     try {
         return amio::detail::init(manifest_path, out_core);
-#if defined(AMIO_HAS_ECKIT)
-    } catch (const eckit::Exception &) {
-        return AMIO_ERR_BACKEND_FAILURE;
-#endif
     } catch (const std::bad_alloc &) {
         return AMIO_ERR_BACKEND_FAILURE;
     } catch (const std::exception &) {

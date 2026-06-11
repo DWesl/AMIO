@@ -42,9 +42,7 @@
 
 #include <cassert>
 
-#ifdef AMIO_HAS_ECKIT
-#include <eckit/exception/Exceptions.h>
-#endif
+
 
 namespace amio::detail {
 
@@ -54,8 +52,6 @@ WorkerPool::WorkerPool(std::size_t thread_count) : thread_count_(thread_count) {
     // Default IOCommunicator: all ranks do I/O on world communicator.
     io_comm_.valid = true;
     io_comm_.is_io_rank = true;
-    io_comm_.io_comm_id = 0;
-    io_comm_.compute_comm_id = 0;
 
     workers_.reserve(thread_count);
     for (std::size_t i = 0; i < thread_count; ++i) {
@@ -72,8 +68,6 @@ WorkerPool::WorkerPool(const WorkerPoolConfig& config)
     if (!io_comm_.valid) {
         io_comm_.valid = true;
         io_comm_.is_io_rank = true;
-        io_comm_.io_comm_id = 0;
-        io_comm_.compute_comm_id = 0;
     }
 
     workers_.reserve(config.thread_count);

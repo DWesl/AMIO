@@ -39,11 +39,11 @@ class InstrumentedDriver : public amio::detail::Backend_Driver {
     InstrumentedDriver() = default;
     ~InstrumentedDriver() override = default;
 
-    void open_write(const eckit::Configuration& /*config*/) override {
+    void open_write(const conf::Config& /*config*/) override {
         record_thread();
     }
 
-    void open_read(const eckit::Configuration& /*config*/) override {
+    void open_read(const conf::Config& /*config*/) override {
         record_thread();
     }
 

@@ -181,12 +181,58 @@ add_executable(
 target_include_directories(test_exception_bridge PRIVATE ${CMAKE_SOURCE_DIR}/src)
 
 target_link_libraries(test_exception_bridge PRIVATE AMIO::public_headers)
+if(CONF_FOUND)
+    target_link_libraries(test_exception_bridge PRIVATE HELM::CONF)
+else()
+    # Fallback: CONF include path from workspace until find_package(CONF) is integrated (task 10).
+    target_include_directories(test_exception_bridge PRIVATE ${CMAKE_SOURCE_DIR}/../conf/include)
+endif()
 if(Threads_FOUND)
     target_link_libraries(test_exception_bridge PRIVATE Threads::Threads)
 endif()
 
 add_test(NAME unit.exception_bridge COMMAND test_exception_bridge)
 set_tests_properties(unit.exception_bridge PROPERTIES LABELS "unit;workers;exception_bridge" TIMEOUT 60)
+
+# ####################################################################################################################################################
+# test_logs_integration
+#
+# Tests LOGS integration in AMIO: Logger initialization lifecycle, pre-initialization stderr fallback, and post-initialization routing through
+# logs::Logger.  Compiles `exception_bridge.cpp` and its dependencies directly into the test binary so the private headers under `src/` are reachable.
+#
+# Validates: R6.7, R6.8, R12.1
+# ####################################################################################################################################################
+add_executable(
+    test_logs_integration
+    test_logs_integration.cpp
+    ${CMAKE_SOURCE_DIR}/src/workers/exception_bridge.cpp
+    ${CMAKE_SOURCE_DIR}/src/workers/worker_pool.cpp
+    ${CMAKE_SOURCE_DIR}/src/workers/thread_pinning.cpp
+    ${CMAKE_SOURCE_DIR}/src/workers/comm_split.cpp
+    ${CMAKE_SOURCE_DIR}/src/workers/mpi_threading.cpp
+    ${CMAKE_SOURCE_DIR}/src/c_boundary/amio_strerror.cpp)
+
+target_include_directories(test_logs_integration PRIVATE ${CMAKE_SOURCE_DIR}/src)
+
+target_link_libraries(test_logs_integration PRIVATE AMIO::public_headers)
+if(CONF_FOUND)
+    target_link_libraries(test_logs_integration PRIVATE HELM::CONF)
+else()
+    # Fallback: CONF include path from workspace until find_package(CONF) is integrated (task 10).
+    target_include_directories(test_logs_integration PRIVATE ${CMAKE_SOURCE_DIR}/../conf/include)
+endif()
+if(LOGS_FOUND)
+    target_link_libraries(test_logs_integration PRIVATE HELM::LOGS)
+else()
+    # Fallback: LOGS include path from workspace until find_package(LOGS) is integrated (task 10).
+    target_include_directories(test_logs_integration PRIVATE ${CMAKE_SOURCE_DIR}/../logs/include)
+endif()
+if(Threads_FOUND)
+    target_link_libraries(test_logs_integration PRIVATE Threads::Threads)
+endif()
+
+add_test(NAME unit.logs_integration COMMAND test_logs_integration)
+set_tests_properties(unit.logs_integration PROPERTIES LABELS "unit;logs;integration" TIMEOUT 60)
 
 # ####################################################################################################################################################
 # test_backend_factory

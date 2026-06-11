@@ -9,7 +9,7 @@
 // Each function below is the post-handle-validation, post-exception-
 // translation entry into the C++ private API.  The C-Boundary calls
 // them under a try/catch cordon (see amio_api.cpp) so they are free
-// to throw `eckit::Exception`, `std::exception`, or any other type
+// to throw `conf::Conf_Error`, `std::exception`, or any other type
 // without the host application ever observing a C++ exception.
 //
 // Validates: R10.5, R10.6, R10.7, R12.2
@@ -21,6 +21,7 @@
 #include <cstdint>
 #include <memory>
 #include <mutex>
+#include <optional>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -31,6 +32,8 @@
 #include "config/config_loader.hpp"
 #include "factory/backend_driver.hpp"
 #include "prefetch/prefetch_queue.hpp"
+
+#include <logs/logger.hpp>
 
 namespace amio::detail {
 
@@ -106,8 +109,21 @@ struct VariableReadState {
 // Holds the Backend_Driver instance, the dataset's mode (read or
 // write), and the handle table token so that close can release it.
 // Also tracks pending write count for flush semantics.
+//
+// Ownership & destruction order: `manifest_config` is declared
+// before `driver` so that in C++ member destruction (reverse of
+// declaration order) the driver is destroyed first.  This ensures
+// the driver's destructor may still safely access configuration
+// values during teardown (Req 13.4).
 // ---------------------------------------------------------------
 struct DatasetRecord {
+    // Parsed manifest as a conf::Config -- owns the configuration
+    // document for the driver's lifetime.  Declared before `driver`
+    // so it outlives the driver (destroyed after driver, per C++
+    // reverse-declaration-order destruction).  Passed by const
+    // reference to open_write / open_read (Req 13.1, 13.2).
+    std::optional<conf::Config> manifest_config;
+
     std::unique_ptr<Backend_Driver> driver;
     std::int32_t mode = AMIO_MODE_WRITE;
     HandleTable::Token token = 0;
@@ -186,6 +202,17 @@ struct AMIO_Core {
 
     // Worker pool (owned by AMIO_Core, may be null in stub mode).
     std::unique_ptr<WorkerPool> worker_pool;
+
+    // ---- LOGS integration (Req 6.8) ----
+
+    // Owned Logger instance.  Lifetime is tied to the core lifecycle:
+    // created during amio_init, destroyed during amio_finalize.
+    logs::Logger logger;
+
+    // Pre-initialization fallback flag.  Before amio_init completes
+    // communicator setup the Exception_Bridge falls back to direct
+    // stderr output rather than invoking LOGS (Req 6.7).
+    std::atomic<bool> logs_initialized{false};
 };
 
 // process_handle_table() -- accessor for the singleton HandleTable
@@ -204,7 +231,7 @@ HandleTable &process_handle_table();
 // these functions otherwise).
 //
 // Each function returns an AMIO_ERR_* code.  Throwing is also
-// permitted -- the C-Boundary catches `eckit::Exception`,
+// permitted -- the C-Boundary catches `conf::Conf_Error`,
 // `std::exception`, and `...` and translates them to the
 // appropriate AMIO_ERR_* code (R12.2).
 // ---------------------------------------------------------------

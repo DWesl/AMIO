@@ -8,9 +8,9 @@
 // -------
 // Provides an abstraction layer for splitting the MPI world
 // communicator into a compute communicator and a dedicated I/O
-// communicator.  When eckit::mpi is available, the implementation
-// delegates to `eckit::mpi::comm("world").split(...)`.  When eckit
-// or MPI is not linked, the functions still compile but return
+// communicator.  When HALO is available (AMIO_HAS_MPI), the
+// implementation delegates to `halo::Communicator::split(...)`.
+// When MPI is not linked, the functions still compile but return
 // appropriate error codes for invalid configs and succeed for
 // empty/default configs.
 //
@@ -33,6 +33,12 @@
 
 #include <cstdint>
 #include <vector>
+
+#ifdef AMIO_HAS_MPI
+#include <optional>
+#include <mpi.h>
+#include <halo/communicator.hpp>
+#endif
 
 #include "amio/amio_errors.h"
 
@@ -60,22 +66,62 @@ struct CommConfig {
 // IOCommunicator -- result of a successful communicator split.
 //
 // This is an opaque handle that Backend_Driver MPI calls should
-// use instead of MPI_COMM_WORLD.  When eckit/MPI is available,
-// this wraps the split communicator.  When not available, it
-// represents a "no-op" communicator that signals single-rank
-// operation.
+// use instead of MPI_COMM_WORLD.  When HALO/MPI is available,
+// this wraps the split communicator via halo::Communicator (RAII).
+// When not available, it represents a "no-op" communicator that
+// signals single-rank operation.
 //
 // Fields:
 //   valid       - true if the split was performed successfully
 //   is_io_rank  - true if the current rank is in the I/O set
-//   io_comm_id  - opaque identifier for the I/O communicator
-//                 (MPI_Comm value when MPI is available, or 0)
-//   compute_comm_id - opaque identifier for the compute communicator
+//   io_comm     - RAII-owned split communicator (nullopt when no
+//                 split was performed or MPI is unavailable)
 struct IOCommunicator {
     bool valid = false;
     bool is_io_rank = false;
-    int64_t io_comm_id = 0;
-    int64_t compute_comm_id = 0;
+
+#ifdef AMIO_HAS_MPI
+    std::optional<halo::Communicator> io_comm;  // RAII-owned split result
+#endif
+
+    // Accessors (inline, header-only)
+
+    /// Returns the raw MPI_Comm handle for use in MPI C APIs.
+    /// When no split was performed (io_comm is nullopt), returns MPI_COMM_WORLD.
+    /// When MPI is not available at build time, returns 0 (sentinel).
+#ifdef AMIO_HAS_MPI
+    MPI_Comm handle() const noexcept {
+        return io_comm.has_value() ? io_comm->handle() : MPI_COMM_WORLD;
+    }
+#else
+    int handle() const noexcept {
+        return 0;  // sentinel -- MPI not available
+    }
+#endif
+
+    /// Returns the rank of this process within the I/O communicator.
+    /// When no split was performed, returns 0.
+    int rank() const noexcept {
+#ifdef AMIO_HAS_MPI
+        if (io_comm.has_value()) {
+            // halo::Communicator::rank() may throw on MPI failure,
+            // but post-split the communicator is valid so this is safe.
+            try { return io_comm->rank(); } catch (...) { return 0; }
+        }
+#endif
+        return 0;
+    }
+
+    /// Returns the size of the I/O communicator.
+    /// When no split was performed, returns 1.
+    int size() const noexcept {
+#ifdef AMIO_HAS_MPI
+        if (io_comm.has_value()) {
+            try { return io_comm->size(); } catch (...) { return 1; }
+        }
+#endif
+        return 1;
+    }
 };
 
 // split_communicator -- split the world communicator into compute
@@ -94,9 +140,8 @@ struct IOCommunicator {
 //     leaves the world communicator unmodified.
 //
 //   * If validation passes and MPI is available, performs the
-//     communicator split via eckit::mpi::comm("world").split(...)
-//     or MPI_Comm_split.  On MPI failure, returns
-//     AMIO_ERR_COMM_SPLIT_FAILED.
+//     communicator split via halo::Communicator::split().
+//     On failure, returns AMIO_ERR_COMM_SPLIT_FAILED.
 //
 //   * If MPI is not available (standalone build), returns AMIO_OK
 //     for default configs and AMIO_ERR_COMM_SPLIT_FAILED for

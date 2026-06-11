@@ -1,25 +1,19 @@
 // config_loader.cpp -- AMIO Config_Loader implementation.
 //
 // Implements manifest parsing, schema validation, and serialization
-// for AMIO runtime configuration.  When AMIO_HAS_ECKIT is defined,
-// delegates to eckit::YAMLConfiguration / eckit::JSONConfiguration.
-// Otherwise, uses a standalone minimal YAML/JSON parser.
+// for AMIO runtime configuration.  Delegates to HELM::CONF for
+// YAML/JSON parsing via conf::Config::from_file / from_string.
 //
 // Validates: R1.2, R1.3, R1.5, R11.3, R11.4, R11.5, R11.6, R11.7
 
 #include "config/config_loader.hpp"
 
 #include <algorithm>
-#include <cctype>
-#include <fstream>
 #include <sstream>
 #include <string_view>
 
-#ifdef AMIO_HAS_ECKIT
-#include <eckit/config/JSONConfiguration.h>
-#include <eckit/config/YAMLConfiguration.h>
-#include <eckit/filesystem/PathName.h>
-#endif
+#include <conf/config.hpp>
+#include <conf/error.hpp>
 
 namespace amio::detail {
 
@@ -129,376 +123,110 @@ amio_err_t ConfigLoader::validate(const Config& config, ValidationError& error_o
 }
 
 // ===================================================================
-// Standalone YAML tokenizer
+// populate_from_conf -- read CONF typed accessors into Config struct.
 //
-// A minimal YAML parser that handles the subset of YAML used by
-// AMIO manifests: nested mappings, scalar values, and lists.
-// This is NOT a full YAML 1.2 parser -- it handles the common
-// patterns used in AMIO configuration files.
-// ===================================================================
-
-static std::string trim(const std::string& s) {
-    auto start = s.find_first_not_of(" \t\r\n");
-    if (start == std::string::npos) return "";
-    auto end = s.find_last_not_of(" \t\r\n");
-    return s.substr(start, end - start + 1);
-}
-
-static int count_indent(const std::string& line) {
-    int count = 0;
-    for (char c : line) {
-        if (c == ' ')
-            ++count;
-        else
-            break;
-    }
-    return count;
-}
-
-std::vector<ConfigLoader::KeyValue> ConfigLoader::tokenize_yaml(const std::string& content) {
-    std::vector<KeyValue> tokens;
-    std::istringstream stream(content);
-    std::string line;
-    int line_num = 0;
-
-    // Stack of prefix paths based on indentation.
-    std::vector<std::pair<int, std::string>> prefix_stack;
-
-    while (std::getline(stream, line)) {
-        ++line_num;
-
-        // Skip empty lines and comments.
-        std::string trimmed = trim(line);
-        if (trimmed.empty() || trimmed[0] == '#') continue;
-
-        // Skip YAML document markers.
-        if (trimmed == "---" || trimmed == "...") continue;
-
-        int indent = count_indent(line);
-
-        // Pop prefix stack entries that are at same or deeper indent.
-        while (!prefix_stack.empty() && prefix_stack.back().first >= indent) {
-            prefix_stack.pop_back();
-        }
-
-        // Check for list item.
-        bool is_list_item = false;
-        std::string work = trimmed;
-        if (work.size() >= 2 && work[0] == '-' && work[1] == ' ') {
-            is_list_item = true;
-            work = trim(work.substr(2));
-        }
-
-        // Check for key: value pair.
-        auto colon_pos = work.find(':');
-        if (colon_pos != std::string::npos && !is_list_item) {
-            std::string key = trim(work.substr(0, colon_pos));
-            std::string value = "";
-            if (colon_pos + 1 < work.size()) {
-                value = trim(work.substr(colon_pos + 1));
-                // Remove inline comments.
-                auto comment_pos = value.find(" #");
-                if (comment_pos != std::string::npos) {
-                    value = trim(value.substr(0, comment_pos));
-                }
-                // Remove quotes.
-                if (value.size() >= 2 && ((value.front() == '"' && value.back() == '"') || (value.front() == '\'' && value.back() == '\''))) {
-                    value = value.substr(1, value.size() - 2);
-                }
-            }
-
-            // Build full path.
-            std::string prefix;
-            for (const auto& [_, p] : prefix_stack) {
-                prefix += p + ".";
-            }
-
-            if (value.empty()) {
-                // This is a mapping key -- push onto prefix stack.
-                prefix_stack.push_back({indent, key});
-            } else {
-                // This is a scalar value.
-                KeyValue kv;
-                kv.key = prefix + key;
-                kv.value = value;
-                kv.line = line_num;
-                kv.indent = indent;
-                kv.is_list_item = false;
-                tokens.push_back(kv);
-            }
-        } else if (is_list_item) {
-            // List item without a key -- use the current prefix path.
-            std::string prefix;
-            for (const auto& [_, p] : prefix_stack) {
-                prefix += p + ".";
-            }
-            // Remove trailing dot.
-            if (!prefix.empty() && prefix.back() == '.') {
-                prefix.pop_back();
-            }
-
-            KeyValue kv;
-            kv.key = prefix;
-            kv.value = work;
-            kv.line = line_num;
-            kv.indent = indent;
-            kv.is_list_item = true;
-            tokens.push_back(kv);
-        }
-    }
-
-    return tokens;
-}
-
-// ===================================================================
-// Standalone JSON tokenizer
+// Reads all Config fields from the parsed CONF document using typed
+// accessors with dotted-path keys.  Optional keys are guarded with
+// manifest.has() before access.  On Key_Not_Found or Type_Mismatch,
+// the error is reported with the dotted path in ValidationError.
+// After population, delegates to validate() for schema checks.
 //
-// A minimal JSON parser for AMIO manifests.  Handles nested objects,
-// arrays of scalars, and string/number values.
+// Validates: R1.3, R1.4, R1.7, R1.8, R1.9, R1.10
 // ===================================================================
 
-std::vector<ConfigLoader::KeyValue> ConfigLoader::tokenize_json(const std::string& content) {
-    std::vector<KeyValue> tokens;
+amio_err_t ConfigLoader::populate_from_conf(const conf::Config& manifest, Config& config_out, ValidationError& error_out) {
+    // Reset config to defaults.
+    config_out = Config{};
 
-    // Simple state-machine JSON parser.
-    std::vector<std::string> path_stack;
-    bool in_array = false;
-    std::string current_array_path;
+    // Track which key is being read so we can report it on failure.
+    std::string_view current_key;
 
-    std::istringstream stream(content);
-    std::string line;
-    int line_num = 0;
-
-    while (std::getline(stream, line)) {
-        ++line_num;
-        std::string trimmed = trim(line);
-        if (trimmed.empty()) continue;
-
-        // Remove trailing comma.
-        if (!trimmed.empty() && trimmed.back() == ',') {
-            trimmed.pop_back();
-            trimmed = trim(trimmed);
-        }
-
-        // Handle braces and brackets.
-        if (trimmed == "{" || trimmed == "}") {
-            if (trimmed == "}") {
-                if (!path_stack.empty()) path_stack.pop_back();
-            }
-            continue;
-        }
-        if (trimmed == "[") {
-            in_array = true;
-            continue;
-        }
-        if (trimmed == "]") {
-            in_array = false;
-            current_array_path.clear();
-            continue;
-        }
-
-        // Parse "key": value or "key": {
-        auto quote1 = trimmed.find('"');
-        if (quote1 != std::string::npos) {
-            auto quote2 = trimmed.find('"', quote1 + 1);
-            if (quote2 == std::string::npos) continue;
-
-            std::string key = trimmed.substr(quote1 + 1, quote2 - quote1 - 1);
-            auto colon = trimmed.find(':', quote2);
-            if (colon == std::string::npos) {
-                // Bare string in array.
-                if (in_array && !current_array_path.empty()) {
-                    KeyValue kv;
-                    kv.key = current_array_path;
-                    kv.value = key;
-                    kv.line = line_num;
-                    kv.is_list_item = true;
-                    tokens.push_back(kv);
-                }
-                continue;
-            }
-
-            std::string value_part = trim(trimmed.substr(colon + 1));
-
-            // Remove trailing comma from value.
-            if (!value_part.empty() && value_part.back() == ',') {
-                value_part.pop_back();
-                value_part = trim(value_part);
-            }
-
-            // Build full path.
-            std::string full_path;
-            for (const auto& p : path_stack) {
-                full_path += p + ".";
-            }
-            full_path += key;
-
-            if (value_part == "{") {
-                // Nested object.
-                path_stack.push_back(key);
-            } else if (value_part == "[") {
-                // Array start.
-                in_array = true;
-                current_array_path = full_path;
-            } else {
-                // Scalar value.
-                // Remove quotes from string values.
-                if (value_part.size() >= 2 && value_part.front() == '"' && value_part.back() == '"') {
-                    value_part = value_part.substr(1, value_part.size() - 2);
-                }
-
-                KeyValue kv;
-                kv.key = full_path;
-                kv.value = value_part;
-                kv.line = line_num;
-                kv.is_list_item = false;
-                tokens.push_back(kv);
-            }
-        } else if (in_array && !current_array_path.empty()) {
-            // Bare number or value in array.
-            KeyValue kv;
-            kv.key = current_array_path;
-            kv.value = trimmed;
-            kv.line = line_num;
-            kv.is_list_item = true;
-            tokens.push_back(kv);
-        }
-    }
-
-    return tokens;
-}
-
-// ===================================================================
-// Populate Config from tokens
-// ===================================================================
-
-static bool parse_size_t(const std::string& s, std::size_t& out) {
-    if (s.empty()) return false;
     try {
-        unsigned long long val = std::stoull(s);
-        out = static_cast<std::size_t>(val);
-        return true;
-    } catch (...) {
-        return false;
-    }
-}
+        // -- Staging pool (integer scalars) --
+        current_key = "staging_pool.buffer_count";
+        if (manifest.has(current_key))
+            config_out.staging_pool.buffer_count = static_cast<std::size_t>(manifest.get_int(current_key));
 
-static bool parse_int(const std::string& s, int& out) {
-    if (s.empty()) return false;
-    try {
-        out = std::stoi(s);
-        return true;
-    } catch (...) {
-        return false;
-    }
-}
+        current_key = "staging_pool.buffer_capacity_bytes";
+        if (manifest.has(current_key))
+            config_out.staging_pool.buffer_capacity_bytes = static_cast<std::size_t>(manifest.get_int(current_key));
 
-amio_err_t ConfigLoader::populate_config(const std::vector<KeyValue>& tokens, Config& config_out, ValidationError& error_out) {
-    for (const auto& kv : tokens) {
-        const std::string& key = kv.key;
-        const std::string& val = kv.value;
+        // -- Worker pool --
+        current_key = "worker_pool.threads";
+        if (manifest.has(current_key))
+            config_out.worker_pool.threads = static_cast<std::size_t>(manifest.get_int(current_key));
 
-        if (key == "staging_pool.buffer_count") {
-            if (!parse_size_t(val, config_out.staging_pool.buffer_count)) {
-                error_out.field_path = key;
-                error_out.message = "invalid integer value: " + val;
-                error_out.line = kv.line;
+        current_key = "worker_pool.cpu_cores";
+        if (manifest.has(current_key))
+            config_out.worker_pool.cpu_cores = manifest.get_int_list(current_key);
+
+        current_key = "worker_pool.numa_domain";
+        if (manifest.has(current_key))
+            config_out.worker_pool.numa_domain = manifest.get_int(current_key);
+
+        // -- Prefetch --
+        current_key = "prefetch.depth";
+        if (manifest.has(current_key))
+            config_out.prefetch.depth = static_cast<std::size_t>(manifest.get_int(current_key));
+
+        current_key = "prefetch.read_timeout_s";
+        if (manifest.has(current_key))
+            config_out.prefetch.read_timeout_s = static_cast<std::size_t>(manifest.get_int(current_key));
+
+        // -- Staging timeout --
+        current_key = "staging_timeout_ms";
+        if (manifest.has(current_key))
+            config_out.staging_timeout_ms = static_cast<std::size_t>(manifest.get_int(current_key));
+
+        // -- Backpressure --
+        current_key = "backpressure.low_watermark";
+        if (manifest.has(current_key))
+            config_out.backpressure.low_watermark = static_cast<std::size_t>(manifest.get_int(current_key));
+
+        current_key = "backpressure.high_watermark";
+        if (manifest.has(current_key))
+            config_out.backpressure.high_watermark = static_cast<std::size_t>(manifest.get_int(current_key));
+
+        current_key = "backpressure.queue_capacity";
+        if (manifest.has(current_key))
+            config_out.backpressure.queue_capacity = static_cast<std::size_t>(manifest.get_int(current_key));
+
+        // -- Backend (string scalar) --
+        current_key = "backend";
+        if (manifest.has(current_key))
+            config_out.backend = manifest.get_string(current_key);
+
+        // -- Codec --
+        current_key = "codec.active_codec";
+        if (manifest.has(current_key))
+            config_out.codec.active_codec = manifest.get_string(current_key);
+
+        current_key = "codec.lossless_allow_list";
+        if (manifest.has(current_key))
+            config_out.codec.lossless_allow_list = manifest.get_string_list(current_key);
+
+        // -- I/O ranks (integer list) --
+        current_key = "io_ranks";
+        if (manifest.has(current_key))
+            config_out.io_ranks = manifest.get_int_list(current_key);
+
+    } catch (const conf::Conf_Error& e) {
+        error_out.field_path = std::string(current_key);
+        switch (e.code()) {
+            case conf::Error_Code::Key_Not_Found:
+                error_out.message = "required key not found: " + std::string(current_key);
                 return AMIO_ERR_MANIFEST_INVALID;
-            }
-        } else if (key == "staging_pool.buffer_capacity_bytes") {
-            if (!parse_size_t(val, config_out.staging_pool.buffer_capacity_bytes)) {
-                error_out.field_path = key;
-                error_out.message = "invalid integer value: " + val;
-                error_out.line = kv.line;
+            case conf::Error_Code::Type_Mismatch:
+                error_out.message = "type mismatch at '" + std::string(current_key) + "': " + e.what();
                 return AMIO_ERR_MANIFEST_INVALID;
-            }
-        } else if (key == "worker_pool.threads") {
-            if (!parse_size_t(val, config_out.worker_pool.threads)) {
-                error_out.field_path = key;
-                error_out.message = "invalid integer value: " + val;
-                error_out.line = kv.line;
+            default:
+                error_out.message = e.what();
                 return AMIO_ERR_MANIFEST_INVALID;
-            }
-        } else if (key == "worker_pool.cpu_cores" && kv.is_list_item) {
-            int core;
-            if (!parse_int(val, core)) {
-                error_out.field_path = key;
-                error_out.message = "invalid integer value in cpu_cores list: " + val;
-                error_out.line = kv.line;
-                return AMIO_ERR_MANIFEST_INVALID;
-            }
-            config_out.worker_pool.cpu_cores.push_back(core);
-        } else if (key == "worker_pool.numa_domain") {
-            int nd;
-            if (!parse_int(val, nd)) {
-                error_out.field_path = key;
-                error_out.message = "invalid integer value: " + val;
-                error_out.line = kv.line;
-                return AMIO_ERR_MANIFEST_INVALID;
-            }
-            config_out.worker_pool.numa_domain = nd;
-        } else if (key == "prefetch.depth") {
-            if (!parse_size_t(val, config_out.prefetch.depth)) {
-                error_out.field_path = key;
-                error_out.message = "invalid integer value: " + val;
-                error_out.line = kv.line;
-                return AMIO_ERR_MANIFEST_INVALID;
-            }
-        } else if (key == "prefetch.read_timeout_s") {
-            if (!parse_size_t(val, config_out.prefetch.read_timeout_s)) {
-                error_out.field_path = key;
-                error_out.message = "invalid integer value: " + val;
-                error_out.line = kv.line;
-                return AMIO_ERR_MANIFEST_INVALID;
-            }
-        } else if (key == "staging_timeout_ms") {
-            if (!parse_size_t(val, config_out.staging_timeout_ms)) {
-                error_out.field_path = key;
-                error_out.message = "invalid integer value: " + val;
-                error_out.line = kv.line;
-                return AMIO_ERR_MANIFEST_INVALID;
-            }
-        } else if (key == "backpressure.low_watermark") {
-            if (!parse_size_t(val, config_out.backpressure.low_watermark)) {
-                error_out.field_path = key;
-                error_out.message = "invalid integer value: " + val;
-                error_out.line = kv.line;
-                return AMIO_ERR_MANIFEST_INVALID;
-            }
-        } else if (key == "backpressure.high_watermark") {
-            if (!parse_size_t(val, config_out.backpressure.high_watermark)) {
-                error_out.field_path = key;
-                error_out.message = "invalid integer value: " + val;
-                error_out.line = kv.line;
-                return AMIO_ERR_MANIFEST_INVALID;
-            }
-        } else if (key == "backpressure.queue_capacity") {
-            if (!parse_size_t(val, config_out.backpressure.queue_capacity)) {
-                error_out.field_path = key;
-                error_out.message = "invalid integer value: " + val;
-                error_out.line = kv.line;
-                return AMIO_ERR_MANIFEST_INVALID;
-            }
-        } else if (key == "backend") {
-            config_out.backend = val;
-        } else if (key == "codec.active_codec") {
-            config_out.codec.active_codec = val;
-        } else if (key == "codec.lossless_allow_list" && kv.is_list_item) {
-            config_out.codec.lossless_allow_list.push_back(val);
-        } else if (key == "io_ranks" && kv.is_list_item) {
-            int rank;
-            if (!parse_int(val, rank)) {
-                error_out.field_path = key;
-                error_out.message = "invalid integer value in io_ranks list: " + val;
-                error_out.line = kv.line;
-                return AMIO_ERR_MANIFEST_INVALID;
-            }
-            config_out.io_ranks.push_back(rank);
         }
-        // Unknown keys are silently ignored (forward compatibility).
     }
 
-    return AMIO_OK;
+    // Validate the populated config against schema rules.
+    return validate(config_out, error_out);
 }
 
 // ===================================================================
@@ -506,57 +234,67 @@ amio_err_t ConfigLoader::populate_config(const std::vector<KeyValue>& tokens, Co
 // ===================================================================
 
 amio_err_t ConfigLoader::parse(const std::string& path, Config& config_out, ValidationError& error_out) {
-    // Read file contents.
-    std::ifstream file(path);
-    if (!file.is_open()) {
-        error_out.field_path = "";
-        error_out.message = "cannot open manifest file: " + path;
-        error_out.line = 0;
-        return AMIO_ERR_MANIFEST_NOT_FOUND;
+    try {
+        conf::Config manifest = conf::Config::from_file(path);
+        return populate_from_conf(manifest, config_out, error_out);
+    } catch (const conf::Conf_Error& e) {
+        switch (e.code()) {
+            case conf::Error_Code::File_Not_Found:
+                error_out.field_path = "";
+                error_out.message = e.what();
+                error_out.line = 0;
+                return AMIO_ERR_MANIFEST_NOT_FOUND;
+            case conf::Error_Code::Parse_Error:
+                error_out.field_path = "";
+                error_out.message = e.what();
+                error_out.line = 0;
+                return AMIO_ERR_MANIFEST_INVALID;
+            default:
+                error_out.field_path = "";
+                error_out.message = e.what();
+                error_out.line = 0;
+                return AMIO_ERR_MANIFEST_INVALID;
+        }
     }
-
-    std::ostringstream ss;
-    ss << file.rdbuf();
-    std::string content = ss.str();
-
-    if (content.empty()) {
-        error_out.field_path = "";
-        error_out.message = "manifest file is empty: " + path;
-        error_out.line = 0;
-        return AMIO_ERR_MANIFEST_INVALID;
-    }
-
-    // Auto-detect format from extension.
-    std::string format = "yaml";
-    if (path.size() >= 5 && path.substr(path.size() - 5) == ".json") {
-        format = "json";
-    }
-
-    return parse_string(content, format, config_out, error_out);
 }
 
 // ===================================================================
 // parse_string -- parse a manifest from a string.
+//
+// Delegates to conf::Config::from_string for YAML/JSON parsing,
+// then populates Config via populate_from_conf.
+// The `format` parameter ("yaml" or "json") is accepted for API
+// completeness; CONF's from_string currently auto-detects format.
 // ===================================================================
 
-amio_err_t ConfigLoader::parse_string(const std::string& content, const std::string& format, Config& config_out, ValidationError& error_out) {
-    // Reset config to defaults.
-    config_out = Config{};
+amio_err_t ConfigLoader::parse_string(const std::string& content,
+                                      const std::string& format,
+                                      Config& config_out,
+                                      ValidationError& error_out) {
+    (void)format;  // Reserved for future use; CONF auto-detects.
 
-    // Tokenize.
-    std::vector<KeyValue> tokens;
-    if (format == "json") {
-        tokens = tokenize_json(content);
-    } else {
-        tokens = tokenize_yaml(content);
+    try {
+        conf::Config manifest = conf::Config::from_string(content);
+        return populate_from_conf(manifest, config_out, error_out);
+    } catch (const conf::Conf_Error& e) {
+        switch (e.code()) {
+            case conf::Error_Code::File_Not_Found:
+                error_out.field_path = "";
+                error_out.message = e.what();
+                error_out.line = 0;
+                return AMIO_ERR_MANIFEST_NOT_FOUND;
+            case conf::Error_Code::Parse_Error:
+                error_out.field_path = "";
+                error_out.message = e.what();
+                error_out.line = 0;
+                return AMIO_ERR_MANIFEST_INVALID;
+            default:
+                error_out.field_path = "";
+                error_out.message = e.what();
+                error_out.line = 0;
+                return AMIO_ERR_MANIFEST_INVALID;
+        }
     }
-
-    // Populate config from tokens.
-    amio_err_t rc = populate_config(tokens, config_out, error_out);
-    if (rc != AMIO_OK) return rc;
-
-    // Validate the populated config.
-    return validate(config_out, error_out);
 }
 
 // ===================================================================

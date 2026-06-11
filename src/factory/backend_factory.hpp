@@ -6,11 +6,10 @@
 //
 // Purpose
 // -------
-// Backend_Factory provides a string-keyed registry of Backend_Driver
-// implementations that mimics eckit::Factory<Backend_Driver> semantics.
-// Each concrete driver registers itself at static initialization time
-// via a static BackendRegistrar<ConcreteDriver> instance, analogous to
-// eckit::ConcreteBuilderT0<Backend_Driver, ConcreteDriver>("key").
+// Backend_Factory is AMIO's own string-keyed singleton registry of
+// Backend_Driver implementations.  Each concrete driver registers
+// itself at static initialization time via a static
+// BackendRegistrar<ConcreteDriver> instance.
 //
 // The factory provides:
 //
@@ -24,9 +23,6 @@
 //
 // No concrete driver class, header, or symbol is part of the public
 // API.  The factory key is the only externally visible coupling (R4.8).
-//
-// When eckit is available, this implementation can be replaced by
-// eckit::Factory<Backend_Driver> with no behavioral change.
 //
 // Thread safety
 // -------------
@@ -50,10 +46,9 @@
 
 namespace amio::detail {
 
-// BackendFactory -- singleton registry for Backend_Driver implementations.
-//
-// Mimics eckit::Factory<Backend_Driver> keyed by string.  Concrete
-// drivers register via BackendRegistrar<T> at static init time.
+// BackendFactory -- AMIO's own string-keyed singleton registry for
+// Backend_Driver implementations.  Concrete drivers register via
+// BackendRegistrar<T> at static init time.
 class BackendFactory {
    public:
     // Builder function type: creates a new Backend_Driver instance.
@@ -65,8 +60,7 @@ class BackendFactory {
     // register_driver -- register a builder under the given key.
     //
     // Thread-safe (exclusive lock).  If the key is already registered,
-    // the previous registration is silently replaced (last-writer-wins,
-    // consistent with eckit::Factory behavior on duplicate keys).
+    // the previous registration is silently replaced (last-writer-wins).
     //
     // Returns true if registration succeeded, false if key was empty.
     bool register_driver(const std::string& key, BuilderFn builder);
@@ -120,13 +114,9 @@ class BackendFactory {
 //   amio::detail::BackendRegistrar<NetCDF_Driver> reg_netcdf("netcdf4");
 //   }
 //
-// This is analogous to:
-//   eckit::ConcreteBuilderT0<Backend_Driver, NetCDF_Driver>("netcdf4")
-//
 // The registrar registers the driver at static initialization time
-// and does NOT unregister on destruction (consistent with eckit
-// factory behavior where drivers remain registered for the process
-// lifetime).
+// and does NOT unregister on destruction (drivers remain registered
+// for the process lifetime).
 template <typename ConcreteDriver>
 class BackendRegistrar {
    public:

@@ -51,8 +51,8 @@ std::vector<std::size_t> row_major_strides(const amio_shape_t& shape) {
 // the read path delivers exactly this gather.
 class SliceDriver : public Backend_Driver {
    public:
-    void open_write(const eckit::Configuration&) override {}
-    void open_read(const eckit::Configuration&) override {}
+    void open_write(const conf::Config&) override {}
+    void open_read(const conf::Config&) override {}
     void flush() override {}
     void close() override {}
     void write(const StagingBuffer&, const VarMeta&) override {}

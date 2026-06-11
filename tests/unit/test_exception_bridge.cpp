@@ -4,6 +4,8 @@
 //   * Exception translation (std::exception → AMIO_ERR_BACKEND_FAILURE)
 //   * Exception translation (std::invalid_argument → AMIO_ERR_INVALID_INPUT)
 //   * Exception translation (unknown → AMIO_ERR_BACKEND_FAILURE)
+//   * Exception translation (conf::Conf_Error → AMIO_ERR_MANIFEST_NOT_FOUND,
+//                            AMIO_ERR_MANIFEST_INVALID, AMIO_ERR_INVALID_INPUT)
 //   * emit_parallel_stacktrace produces non-empty trace
 //   * OutcomeRegistry: record, query, clear
 //   * execute_with_exception_cordon: success path
@@ -16,7 +18,7 @@
 // (its header lives under `src/workers/`), this test target compiles
 // the source directly into the test binary.
 //
-// Validates: R12.1, R12.2, R12.3, R12.4, R12.9, R12.10
+// Validates: R12.1, R12.2, R12.3, R12.4, R12.6, R12.9, R12.10
 
 #include <atomic>
 #include <cassert>
@@ -25,6 +27,8 @@
 #include <stdexcept>
 #include <string>
 #include <thread>
+
+#include <conf/error.hpp>
 
 #include "workers/exception_bridge.hpp"
 #include "workers/worker_pool.hpp"
@@ -110,14 +114,102 @@ void test_translate_unknown_exception() {
     EXPECT_TRUE(msg == "Unknown exception (non-std)", "message should indicate unknown exception");
 }
 
+// ---- Test: translate_exception_to_error with conf::Conf_Error{File_Not_Found} ----
+
+void test_translate_conf_error_file_not_found() {
+    std::string msg;
+    amio_err_t code = AMIO_OK;
+
+    try {
+        throw conf::Conf_Error(conf::Error_Code::File_Not_Found, "test file not found");
+    } catch (...) {
+        code = translate_exception_to_error(&msg);
+    }
+
+    EXPECT_TRUE(code == AMIO_ERR_MANIFEST_NOT_FOUND,
+                "conf::Conf_Error{File_Not_Found} should map to AMIO_ERR_MANIFEST_NOT_FOUND");
+    EXPECT_TRUE(msg.find("test file not found") != std::string::npos,
+                "message should contain the original error text");
+}
+
+// ---- Test: translate_exception_to_error with conf::Conf_Error{Parse_Error} ----
+
+void test_translate_conf_error_parse_error() {
+    std::string msg;
+    amio_err_t code = AMIO_OK;
+
+    try {
+        throw conf::Conf_Error(conf::Error_Code::Parse_Error, "invalid YAML at line 5");
+    } catch (...) {
+        code = translate_exception_to_error(&msg);
+    }
+
+    EXPECT_TRUE(code == AMIO_ERR_MANIFEST_INVALID,
+                "conf::Conf_Error{Parse_Error} should map to AMIO_ERR_MANIFEST_INVALID");
+    EXPECT_TRUE(msg.find("invalid YAML at line 5") != std::string::npos,
+                "message should contain the original error text");
+}
+
+// ---- Test: translate_exception_to_error with conf::Conf_Error{Key_Not_Found} ----
+
+void test_translate_conf_error_key_not_found() {
+    std::string msg;
+    amio_err_t code = AMIO_OK;
+
+    try {
+        throw conf::Conf_Error(conf::Error_Code::Key_Not_Found, "key 'staging_pool.buffer_count' missing");
+    } catch (...) {
+        code = translate_exception_to_error(&msg);
+    }
+
+    EXPECT_TRUE(code == AMIO_ERR_MANIFEST_INVALID,
+                "conf::Conf_Error{Key_Not_Found} should map to AMIO_ERR_MANIFEST_INVALID");
+    EXPECT_TRUE(msg.find("staging_pool.buffer_count") != std::string::npos,
+                "message should contain the missing key path");
+}
+
+// ---- Test: translate_exception_to_error with conf::Conf_Error{Type_Mismatch} ----
+
+void test_translate_conf_error_type_mismatch() {
+    std::string msg;
+    amio_err_t code = AMIO_OK;
+
+    try {
+        throw conf::Conf_Error(conf::Error_Code::Type_Mismatch, "expected int, got string");
+    } catch (...) {
+        code = translate_exception_to_error(&msg);
+    }
+
+    EXPECT_TRUE(code == AMIO_ERR_INVALID_INPUT,
+                "conf::Conf_Error{Type_Mismatch} should map to AMIO_ERR_INVALID_INPUT");
+    EXPECT_TRUE(msg.find("expected int, got string") != std::string::npos,
+                "message should contain the type mismatch description");
+}
+
+// ---- Test: translate_exception_to_error with conf::Conf_Error{Invalid_Arg} ----
+
+void test_translate_conf_error_invalid_arg() {
+    std::string msg;
+    amio_err_t code = AMIO_OK;
+
+    try {
+        throw conf::Conf_Error(conf::Error_Code::Invalid_Arg, "null pointer passed to Config");
+    } catch (...) {
+        code = translate_exception_to_error(&msg);
+    }
+
+    EXPECT_TRUE(code == AMIO_ERR_INVALID_INPUT,
+                "conf::Conf_Error{Invalid_Arg} should map to AMIO_ERR_INVALID_INPUT");
+    EXPECT_TRUE(msg.find("null pointer passed to Config") != std::string::npos,
+                "message should contain the invalid argument description");
+}
+
 // ---- Test: emit_parallel_stacktrace produces non-empty trace ----
 
 void test_emit_parallel_stacktrace_produces_trace() {
     IOCommunicator io_comm;
     io_comm.valid = true;
     io_comm.is_io_rank = true;
-    io_comm.io_comm_id = 0;
-    io_comm.compute_comm_id = 0;
 
     std::string trace = emit_parallel_stacktrace(io_comm, AMIO_ERR_BACKEND_FAILURE, "test failure message");
 
@@ -205,8 +297,6 @@ void test_cordon_success_path() {
     IOCommunicator io_comm;
     io_comm.valid = true;
     io_comm.is_io_rank = true;
-    io_comm.io_comm_id = 0;
-    io_comm.compute_comm_id = 0;
 
     OutcomeRegistry registry;
     std::atomic<int> counter{0};
@@ -226,8 +316,6 @@ void test_cordon_std_exception_path() {
     IOCommunicator io_comm;
     io_comm.valid = true;
     io_comm.is_io_rank = true;
-    io_comm.io_comm_id = 0;
-    io_comm.compute_comm_id = 0;
 
     OutcomeRegistry registry;
 
@@ -252,8 +340,6 @@ void test_cordon_unknown_exception_path() {
     IOCommunicator io_comm;
     io_comm.valid = true;
     io_comm.is_io_rank = true;
-    io_comm.io_comm_id = 0;
-    io_comm.compute_comm_id = 0;
 
     OutcomeRegistry registry;
 
@@ -356,8 +442,6 @@ void test_stack_trace_before_recording() {
     IOCommunicator io_comm;
     io_comm.valid = true;
     io_comm.is_io_rank = true;
-    io_comm.io_comm_id = 0;
-    io_comm.compute_comm_id = 0;
 
     OutcomeRegistry registry;
 
@@ -380,8 +464,6 @@ void test_cordon_null_callback() {
     IOCommunicator io_comm;
     io_comm.valid = true;
     io_comm.is_io_rank = true;
-    io_comm.io_comm_id = 0;
-    io_comm.compute_comm_id = 0;
 
     OutcomeRegistry registry;
 
@@ -434,6 +516,11 @@ int main() {
     test_translate_std_runtime_error();
     test_translate_std_invalid_argument();
     test_translate_unknown_exception();
+    test_translate_conf_error_file_not_found();
+    test_translate_conf_error_parse_error();
+    test_translate_conf_error_key_not_found();
+    test_translate_conf_error_type_mismatch();
+    test_translate_conf_error_invalid_arg();
     test_emit_parallel_stacktrace_produces_trace();
     test_outcome_registry_record_and_query();
     test_outcome_registry_clear();

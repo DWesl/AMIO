@@ -16,7 +16,7 @@
 //     getgridtemplate() / getpdstemplate() / getdrstemplate()
 //     NCEP template tables to lay out each section.  AMIO does NOT
 //     maintain its own table file and does NOT translate metadata
-//     through an eckit-authored code map.
+//     through an external code map.
 //
 //   * The manifest supplies the *numeric* GRIB2 product identifiers
 //     (discipline, parameter category/number, grid- and product-
@@ -29,14 +29,12 @@
 //       - Otherwise -> pack into a contiguous row-major buffer
 //
 //   * DRT restricted to {Adaptive Entropy Coding via libaec (42),
-//     Lossless JPEG2000 (40)}; others rejected with eckit::Exception.
-//   * Missing/invalid DRT or unsupported dtype -> eckit::Exception,
+//     Lossless JPEG2000 (40)}; others rejected with std::runtime_error.
+//   * Missing/invalid DRT or unsupported dtype -> std::runtime_error,
 //     zero output bytes.
 //
 // Conditional compilation:
 //   - AMIO_HAS_G2C: when defined, uses the real g2c API.
-//   - AMIO_HAS_ECKIT: when defined, uses eckit::Exception and
-//     eckit::Configuration.  Otherwise falls back to std::runtime_error.
 //   - When g2c is not available, the driver compiles but throws on
 //     construction indicating g2c is not available.
 //
@@ -215,8 +213,8 @@ class GRIB2_Driver : public Backend_Driver {
     ~GRIB2_Driver() override;
 
     // Backend_Driver interface
-    void open_write(const eckit::Configuration& config) override;
-    void open_read(const eckit::Configuration& config) override;
+    void open_write(const conf::Config& config) override;
+    void open_read(const conf::Config& config) override;
     void write(const StagingBuffer& src, const VarMeta& meta) override;
     void read(StagingBuffer& dst, const VarMeta& meta, std::int64_t timestep, const std::optional<BoundingBox>& bbox) override;
     void flush() override;
@@ -238,17 +236,17 @@ class GRIB2_Driver : public Backend_Driver {
    private:
     // Read the GRIB2 product identifiers from the manifest and open
     // the output file.  Throws on failure.  Called from open_write.
-    void initialize(const eckit::Configuration& config);
+    void initialize(const conf::Config& config);
 
     // Scan the GRIB2 source file and build the in-memory record index
     // (records_), keyed by field-identity name.  Throws on failure.
     // Called from open_read.  Only compiled when AMIO_HAS_G2C is set.
-    void build_record_index(const eckit::Configuration& config);
+    void build_record_index(const conf::Config& config);
 
     // Validate that the DRT field is present and in the allowed set.
     // Throws with appropriate message on failure, identifying whether
     // the field was missing or the name was unrecognized (R9.7).
-    GRIB2_DRT validate_drt(const eckit::Configuration& config) const;
+    GRIB2_DRT validate_drt(const conf::Config& config) const;
 
    public:
     // field_identity_name -- the variable-name <-> field-identity
@@ -327,7 +325,7 @@ class GRIB2_Driver : public Backend_Driver {
     // (getgridtemplate / getpdstemplate / getdrstemplate) for the
     // matching template *layout*.  The values themselves are the
     // WMO/NCEP code-table numbers carried straight through from the
-    // manifest -- no eckit-side translation.
+    // manifest -- no external translation.
 
     // Grid Definition Template 3.0 (regular lat/lon), 19 entries.
     // ni = points along a parallel (longitudes), nj = points along a
@@ -387,7 +385,7 @@ class GRIB2_Driver : public Backend_Driver {
    private:
     // Read all Grib2Settings fields from the configuration, applying
     // defaults for any absent key.
-    static Grib2Settings read_settings(const eckit::Configuration& config);
+    static Grib2Settings read_settings(const conf::Config& config);
 
     // State
     bool initialized_ = false;

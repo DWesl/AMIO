@@ -20,46 +20,15 @@
 //
 // Validates: R8.1, R8.2, R8.3, R8.4, R8.5, R8.9, R8.10
 
-// Standard headers needed by the eckit::Configuration stub.
+// Standard headers.
 #include <string>
 #include <vector>
 
-// We need the eckit::Configuration definition before including the
-// driver header.  In non-eckit builds, the driver .cpp provides a
-// stub.  For the test, we provide our own complete definition.
-#ifndef AMIO_HAS_ECKIT
-namespace eckit {
-class Configuration {
-   public:
-    virtual ~Configuration() = default;
-    virtual bool has(const std::string& /*key*/) const {
-        return false;
-    }
-    virtual std::string getString(const std::string& /*key*/) const {
-        return "";
-    }
-    virtual std::string getString(const std::string& /*key*/, const std::string& def) const {
-        return def;
-    }
-    virtual long getLong(const std::string& /*key*/, long def = 0) const {
-        return def;
-    }
-    virtual std::vector<long> getLongVector(const std::string& /*key*/) const {
-        return {};
-    }
-    virtual bool getBool(const std::string& /*key*/, bool def = false) const {
-        return def;
-    }
-};
-}  // namespace eckit
-// Prevent the driver .cpp from redefining eckit::Configuration.
-#define AMIO_ECKIT_CONFIG_DEFINED
-#endif
+#include <conf/config.hpp>
 
 #include <cassert>
 #include <cstdio>
 #include <stdexcept>
-#include <unordered_map>
 
 #include "drivers/zarr/zarr_driver.hpp"
 #include "factory/backend_factory.hpp"
@@ -138,71 +107,24 @@ void report_failure(const char* expr, const char* file, int line, const std::str
     } while (0)
 
 // ---------------------------------------------------------------
-// Minimal eckit::Configuration mock for testing.
+// Helper: build a conf::Config from YAML text for testing.
 // ---------------------------------------------------------------
 
-// A simple key-value configuration mock that implements the
-// eckit::Configuration interface used by Zarr_Driver.
-class MockConfig : public eckit::Configuration {
-   public:
-    MockConfig() = default;
-    ~MockConfig() override = default;
-
-    void set_string(const std::string& key, const std::string& value) {
-        strings_[key] = value;
-    }
-
-    void set_long_vector(const std::string& key, const std::vector<long>& value) {
-        vectors_[key] = value;
-    }
-
-    bool has(const std::string& key) const override {
-        return strings_.count(key) > 0 || vectors_.count(key) > 0;
-    }
-
-    std::string getString(const std::string& key) const override {
-        auto it = strings_.find(key);
-        if (it != strings_.end()) return it->second;
-        return "";
-    }
-
-    std::string getString(const std::string& key, const std::string& def) const override {
-        auto it = strings_.find(key);
-        if (it != strings_.end()) return it->second;
-        return def;
-    }
-
-    long getLong(const std::string& key, long def = 0) const override {
-        (void)key;
-        return def;
-    }
-
-    std::vector<long> getLongVector(const std::string& key) const override {
-        auto it = vectors_.find(key);
-        if (it != vectors_.end()) return it->second;
-        return {};
-    }
-
-    bool getBool(const std::string& key, bool def = false) const override {
-        (void)key;
-        return def;
-    }
-
-   private:
-    std::unordered_map<std::string, std::string> strings_;
-    std::unordered_map<std::string, std::vector<long>> vectors_;
-};
+// A simple key-value configuration helper that builds a conf::Config
+// from YAML strings for Zarr_Driver testing.
+conf::Config make_config_from_yaml(const std::string& yaml) {
+    return conf::Config::from_string(yaml);
+}
 
 // Helper: create a valid Zarr configuration.
-MockConfig make_valid_config() {
-    MockConfig cfg;
-    cfg.set_string("uri", "/tmp/test_zarr_output");
-    cfg.set_long_vector("chunk_shape", {64, 64});
-    cfg.set_long_vector("shard_shape", {256, 256});
-    cfg.set_long_vector("array_shape", {1024, 1024});
-    cfg.set_string("codec", "blosc");
-    cfg.set_string("dtype", "float32");
-    return cfg;
+conf::Config make_valid_config() {
+    return conf::Config::from_string(
+        "uri: /tmp/test_zarr_output\n"
+        "chunk_shape: [64, 64]\n"
+        "shard_shape: [256, 256]\n"
+        "array_shape: [1024, 1024]\n"
+        "codec: blosc\n"
+        "dtype: float32\n");
 }
 
 // ---------------------------------------------------------------
@@ -226,38 +148,37 @@ void test_zarr_driver_registered_with_factory() {
 
 void test_missing_all_fields() {
     Zarr_Driver driver;
-    MockConfig cfg;  // Empty config — all fields missing.
+    auto cfg = conf::Config::from_string("dummy: true\n");  // Empty config — all fields missing.
 
     EXPECT_THROWS_WITH(driver.open_write(cfg), "missing required configuration fields", "empty config should throw naming missing fields");
 }
 
 void test_missing_uri_field() {
-    MockConfig cfg;
     // Provide everything except uri.
-    cfg.set_long_vector("chunk_shape", {64, 64});
-    cfg.set_long_vector("shard_shape", {256, 256});
-    cfg.set_long_vector("array_shape", {1024, 1024});
-    cfg.set_string("codec", "blosc");
+    auto cfg = conf::Config::from_string(
+        "chunk_shape: [64, 64]\n"
+        "shard_shape: [256, 256]\n"
+        "array_shape: [1024, 1024]\n"
+        "codec: blosc\n");
 
     Zarr_Driver driver;
     EXPECT_THROWS_WITH(driver.open_write(cfg), "uri", "missing uri should be named in error");
 }
 
 void test_missing_chunk_shape_field() {
-    MockConfig cfg;
-    cfg.set_string("uri", "/tmp/test");
-    cfg.set_long_vector("shard_shape", {256, 256});
-    cfg.set_long_vector("array_shape", {1024, 1024});
-    cfg.set_string("codec", "blosc");
+    auto cfg = conf::Config::from_string(
+        "uri: /tmp/test\n"
+        "shard_shape: [256, 256]\n"
+        "array_shape: [1024, 1024]\n"
+        "codec: blosc\n");
 
     Zarr_Driver driver;
     EXPECT_THROWS_WITH(driver.open_write(cfg), "chunk_shape", "missing chunk_shape should be named in error");
 }
 
 void test_missing_multiple_fields() {
-    MockConfig cfg;
     // Only provide uri — missing chunk_shape, shard_shape, array_shape, codec.
-    cfg.set_string("uri", "/tmp/test");
+    auto cfg = conf::Config::from_string("uri: /tmp/test\n");
 
     Zarr_Driver driver;
     try {
@@ -278,48 +199,48 @@ void test_missing_multiple_fields() {
 // ---------------------------------------------------------------
 
 void test_chunk_dims_must_divide_shard_dims() {
-    MockConfig cfg;
-    cfg.set_string("uri", "/tmp/test");
-    cfg.set_long_vector("chunk_shape", {100, 64});  // 100 does not divide 256
-    cfg.set_long_vector("shard_shape", {256, 256});
-    cfg.set_long_vector("array_shape", {1024, 1024});
-    cfg.set_string("codec", "blosc");
+    auto cfg = conf::Config::from_string(
+        "uri: /tmp/test\n"
+        "chunk_shape: [100, 64]\n"
+        "shard_shape: [256, 256]\n"
+        "array_shape: [1024, 1024]\n"
+        "codec: blosc\n");
 
     Zarr_Driver driver;
     EXPECT_THROWS_WITH(driver.open_write(cfg), "must evenly divide", "chunk not dividing shard should throw");
 }
 
 void test_chunk_dims_must_be_positive() {
-    MockConfig cfg;
-    cfg.set_string("uri", "/tmp/test");
-    cfg.set_long_vector("chunk_shape", {0, 64});  // 0 is not positive
-    cfg.set_long_vector("shard_shape", {256, 256});
-    cfg.set_long_vector("array_shape", {1024, 1024});
-    cfg.set_string("codec", "blosc");
+    auto cfg = conf::Config::from_string(
+        "uri: /tmp/test\n"
+        "chunk_shape: [0, 64]\n"
+        "shard_shape: [256, 256]\n"
+        "array_shape: [1024, 1024]\n"
+        "codec: blosc\n");
 
     Zarr_Driver driver;
     EXPECT_THROWS_WITH(driver.open_write(cfg), "must be a positive integer", "zero chunk dim should throw");
 }
 
 void test_shard_dims_must_be_positive() {
-    MockConfig cfg;
-    cfg.set_string("uri", "/tmp/test");
-    cfg.set_long_vector("chunk_shape", {64, 64});
-    cfg.set_long_vector("shard_shape", {-1, 256});  // negative is not positive
-    cfg.set_long_vector("array_shape", {1024, 1024});
-    cfg.set_string("codec", "blosc");
+    auto cfg = conf::Config::from_string(
+        "uri: /tmp/test\n"
+        "chunk_shape: [64, 64]\n"
+        "shard_shape: [-1, 256]\n"
+        "array_shape: [1024, 1024]\n"
+        "codec: blosc\n");
 
     Zarr_Driver driver;
     EXPECT_THROWS_WITH(driver.open_write(cfg), "must be a positive integer", "negative shard dim should throw");
 }
 
 void test_chunk_shard_dimension_mismatch() {
-    MockConfig cfg;
-    cfg.set_string("uri", "/tmp/test");
-    cfg.set_long_vector("chunk_shape", {64, 64, 64});  // 3 dims
-    cfg.set_long_vector("shard_shape", {256, 256});    // 2 dims
-    cfg.set_long_vector("array_shape", {1024, 1024});
-    cfg.set_string("codec", "blosc");
+    auto cfg = conf::Config::from_string(
+        "uri: /tmp/test\n"
+        "chunk_shape: [64, 64, 64]\n"
+        "shard_shape: [256, 256]\n"
+        "array_shape: [1024, 1024]\n"
+        "codec: blosc\n");
 
     Zarr_Driver driver;
     EXPECT_THROWS_WITH(driver.open_write(cfg), "same number of dimensions", "mismatched chunk/shard dims should throw");
@@ -327,12 +248,12 @@ void test_chunk_shard_dimension_mismatch() {
 
 void test_valid_sharding_accepted() {
     // 64 divides 256, 128 divides 512 — should pass validation.
-    MockConfig cfg;
-    cfg.set_string("uri", "/tmp/test");
-    cfg.set_long_vector("chunk_shape", {64, 128});
-    cfg.set_long_vector("shard_shape", {256, 512});
-    cfg.set_long_vector("array_shape", {1024, 1024});
-    cfg.set_string("codec", "blosc");
+    auto cfg = conf::Config::from_string(
+        "uri: /tmp/test\n"
+        "chunk_shape: [64, 128]\n"
+        "shard_shape: [256, 512]\n"
+        "array_shape: [1024, 1024]\n"
+        "codec: blosc\n");
 
     Zarr_Driver driver;
     // In non-TensorStore builds, this will throw about TensorStore
@@ -347,20 +268,19 @@ void test_valid_sharding_accepted() {
 // ---------------------------------------------------------------
 
 void test_invalid_codec_rejected() {
-    MockConfig cfg;
-    cfg.set_string("uri", "/tmp/test");
-    cfg.set_long_vector("chunk_shape", {64, 64});
-    cfg.set_long_vector("shard_shape", {256, 256});
-    cfg.set_long_vector("array_shape", {1024, 1024});
-    cfg.set_string("codec", "lz4");  // Not in {blosc, zstandard}
+    auto cfg = conf::Config::from_string(
+        "uri: /tmp/test\n"
+        "chunk_shape: [64, 64]\n"
+        "shard_shape: [256, 256]\n"
+        "array_shape: [1024, 1024]\n"
+        "codec: lz4\n");
 
     Zarr_Driver driver;
     EXPECT_THROWS_WITH(driver.open_write(cfg), "must be one of {blosc, zstandard}", "invalid codec should throw");
 }
 
 void test_blosc_codec_accepted() {
-    MockConfig cfg = make_valid_config();
-    cfg.set_string("codec", "blosc");
+    auto cfg = make_valid_config();
 
     Zarr_Driver driver;
 #ifndef AMIO_HAS_TENSORSTORE
@@ -370,8 +290,13 @@ void test_blosc_codec_accepted() {
 }
 
 void test_zstandard_codec_accepted() {
-    MockConfig cfg = make_valid_config();
-    cfg.set_string("codec", "zstandard");
+    auto cfg = conf::Config::from_string(
+        "uri: /tmp/test_zarr_output\n"
+        "chunk_shape: [64, 64]\n"
+        "shard_shape: [256, 256]\n"
+        "array_shape: [1024, 1024]\n"
+        "codec: zstandard\n"
+        "dtype: float32\n");
 
     Zarr_Driver driver;
 #ifndef AMIO_HAS_TENSORSTORE
@@ -412,14 +337,14 @@ void test_error_categorization() {
 
 #ifndef AMIO_HAS_TENSORSTORE
 void test_open_write_throws_without_tensorstore() {
-    MockConfig cfg = make_valid_config();
+    auto cfg = make_valid_config();
     Zarr_Driver driver;
 
     EXPECT_THROWS_WITH(driver.open_write(cfg), "TensorStore is not available", "open_write should throw without TensorStore");
 }
 
 void test_open_read_throws_without_tensorstore() {
-    MockConfig cfg = make_valid_config();
+    auto cfg = make_valid_config();
     Zarr_Driver driver;
 
     EXPECT_THROWS_WITH(driver.open_read(cfg), "TensorStore is not available", "open_read should throw without TensorStore");

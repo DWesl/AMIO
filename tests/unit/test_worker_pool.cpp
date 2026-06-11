@@ -470,15 +470,13 @@ void test_config_constructor_with_io_comm() {
     config.thread_count = 2;
     config.io_comm.valid = true;
     config.io_comm.is_io_rank = true;
-    config.io_comm.io_comm_id = 42;
-    config.io_comm.compute_comm_id = 7;
 
     WorkerPool pool(config);
 
     EXPECT_TRUE(pool.io_communicator().valid, "io_communicator should be valid");
     EXPECT_TRUE(pool.io_communicator().is_io_rank, "io_communicator should report is_io_rank");
-    EXPECT_TRUE(pool.io_communicator().io_comm_id == 42, "io_communicator io_comm_id should be 42");
-    EXPECT_TRUE(pool.io_communicator().compute_comm_id == 7, "io_communicator compute_comm_id should be 7");
+    EXPECT_TRUE(pool.io_communicator().rank() == 0, "io_communicator rank() should be 0 (no split)");
+    EXPECT_TRUE(pool.io_communicator().size() == 1, "io_communicator size() should be 1 (no split)");
 }
 
 // ---- Test: WorkerPoolConfig with invalid pinning records errors ----
@@ -557,27 +555,25 @@ void test_backend_driver_uses_io_comm() {
     config.thread_count = 1;
     config.io_comm.valid = true;
     config.io_comm.is_io_rank = true;
-    config.io_comm.io_comm_id = 123;
-    config.io_comm.compute_comm_id = 456;
 
     WorkerPool pool(config);
 
-    std::atomic<int64_t> observed_io_comm{0};
+    std::atomic<bool> observed_valid{false};
     std::atomic<bool> observed_is_io{false};
 
     DatasetVariableKey key{1, 1};
     pool.submit_write(key, [&]() {
         // In a real Backend_Driver, this is where MPI calls would
-        // use pool.io_communicator().io_comm_id instead of
+        // use pool.io_communicator().handle() instead of
         // MPI_COMM_WORLD.
         const auto& comm = pool.io_communicator();
-        observed_io_comm.store(comm.io_comm_id, std::memory_order_relaxed);
+        observed_valid.store(comm.valid, std::memory_order_relaxed);
         observed_is_io.store(comm.is_io_rank, std::memory_order_relaxed);
     });
 
     pool.drain();
 
-    EXPECT_TRUE(observed_io_comm.load() == 123, "Backend_Driver should see io_comm_id=123, got " + std::to_string(observed_io_comm.load()));
+    EXPECT_TRUE(observed_valid.load(), "Backend_Driver should see valid=true");
     EXPECT_TRUE(observed_is_io.load(), "Backend_Driver should see is_io_rank=true");
 }
 
@@ -685,8 +681,6 @@ void test_all_backend_calls_use_io_comm_only() {
     config.thread_count = 2;
     config.io_comm.valid = true;
     config.io_comm.is_io_rank = true;
-    config.io_comm.io_comm_id = 777;
-    config.io_comm.compute_comm_id = 888;
 
     WorkerPool pool(config);
 
@@ -699,7 +693,7 @@ void test_all_backend_calls_use_io_comm_only() {
         DatasetVariableKey key{static_cast<uint64_t>(i), 0};
         pool.submit_write(key, [&]() {
             const auto& comm = pool.io_communicator();
-            if (comm.valid && comm.io_comm_id == 777 && comm.is_io_rank) {
+            if (comm.valid && comm.is_io_rank) {
                 correct_comm_count.fetch_add(1, std::memory_order_relaxed);
             }
         });
@@ -707,7 +701,7 @@ void test_all_backend_calls_use_io_comm_only() {
 
     pool.drain();
 
-    EXPECT_TRUE(correct_comm_count.load() == kTasks, "all " + std::to_string(kTasks) + " Backend_Driver callbacks should see io_comm_id=777, got " +
+    EXPECT_TRUE(correct_comm_count.load() == kTasks, "all " + std::to_string(kTasks) + " Backend_Driver callbacks should see valid io_comm, got " +
                                                          std::to_string(correct_comm_count.load()));
 }
 

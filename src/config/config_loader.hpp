@@ -26,12 +26,12 @@
 //       staging_timeout_ms[1, 60000]
 //   * Enforcement of lossless-codec allow-list (R11.6, R11.7).
 //
-// eckit integration
-// -----------------
-// When AMIO_HAS_ECKIT is defined, the loader delegates to
-// eckit::YAMLConfiguration / eckit::JSONConfiguration.  Otherwise,
-// a standalone minimal YAML/JSON parser is used so the library can
-// build without eckit for testing or lightweight deployments.
+// CONF integration
+// ----------------
+// The loader delegates to HELM::CONF's Config::from_file /
+// Config::from_string for YAML/JSON parsing, then reads values
+// via CONF's typed accessors (get_int, get_string, etc.) with
+// dotted-path keys matching the manifest schema.
 //
 // Thread safety
 // -------------
@@ -50,6 +50,10 @@
 #include <vector>
 
 #include "amio/amio_errors.h"
+
+// Forward-declare conf::Config to avoid pulling the full CONF header
+// into every translation unit that includes this private header.
+namespace conf { class Config; }
 
 namespace amio::detail {
 
@@ -185,24 +189,9 @@ class ConfigLoader {
     static amio_err_t validate(const Config& config, ValidationError& error_out);
 
    private:
-    // Internal helpers for parsing key-value pairs from a simple
-    // YAML/JSON representation.
-    struct KeyValue {
-        std::string key;
-        std::string value;
-        int line = 0;
-        int indent = 0;
-        bool is_list_item = false;
-    };
-
-    // Tokenize a YAML document into key-value pairs with line info.
-    static std::vector<KeyValue> tokenize_yaml(const std::string& content);
-
-    // Tokenize a JSON document into key-value pairs with line info.
-    static std::vector<KeyValue> tokenize_json(const std::string& content);
-
-    // Populate Config from tokenized key-value pairs.
-    static amio_err_t populate_config(const std::vector<KeyValue>& tokens, Config& config_out, ValidationError& error_out);
+    // Populate Config from a conf::Config object using CONF typed accessors.
+    // Reads scalar and list values via dotted-path keys matching the manifest schema.
+    static amio_err_t populate_from_conf(const conf::Config& manifest, Config& config_out, ValidationError& error_out);
 
     // Check if a codec name is in the valid codecs list.
     static bool is_valid_codec(const std::string& name);

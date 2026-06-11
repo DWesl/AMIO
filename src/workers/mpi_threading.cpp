@@ -24,6 +24,10 @@
 
 #include "workers/mpi_threading.hpp"
 
+#ifdef AMIO_HAS_MPI
+#include <halo/environment.hpp>
+#endif
+
 namespace amio::detail {
 
 amio_err_t validate_mpi_threading(const MpiThreadingConfig& config) {
@@ -41,17 +45,16 @@ amio_err_t validate_mpi_threading(const MpiThreadingConfig& config) {
 }
 
 int query_mpi_thread_level() {
-    // In a standalone build (no MPI linked), we cannot query the
-    // thread level.  Return -1 to indicate "unknown / not available".
-    //
-    // When MPI is available, this would call:
-    //   int provided = -1;
-    //   MPI_Query_thread(&provided);
-    //   return provided;
-    //
-    // For now, we return -1 (MPI not initialized).  The actual MPI
-    // integration will be wired when eckit::mpi is linked.
+#ifdef AMIO_HAS_MPI
+    // Delegate to HALO's Environment singleton which queries
+    // MPI_Query_thread during halo::Environment::initialize().
+    // Returns -1 if initialize() has not been called yet.
+    return halo::Environment::thread_support_level();
+#else
+    // Standalone build (no MPI linked) -- cannot query thread level.
+    // Return -1 to indicate "unknown / not available".
     return -1;
+#endif
 }
 
 }  // namespace amio::detail

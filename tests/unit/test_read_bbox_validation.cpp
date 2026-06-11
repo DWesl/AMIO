@@ -80,8 +80,8 @@ class BboxMockDriver : public amio::detail::Backend_Driver {
    public:
     explicit BboxMockDriver(amio::detail::VariableInfo info) : info_(info) {}
 
-    void open_write(const eckit::Configuration &) override {}
-    void open_read(const eckit::Configuration &) override {}
+    void open_write(const conf::Config &) override {}
+    void open_read(const conf::Config &) override {}
     void write(const amio::detail::StagingBuffer &, const amio::detail::VarMeta &) override {}
 
     void read(amio::detail::StagingBuffer &dst, const amio::detail::VarMeta &, std::int64_t,

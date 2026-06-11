@@ -179,8 +179,8 @@ set_tests_properties(pbt.handle_safety PROPERTIES LABELS "pbt;handles;safety" TI
 add_executable(test_p2_config_validity test_p2_config_validity.cpp ${CMAKE_SOURCE_DIR}/src/config/config_loader.cpp)
 
 target_link_libraries(test_p2_config_validity PRIVATE AMIO::pbt_common)
-if(eckit_FOUND)
-    target_link_libraries(test_p2_config_validity PRIVATE eckit)
+if(CONF_FOUND)
+    target_link_libraries(test_p2_config_validity PRIVATE HELM::CONF)
 endif()
 
 add_test(NAME pbt.p2_config_validity COMMAND test_p2_config_validity)
@@ -340,7 +340,7 @@ set_tests_properties(pbt.p15_driver_thread_invariant PROPERTIES LABELS "pbt;p15;
 # ####################################################################################################################################################
 # pbt_p16_exception_bridge -- Property P16: Exception bridge invariant.
 #
-# For any exception on Worker_Pool thread (eckit::Exception, std::exception, unknown): C boundary catches, records AMIO_ERR_* against handle, ensures
+# For any exception on Worker_Pool thread (std::exception, unknown): C boundary catches, records AMIO_ERR_* against handle, ensures
 # parallel stack-trace emission completes before surfacing, surfaces on next flush/close/wait without remapping, preserves trace for AMIO_Core
 # lifetime.
 #
@@ -550,7 +550,7 @@ set_tests_properties(pbt.p24_grib2_contiguity_gating PROPERTIES LABELS "pbt;p24;
 # pbt_p25_grib2_metadata_invariant -- Property P25: GRIB2 metadata invariant.
 #
 # For any GRIB2_Driver::write: every human-readable metadata string translated to WMO code before encoding; missing WMO key or DRT outside {Adaptive
-# Entropy Coding via libaec, Lossless JPEG2000} → eckit::Exception, zero output bytes.
+# Entropy Coding via libaec, Lossless JPEG2000} → std::runtime_error, zero output bytes.
 #
 # Validates: R9.3, R9.6, R9.7, R9.8
 # ####################################################################################################################################################

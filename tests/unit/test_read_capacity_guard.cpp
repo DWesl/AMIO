@@ -98,8 +98,8 @@ amio::detail::VariableInfo make_info() {
 // ---------------------------------------------------------------
 class OverCapacityMockDriver : public amio::detail::Backend_Driver {
    public:
-    void open_write(const eckit::Configuration &) override {}
-    void open_read(const eckit::Configuration &) override {}
+    void open_write(const conf::Config &) override {}
+    void open_read(const conf::Config &) override {}
     void write(const amio::detail::StagingBuffer &, const amio::detail::VarMeta &) override {}
 
     void read(amio::detail::StagingBuffer &dst, const amio::detail::VarMeta &, std::int64_t,
@@ -126,8 +126,8 @@ class OverCapacityMockDriver : public amio::detail::Backend_Driver {
 // ---------------------------------------------------------------
 class ThrowingCapacityMockDriver : public amio::detail::Backend_Driver {
    public:
-    void open_write(const eckit::Configuration &) override {}
-    void open_read(const eckit::Configuration &) override {}
+    void open_write(const conf::Config &) override {}
+    void open_read(const conf::Config &) override {}
     void write(const amio::detail::StagingBuffer &, const amio::detail::VarMeta &) override {}
 
     void read(amio::detail::StagingBuffer &dst, const amio::detail::VarMeta &, std::int64_t,
@@ -150,8 +150,8 @@ class ThrowingCapacityMockDriver : public amio::detail::Backend_Driver {
 // ---------------------------------------------------------------
 class GoodMockDriver : public amio::detail::Backend_Driver {
    public:
-    void open_write(const eckit::Configuration &) override {}
-    void open_read(const eckit::Configuration &) override {}
+    void open_write(const conf::Config &) override {}
+    void open_read(const conf::Config &) override {}
     void write(const amio::detail::StagingBuffer &, const amio::detail::VarMeta &) override {}
 
     void read(amio::detail::StagingBuffer &dst, const amio::detail::VarMeta &meta, std::int64_t,

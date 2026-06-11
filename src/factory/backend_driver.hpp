@@ -10,12 +10,12 @@
 // backend drivers (NetCDF_Driver, Zarr_Driver, GRIB2_Driver)
 // implement.  It declares pure virtual methods for opening,
 // writing, reading, flushing, and closing datasets.  The
-// Backend_Factory (eckit::Factory<Backend_Driver>) dispatches to
-// concrete implementations based on a string key registered at
-// static initialization time.
+// Backend_Factory (AMIO's own string-keyed singleton registry)
+// dispatches to concrete implementations based on a string key
+// registered at static initialization time.
 //
 // The class operates on:
-//   * eckit::Configuration for dataset/variable configuration
+//   * conf::Config for dataset/variable configuration
 //   * StagingBuffer references for data payloads
 //   * VarMeta descriptors for variable metadata (dtype, shape, name)
 //   * BoundingBox descriptors for selective reads
@@ -41,15 +41,13 @@
 #include <optional>
 #include <string>
 
-#include "amio/amio_types.h"
+#include <conf/config.hpp>
 
-// Forward-declare eckit::Configuration to avoid requiring eckit
-// headers in translation units that only need the Backend_Driver
-// interface declaration.  When eckit is available, the full header
-// is included by concrete driver implementations.
-namespace eckit {
-class Configuration;
-}  // namespace eckit
+#ifdef AMIO_HAS_MPI
+#include <mpi.h>
+#endif
+
+#include "amio/amio_types.h"
 
 namespace amio::detail {
 
@@ -186,10 +184,10 @@ struct VariableInfo {
 // ---------------------------------------------------------------
 
 // Backend_Driver is the pure virtual interface that concrete drivers
-// implement.  It is registered with eckit::Factory<Backend_Driver>
-// keyed by a string (e.g., "netcdf4", "zarr3", "grib2").  New
-// drivers register at static initialization via
-// eckit::ConcreteBuilderT0<Backend_Driver, ConcreteDriver>("key")
+// implement.  It is registered with AMIO's Backend_Factory (a
+// string-keyed singleton registry) keyed by a string (e.g.,
+// "netcdf4", "zarr3", "grib2").  New drivers register at static
+// initialization via BackendRegistrar<ConcreteDriver>("key")
 // without any modification to the public API (R4.2).
 //
 // Lifecycle:
@@ -202,10 +200,11 @@ struct VariableInfo {
 //   5. close() is called to release resources.
 //
 // Exception contract:
-//   All methods may throw eckit::Exception (or std::exception
-//   subclasses) on failure.  The Worker_Pool exception cordon
-//   catches these and translates them to AMIO_ERR_* codes recorded
-//   against the originating handle (R12.1, R12.2).
+//   All methods may throw std::exception subclasses (including
+//   conf::Conf_Error for configuration problems) on failure.
+//   The Worker_Pool exception cordon catches these and translates
+//   them to AMIO_ERR_* codes recorded against the originating
+//   handle (R12.1, R12.2).
 class Backend_Driver {
    public:
     virtual ~Backend_Driver() = default;
@@ -216,17 +215,18 @@ class Backend_Driver {
     // file path / URI, data model, compression codec, chunk/shard
     // shapes, and any driver-specific options.
     //
-    // Throws eckit::Exception on failure (e.g., missing Parallel
-    // HDF5 support, invalid data model, missing required fields).
-    virtual void open_write(const eckit::Configuration& config) = 0;
+    // Throws std::exception (or conf::Conf_Error) on failure
+    // (e.g., missing Parallel HDF5 support, invalid data model,
+    // missing required fields).
+    virtual void open_write(const conf::Config& config) = 0;
 
     // open_read -- prepare the driver for read operations.
     //
     // The configuration contains dataset-level parameters such as
     // file path / URI and any driver-specific options.
     //
-    // Throws eckit::Exception on failure.
-    virtual void open_read(const eckit::Configuration& config) = 0;
+    // Throws std::exception (or conf::Conf_Error) on failure.
+    virtual void open_read(const conf::Config& config) = 0;
 
     // write -- serialize a staging buffer payload to storage.
     //
@@ -238,7 +238,7 @@ class Backend_Driver {
     // The driver encodes the payload according to its format and
     // writes it to the storage layer.  On success, the data is
     // durable (or at least committed to the driver's internal
-    // write pipeline).  On failure, throws eckit::Exception.
+    // write pipeline).  On failure, throws std::exception.
     //
     // The caller (Worker_Pool) holds the per-(dataset, variable)
     // ordering mutex during this call, ensuring writes to the same
@@ -257,21 +257,46 @@ class Backend_Driver {
     //          ranges from storage (R5.7)
     //
     // On success, dst.data[0..dst.used_bytes) contains the decoded
-    // payload.  On failure, throws eckit::Exception.
+    // payload.  On failure, throws std::exception.
     virtual void read(StagingBuffer& dst, const VarMeta& meta, std::int64_t timestep, const std::optional<BoundingBox>& bbox) = 0;
 
     // flush -- ensure all previously written data is durable.
     //
     // Blocks until all pending internal write operations (if any)
-    // have completed.  Throws eckit::Exception on failure.
+    // have completed.  Throws std::exception on failure.
     virtual void flush() = 0;
 
     // close -- release all resources held by the driver.
     //
     // After close(), no further write/read/flush calls are valid.
-    // Throws eckit::Exception if outstanding operations cannot be
+    // Throws std::exception if outstanding operations cannot be
     // completed.
     virtual void close() = 0;
+
+    // set_communicator -- provide the MPI communicator handle for
+    // parallel I/O operations.
+    //
+    // Called by the C_Boundary after factory construction but before
+    // open_write / open_read.  Drivers that need a raw MPI_Comm for
+    // parallel file creation (e.g., nc_create_par, nc_open_par) override
+    // this to store the handle.  The default implementation is a no-op
+    // so that drivers without MPI needs (Zarr, GRIB2) remain unchanged.
+    //
+    // The caller (AMIO_Core) guarantees that the owning
+    // halo::Communicator in IOCommunicator outlives all driver usages
+    // of the handle (the IOCommunicator lives on the Worker_Pool, which
+    // is destroyed after all datasets are closed).  (R3.3, R10.4)
+    //
+    // Parameters:
+    //   comm_handle - raw MPI_Comm from IOCommunicator::handle().
+    //                 When no communicator split was performed, this is
+    //                 MPI_COMM_WORLD.  When MPI is unavailable, this
+    //                 method is never called.
+#ifdef AMIO_HAS_MPI
+    virtual void set_communicator(MPI_Comm comm_handle) {
+        (void)comm_handle;
+    }
+#endif
 
     // describe_variable -- report a variable's element type, shape, and
     // timestep count (Dataset_Metadata).

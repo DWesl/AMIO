@@ -54,8 +54,8 @@ namespace {
 // a valid HDF5 parallel file and crash the test).
 class NoOpDriver : public Backend_Driver {
    public:
-    void open_write(const eckit::Configuration& /*config*/) override {}
-    void open_read(const eckit::Configuration& /*config*/) override {}
+    void open_write(const conf::Config& /*config*/) override {}
+    void open_read(const conf::Config& /*config*/) override {}
     void write(const StagingBuffer& /*src*/, const VarMeta& /*meta*/) override {
         // No-op: accepts the write without I/O.
     }
