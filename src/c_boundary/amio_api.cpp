@@ -34,6 +34,7 @@
 #define AMIO_BUILDING_LIBRARY 1
 
 #include <cstdint>
+#include <cstring>
 #include <exception>
 #include <new>  // std::bad_alloc
 #include <type_traits>
@@ -208,6 +209,15 @@ AMIO_API amio_status_t amio_view_data(amio_view_handle view, const void **out_da
     *out_size = 0;
     return kind_dispatch(view, HandleKind::View,
                          [&](void *payload) -> amio_status_t { return amio::detail::view_data(payload, out_data, out_size); });
+}
+
+AMIO_API amio_status_t amio_view_shape(amio_view_handle view, amio_shape_t *out_shape) {
+    if (out_shape == nullptr) {
+        return AMIO_ERR_INVALID_INPUT;
+    }
+    std::memset(out_shape, 0, sizeof(amio_shape_t));
+    return kind_dispatch(view, HandleKind::View,
+                         [&](void *payload) -> amio_status_t { return amio::detail::view_shape(payload, out_shape); });
 }
 
 // amio_strerror is intentionally NOT defined in this translation

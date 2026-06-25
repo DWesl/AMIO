@@ -88,9 +88,13 @@ amio_status_t init(const char *manifest_path, amio_core_handle *out_core) {
         core->staging_pool = std::make_unique<StagingPool>(cfg.staging_pool.buffer_count, cfg.staging_pool.buffer_capacity_bytes,
                                                            static_cast<std::int64_t>(cfg.staging_timeout_ms));
 
-        WorkerPoolConfig wp{};
-        wp.thread_count = cfg.worker_pool.threads;
-        core->worker_pool = std::make_unique<WorkerPool>(wp);
+        if (cfg.worker_pool.threads > 0) {
+            WorkerPoolConfig wp{};
+            wp.thread_count = cfg.worker_pool.threads;
+            core->worker_pool = std::make_unique<WorkerPool>(wp);
+        } else {
+            core->worker_pool = nullptr;
+        }
     } catch (...) {
         // Pool construction failed -- AMIO_ERR_BACKEND_FAILURE, no
         // handle minted (Req 1.4).  `core` is destroyed here, tearing
@@ -111,7 +115,11 @@ amio_status_t init(const char *manifest_path, amio_core_handle *out_core) {
     // (configure_communicator, set_threshold) are visible to other
     // threads that load logs_initialized with memory_order_acquire.
 #ifdef AMIO_HAS_MPI
-    core->logger.configure_communicator(core->worker_pool->io_communicator().handle());
+    if (core->worker_pool) {
+        core->logger.configure_communicator(core->worker_pool->io_communicator().handle());
+    } else {
+        core->logger.configure_communicator(MPI_COMM_WORLD);
+    }
 #else
     // Without MPI the Logger receives MPI_COMM_NULL (a no-op
     // configuration that leaves the rank as the sentinel -1).
@@ -262,8 +270,11 @@ amio_status_t open_dataset(void *core_payload, const char *config_path, std::int
         } else /* AMIO_MODE_READ */ {
             driver->open_read(manifest_cfg);
         }
+    } catch (const std::exception &e) {
+        std::cerr << "[AMIO ERROR] open_dataset failed: " << e.what() << std::endl;
+        return AMIO_ERR_BACKEND_FAILURE;
     } catch (...) {
-        // Open failed -- AMIO_ERR_BACKEND_FAILURE, no handle (Req 2.2).
+        std::cerr << "[AMIO ERROR] open_dataset failed: unknown exception" << std::endl;
         return AMIO_ERR_BACKEND_FAILURE;
     }
 
@@ -766,17 +777,22 @@ static amio_status_t validate_bbox(const amio_bbox_t *b, const amio_shape_t &sha
 static VariableReadState *resolve_variable(DatasetRecord *record, const std::string &var_name) {
     std::lock_guard<std::mutex> lock(record->variables_mu);
 
+    std::cerr << "[AMIO STUBS DEBUG] resolve_variable: var_name = '" << var_name << "'" << std::endl;
+
     // Reuse existing state if the variable has already been resolved.
     auto it = record->variables.find(var_name);
     if (it != record->variables.end()) {
+        std::cerr << "[AMIO STUBS DEBUG] resolve_variable: found cached state for '" << var_name << "'" << std::endl;
         return it->second.get();
     }
 
     // First use of this variable: probe the backend for its metadata.
     if (!record->driver) {
+        std::cerr << "[AMIO STUBS DEBUG] resolve_variable error: record->driver is NULL" << std::endl;
         return nullptr;
     }
     VariableInfo info = record->driver->describe_variable(var_name);
+    std::cerr << "[AMIO STUBS DEBUG] resolve_variable: record->driver->describe_variable returned found = " << (info.found ? "true" : "false") << std::endl;
     if (!info.found) {
         // Variable absent or driver cannot introspect it (Req 4.5).
         return nullptr;
@@ -908,6 +924,15 @@ amio_status_t read(void *dataset_payload, const char *var_name, std::int64_t tim
     view_rec->core = core;
     view_rec->dataset_id = record->dataset_id;
     view_rec->timestep = timestep;
+    if (bbox != nullptr) {
+        view_rec->shape.rank = bbox->rank;
+        for (int d = 0; d < bbox->rank && d < AMIO_MAX_RANK; ++d) {
+            view_rec->shape.extents[d] = bbox->extents[d];
+            view_rec->shape.strides[d] = bbox->strides[d];
+        }
+    } else {
+        view_rec->shape = vs->info.shape;
+    }
 
     // Insert into handle table as a View handle.
     auto view_token = process_handle_table().insert(HandleKind::View, view_rec);
@@ -998,6 +1023,15 @@ amio_status_t view_data(void *view_payload, const void **out_data, std::size_t *
     }
     *out_data = view_rec->staging_buf->data;
     *out_size = view_rec->staging_buf->used_bytes;
+    return AMIO_OK;
+}
+
+amio_status_t view_shape(void *view_payload, amio_shape_t *out_shape) {
+    auto *view_rec = static_cast<ViewRecord *>(view_payload);
+    if (view_rec == nullptr) {
+        return AMIO_ERR_INVALID_HANDLE;
+    }
+    *out_shape = view_rec->shape;
     return AMIO_OK;
 }
 

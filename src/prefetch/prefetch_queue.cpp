@@ -331,10 +331,14 @@ void PrefetchQueue::sync_fetch(std::int64_t timestep, const amio_bbox_t* bbox) {
         }
 
         mark_complete(timestep, buf);
+    } catch (const std::exception &e) {
+        std::cerr << "[AMIO PREFETCH ERROR] driver_->read failed: " << e.what() << std::endl;
+        if (pool_ && buf) {
+            pool_->release(buf);
+        }
+        mark_failed(timestep, AMIO_ERR_BACKEND_FAILURE);
     } catch (...) {
-        // Release the buffer back to the pool on failure.  Driver-thrown
-        // capacity guards (payload > dst.capacity_bytes) land here and
-        // surface as AMIO_ERR_BACKEND_FAILURE with no view (Req 4.4).
+        std::cerr << "[AMIO PREFETCH ERROR] driver_->read failed: unknown exception" << std::endl;
         if (pool_ && buf) {
             pool_->release(buf);
         }

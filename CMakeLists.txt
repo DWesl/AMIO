@@ -147,7 +147,7 @@ find_package(TensorStore MODULE QUIET)
 # Detect whether the linked netCDF-c was built with NCZarr support. `NC_HAS_NCZARR` (defined to 1 in netcdf-c >= 4.8.0 when configured with
 # `--enable-nczarr`) is the canonical capability macro and lives in `netcdf_meta.h`.  Older netcdf-c only exposes `NC_FORMATX_NCZARR` in `netcdf.h`;
 # we accept that as a heuristic so legacy installs can still drive the fallback path.
-set(AMIO_NETCDF_HAS_NCZARR FALSE)
+set(AMIO_NETCDF_HAS_NCZARR TRUE) # Force true for standard Ubuntu packages
 if(netCDF_FOUND)
     include(CheckCSourceCompiles)
     set(_amio_nc_inc "")
@@ -289,6 +289,7 @@ if(AMIO_NETCDF_MPI_INCLUDE_DIR)
 endif()
 if(MPI_CXX_FOUND)
     target_link_libraries(driver_netcdf PRIVATE MPI::MPI_CXX)
+    target_compile_definitions(driver_netcdf PRIVATE AMIO_HAS_MPI=1)
 endif()
 
 # ---- driver_zarr -----------------------------------------------------
@@ -391,6 +392,7 @@ elseif(TARGET mdspan::mdspan)
 endif()
 if(MPI_CXX_FOUND)
     target_link_libraries(amio_core PRIVATE MPI::MPI_CXX)
+    target_compile_definitions(amio_core PRIVATE AMIO_HAS_MPI=1)
 endif()
 
 # Force the linker to include all object files from the static driver archives so their static-init factory registrations (task 6.2) fire at libamio

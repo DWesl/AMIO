@@ -164,7 +164,7 @@ struct WorkerPoolConfig {
 class WorkerPool {
    public:
     // Configuration limits (from design.md / requirements).
-    static constexpr std::size_t kMinThreadCount = 1;
+    static constexpr std::size_t kMinThreadCount = 0;
     static constexpr std::size_t kMaxThreadCount = 256;
     static constexpr std::size_t kDefaultThreadCount = 1;
 

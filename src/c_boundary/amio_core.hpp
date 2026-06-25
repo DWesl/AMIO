@@ -76,6 +76,7 @@ struct ViewRecord {
     AMIO_Core *core = nullptr;  // back-pointer for pool release
     std::uint64_t dataset_id = 0;
     std::int64_t timestep = -1;
+    amio_shape_t shape = {};
 };
 
 // ---------------------------------------------------------------
@@ -258,6 +259,8 @@ amio_status_t wait(void *io_payload, std::int64_t timeout_ms);
 amio_status_t release_view(void *view_payload);
 
 amio_status_t view_data(void *view_payload, const void **out_data, std::size_t *out_size);
+
+amio_status_t view_shape(void *view_payload, amio_shape_t *out_shape);
 
 }  // namespace amio::detail
 

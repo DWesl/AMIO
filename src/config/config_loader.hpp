@@ -148,7 +148,7 @@ class ConfigLoader {
     static constexpr std::size_t kMaxBufferCount = 4096;
     static constexpr std::size_t kMinBufferCapacity = 1;
     static constexpr std::size_t kMaxBufferCapacity = 1'073'741'824;  // 1 GiB
-    static constexpr std::size_t kMinThreads = 1;
+    static constexpr std::size_t kMinThreads = 0;
     static constexpr std::size_t kMaxThreads = 256;
     static constexpr std::size_t kMinPrefetchDepth = 1;
     static constexpr std::size_t kMaxPrefetchDepth = 1024;

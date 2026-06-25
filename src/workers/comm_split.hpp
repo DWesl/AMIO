@@ -84,6 +84,35 @@ struct IOCommunicator {
     std::optional<halo::Communicator> io_comm;  // RAII-owned split result
 #endif
 
+    IOCommunicator() = default;
+    IOCommunicator(IOCommunicator&&) = default;
+    IOCommunicator& operator=(IOCommunicator&&) = default;
+
+    // Custom copy constructor and copy assignment operator to support duplicate wrapping
+    IOCommunicator(const IOCommunicator& other)
+        : valid(other.valid), is_io_rank(other.is_io_rank) {
+#ifdef AMIO_HAS_MPI
+        if (other.io_comm.has_value()) {
+            io_comm.emplace(other.io_comm->duplicate());
+        }
+#endif
+    }
+
+    IOCommunicator& operator=(const IOCommunicator& other) {
+        if (this != &other) {
+            valid = other.valid;
+            is_io_rank = other.is_io_rank;
+#ifdef AMIO_HAS_MPI
+            if (other.io_comm.has_value()) {
+                io_comm.emplace(other.io_comm->duplicate());
+            } else {
+                io_comm.reset();
+            }
+#endif
+        }
+        return *this;
+    }
+
     // Accessors (inline, header-only)
 
     /// Returns the raw MPI_Comm handle for use in MPI C APIs.

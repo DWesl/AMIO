@@ -148,6 +148,8 @@ void test_flush_close_wait_release_null_handle() {
     EXPECT_TRUE(amio_close(nullptr) == AMIO_ERR_NULL_HANDLE, "amio_close(NULL) did not return AMIO_ERR_NULL_HANDLE");
     EXPECT_TRUE(amio_wait(nullptr, /*timeout_ms=*/1) == AMIO_ERR_NULL_HANDLE, "amio_wait(NULL) did not return AMIO_ERR_NULL_HANDLE");
     EXPECT_TRUE(amio_release_view(nullptr) == AMIO_ERR_NULL_HANDLE, "amio_release_view(NULL) did not return AMIO_ERR_NULL_HANDLE");
+    amio_shape_t shape{};
+    EXPECT_TRUE(amio_view_shape(nullptr, &shape) == AMIO_ERR_NULL_HANDLE, "amio_view_shape(NULL) did not return AMIO_ERR_NULL_HANDLE");
 }
 
 // -------------------------------------------------------------------
@@ -164,6 +166,9 @@ void test_flush_close_wait_release_garbage_handle() {
     EXPECT_TRUE(amio_close(bogus_dataset) == AMIO_ERR_INVALID_HANDLE, "amio_close(garbage) did not return AMIO_ERR_INVALID_HANDLE");
     EXPECT_TRUE(amio_wait(bogus_io, 0) == AMIO_ERR_INVALID_HANDLE, "amio_wait(garbage) did not return AMIO_ERR_INVALID_HANDLE");
     EXPECT_TRUE(amio_release_view(bogus_view) == AMIO_ERR_INVALID_HANDLE, "amio_release_view(garbage) did not return AMIO_ERR_INVALID_HANDLE");
+    amio_shape_t shape{};
+    EXPECT_TRUE(amio_view_shape(bogus_view, &shape) == AMIO_ERR_INVALID_HANDLE, "amio_view_shape(garbage) did not return AMIO_ERR_INVALID_HANDLE");
+    EXPECT_TRUE(amio_view_shape(bogus_view, nullptr) == AMIO_ERR_INVALID_INPUT, "amio_view_shape(garbage, NULL) did not return AMIO_ERR_INVALID_INPUT");
 }
 
 }  // namespace

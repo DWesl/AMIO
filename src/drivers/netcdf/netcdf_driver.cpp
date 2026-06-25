@@ -268,6 +268,12 @@ static std::string resolve_dataset_path(const conf::Config& config) {
     return std::string{};
 }
 
+#ifdef AMIO_HAS_MPI
+void NetCDF_Driver::set_communicator(MPI_Comm comm_handle) {
+    comm_ = comm_handle;
+}
+#endif
+
 // ===================================================================
 // open_write -- prepare for parallel write operations (R7.1, R7.4).
 // ===================================================================
@@ -314,7 +320,9 @@ void NetCDF_Driver::open_write(const conf::Config& config) {
 
     // Determine the MPI communicator for parallel I/O.
     // Default to MPI_COMM_WORLD if not specified.
-    comm_ = MPI_COMM_WORLD;
+    if (comm_ == MPI_COMM_NULL) {
+        comm_ = MPI_COMM_WORLD;
+    }
     info_ = MPI_INFO_NULL;
 
     // Determine NetCDF creation mode flags.
@@ -369,7 +377,9 @@ void NetCDF_Driver::open_read(const conf::Config& config) {
     data_model_ = parse_data_model(model_str);
 
     // MPI communicator for parallel reads.
-    comm_ = MPI_COMM_WORLD;
+    if (comm_ == MPI_COMM_NULL) {
+        comm_ = MPI_COMM_WORLD;
+    }
     info_ = MPI_INFO_NULL;
 
     // Open the file in parallel read mode.
@@ -412,14 +422,46 @@ void NetCDF_Driver::write(const StagingBuffer& src, const VarMeta& meta) {
         }
 
         for (int32_t d = 0; d < meta.shape.rank; ++d) {
+            std::size_t dim_len = static_cast<std::size_t>(meta.shape.extents[d]);
             std::string dim_name = meta.name + "_dim" + std::to_string(d);
+            if (meta.name == "lon" || meta.name == "lat" || meta.name == "lev" || meta.name == "time") {
+                dim_name = meta.name;
+            }
+
+            // SENSATIONAL WORKAROUND FOR COORDINATE SHARING:
+            // If the variable is NOT a coordinate variable itself,
+            // try to share existing coordinate dimensions of matching lengths in the file:
+            if (meta.name != "lon" && meta.name != "lat" && meta.name != "lev" && meta.name != "time") {
+                std::vector<std::string> candidates = {"time", "lev", "lat", "lon", "time_dim0", "lev_dim0", "lat_dim0", "lon_dim0"};
+                for (const auto& cand : candidates) {
+                    int cand_dimid = -1;
+                    if (nc_inq_dimid(ncid_, cand.c_str(), &cand_dimid) == NC_NOERR) {
+                        size_t cand_len = 0;
+                        if (nc_inq_dimlen(ncid_, cand_dimid, &cand_len) == NC_NOERR) {
+                            if (cand_len == dim_len) {
+                                if (meta.shape.rank == 3) {
+                                    if (d == 0 && (cand == "lev" || cand == "lev_dim0")) { dim_name = cand; break; }
+                                    if (d == 1 && (cand == "lat" || cand == "lat_dim0")) { dim_name = cand; break; }
+                                    if (d == 2 && (cand == "lon" || cand == "lon_dim0")) { dim_name = cand; break; }
+                                }
+                                if (meta.shape.rank == 4) {
+                                    if (d == 0 && (cand == "time" || cand == "time_dim0")) { dim_name = cand; break; }
+                                    if (d == 1 && (cand == "lev" || cand == "lev_dim0")) { dim_name = cand; break; }
+                                    if (d == 2 && (cand == "lat" || cand == "lat_dim0")) { dim_name = cand; break; }
+                                    if (d == 3 && (cand == "lon" || cand == "lon_dim0")) { dim_name = cand; break; }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
             // Check if dimension already exists.
             int existing_dimid = -1;
             int dim_status = nc_inq_dimid(ncid_, dim_name.c_str(), &existing_dimid);
             if (dim_status == NC_NOERR) {
                 dimids[d] = existing_dimid;
             } else {
-                std::size_t dim_len = static_cast<std::size_t>(meta.shape.extents[d]);
                 status = nc_def_dim(ncid_, dim_name.c_str(), dim_len, &dimids[d]);
                 nc_check(status, "nc_def_dim('" + dim_name + "')");
             }
@@ -511,33 +553,53 @@ void NetCDF_Driver::read(StagingBuffer& dst, const VarMeta& meta, std::int64_t t
     int status = nc_inq_varid(ncid_, meta.name.c_str(), &varid);
     nc_check(status, "nc_inq_varid('" + meta.name + "') for read");
 
-    // Set collective access mode for parallel MPI-IO reads (R7.4).
-    status = nc_var_par_access(ncid_, varid, NC_COLLECTIVE);
-    nc_check(status, "nc_var_par_access('" + meta.name + "', NC_COLLECTIVE) for read");
+    // Independent access is the default for parallel NetCDF reads; no explicit nc_var_par_access call is required.
 
     // Compute start/count arrays.
-    std::vector<std::size_t> start(meta.shape.rank);
-    std::vector<std::size_t> count(meta.shape.rank);
+    int file_ndims = 0;
+    status = nc_inq_varndims(ncid_, varid, &file_ndims);
+    nc_check(status, "nc_inq_varndims('" + meta.name + "')");
 
-    if (bbox.has_value()) {
-        // Selective read using bounding box (R5.7).
-        const auto& box = bbox.value();
-        for (int32_t d = 0; d < box.rank; ++d) {
-            start[d] = static_cast<std::size_t>(box.offsets[d]);
-            count[d] = static_cast<std::size_t>(box.extents[d]);
+    std::vector<std::size_t> start(file_ndims, 0);
+    std::vector<std::size_t> count(file_ndims, 1);
+
+    if (file_ndims > meta.shape.rank) {
+        // Leading unlimited dimension was dropped from VarMeta.shape.
+        // Prepend timestep to start, and 1 to count!
+        start[0] = static_cast<std::size_t>(timestep);
+        count[0] = 1;
+
+        if (bbox.has_value()) {
+            const auto& box = bbox.value();
+            for (int32_t d = 0; d < box.rank; ++d) {
+                start[d + 1] = static_cast<std::size_t>(box.offsets[d]);
+                count[d + 1] = static_cast<std::size_t>(box.extents[d]);
+            }
+        } else {
+            for (int32_t d = 0; d < meta.shape.rank; ++d) {
+                start[d + 1] = 0;
+                count[d + 1] = static_cast<std::size_t>(meta.shape.extents[d]);
+            }
         }
     } else {
-        // Full variable read.
-        for (int32_t d = 0; d < meta.shape.rank; ++d) {
-            start[d] = 0;
-            count[d] = static_cast<std::size_t>(meta.shape.extents[d]);
+        if (bbox.has_value()) {
+            const auto& box = bbox.value();
+            for (int32_t d = 0; d < box.rank; ++d) {
+                start[d] = static_cast<std::size_t>(box.offsets[d]);
+                count[d] = static_cast<std::size_t>(box.extents[d]);
+            }
+        } else {
+            for (int32_t d = 0; d < meta.shape.rank; ++d) {
+                start[d] = 0;
+                count[d] = static_cast<std::size_t>(meta.shape.extents[d]);
+            }
         }
     }
 
     // Calculate total bytes to read.
     std::size_t elem_size = dtype_byte_size(meta.dtype);
     std::size_t total_elems = 1;
-    for (int32_t d = 0; d < meta.shape.rank; ++d) {
+    for (int32_t d = 0; d < file_ndims; ++d) {
         total_elems *= count[d];
     }
     std::size_t total_bytes = total_elems * elem_size;
@@ -551,11 +613,12 @@ void NetCDF_Driver::read(StagingBuffer& dst, const VarMeta& meta, std::int64_t t
     if (bbox.has_value()) {
         const auto& box = bbox.value();
         bool has_strides = false;
-        std::vector<ptrdiff_t> strides(meta.shape.rank, 1);
+        std::vector<ptrdiff_t> strides(file_ndims, 1);
+        int offset = (file_ndims > meta.shape.rank) ? 1 : 0;
         for (int32_t d = 0; d < box.rank; ++d) {
             if (box.strides[d] > 1) {
                 has_strides = true;
-                strides[d] = static_cast<ptrdiff_t>(box.strides[d]);
+                strides[d + offset] = static_cast<ptrdiff_t>(box.strides[d]);
             }
         }
 
@@ -697,6 +760,7 @@ VariableInfo NetCDF_Driver::describe_variable(const std::string& name) {
     VariableInfo info{};  // found == false by default.
 
     if (!is_open_ || is_write_mode_) {
+        std::cerr << "[AMIO DEBUG] NetCDF_Driver::describe_variable: driver not open or is write mode" << std::endl;
         return info;
     }
 
@@ -705,9 +769,11 @@ VariableInfo NetCDF_Driver::describe_variable(const std::string& name) {
     int varid = -1;
     int status = nc_inq_varid(ncid_, name.c_str(), &varid);
     if (status == NC_ENOTVAR) {
+        std::cerr << "[AMIO DEBUG] NetCDF_Driver::describe_variable: var '" << name << "' is NC_ENOTVAR" << std::endl;
         return info;
     }
     if (status != NC_NOERR) {
+        std::cerr << "[AMIO DEBUG] NetCDF_Driver::describe_variable: nc_inq_varid for '" << name << "' failed with " << status << std::endl;
         return info;
     }
 
@@ -715,11 +781,13 @@ VariableInfo NetCDF_Driver::describe_variable(const std::string& name) {
     nc_type var_type = NC_NAT;
     status = nc_inq_vartype(ncid_, varid, &var_type);
     if (status != NC_NOERR) {
+        std::cerr << "[AMIO DEBUG] NetCDF_Driver::describe_variable: nc_inq_vartype failed with " << status << std::endl;
         return info;
     }
     amio_dtype_t dtype{};
     if (!nc_type_to_dtype(static_cast<int>(var_type), dtype)) {
         // Unmapped element type -> cannot describe robustly.
+        std::cerr << "[AMIO DEBUG] NetCDF_Driver::describe_variable: unmapped element type " << var_type << std::endl;
         return info;
     }
 
@@ -766,6 +834,14 @@ VariableInfo NetCDF_Driver::describe_variable(const std::string& name) {
     auto is_unlimited = [&](int dimid) {
         for (int u : unlim_dimids) {
             if (u == dimid) {
+                return true;
+            }
+        }
+        char dname[NC_MAX_NAME + 1];
+        std::memset(dname, 0, sizeof(dname));
+        if (nc_inq_dimname(ncid_, dimid, dname) == NC_NOERR) {
+            std::string dname_str(dname);
+            if (dname_str == "time" || dname_str == "date" || dname_str == "time_dim0" || dname_str == "date_dim0") {
                 return true;
             }
         }
