@@ -238,6 +238,19 @@ AMIO_API amio_status_t amio_wait(amio_io_handle io, int64_t timeout_ms);
 AMIO_API amio_status_t amio_view_data(amio_view_handle view, const void **out_data, size_t *out_size);
 
 /**
+ * @brief Retrieve the shape descriptor of an outstanding read view.
+ *
+ * @param[in]  view       A valid view handle from amio_read().
+ * @param[out] out_shape  Non-NULL pointer; receives the shape descriptor.
+ *
+ * @return AMIO_OK on success, or one of:
+ *   - AMIO_ERR_NULL_HANDLE — view is NULL
+ *   - AMIO_ERR_INVALID_HANDLE — view stale or wrong kind
+ *   - AMIO_ERR_INVALID_INPUT — out_shape is NULL
+ */
+AMIO_API amio_status_t amio_view_shape(amio_view_handle view, amio_shape_t *out_shape);
+
+/**
  * @brief Release a read-side Memory_View, returning its buffer to the pool.
  *
  * Once the last reference is dropped, the buffer returns to the
