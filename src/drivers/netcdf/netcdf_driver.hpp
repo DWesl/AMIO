@@ -82,7 +82,7 @@ class NetCDF_Driver : public Backend_Driver {
     void flush() override;
     void close() override;
 
-#ifdef AMIO_HAS_MPI
+#if defined(AMIO_HAS_MPI) && defined(AMIO_HAS_NETCDF)
     // Override set_communicator to receive the I/O communicator
     // handle from the Worker_Pool's IOCommunicator (R3.3, R10.4).
     // Must be called before open_write / open_read.

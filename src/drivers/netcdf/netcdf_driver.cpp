@@ -30,6 +30,7 @@
 
 #include <algorithm>
 #include <cstring>
+#include <iostream>
 #include <stdexcept>
 #include <string>
 
@@ -268,7 +269,7 @@ static std::string resolve_dataset_path(const conf::Config& config) {
     return std::string{};
 }
 
-#ifdef AMIO_HAS_MPI
+#if defined(AMIO_HAS_MPI) && defined(AMIO_HAS_NETCDF)
 void NetCDF_Driver::set_communicator(MPI_Comm comm_handle) {
     comm_ = comm_handle;
 }
