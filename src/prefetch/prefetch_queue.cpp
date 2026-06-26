@@ -9,6 +9,7 @@
 
 #include <algorithm>
 #include <cassert>
+#include <iostream>
 
 #include "factory/backend_driver.hpp"
 #include "staging/staging_pool.hpp"
