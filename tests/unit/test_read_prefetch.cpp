@@ -54,12 +54,12 @@ static const VariableInfo kVarInfo = make_var_info(AMIO_DTYPE_F32, {256});
 // ---------------------------------------------------------------
 class MockBackendDriver : public Backend_Driver {
    public:
-    void open_write(const conf::Config&) override {}
-    void open_read(const conf::Config&) override {}
+    void open_write(const conf::Config &) override {}
+    void open_read(const conf::Config &) override {}
 
-    void write(const StagingBuffer& /*src*/, const VarMeta& /*meta*/) override {}
+    void write(const StagingBuffer & /*src*/, const VarMeta & /*meta*/) override {}
 
-    void read(StagingBuffer& dst, const VarMeta& /*meta*/, std::int64_t timestep, const std::optional<BoundingBox>& bbox) override {
+    void read(StagingBuffer &dst, const VarMeta & /*meta*/, std::int64_t timestep, const std::optional<BoundingBox> &bbox) override {
         // Fill the buffer with a pattern: each byte = (timestep & 0xFF).
         std::size_t fill_size = dst.capacity_bytes;
 
@@ -161,7 +161,7 @@ void test_get_buffer_immediate_return() {
     pq.schedule_initial();
 
     // Timestep 0 should be completed -- get_buffer returns immediately.
-    StagingBuffer* buf = nullptr;
+    StagingBuffer *buf = nullptr;
     amio_status_t rc = pq.get_buffer(0, nullptr, &buf);
 
     assert(rc == AMIO_OK);
@@ -194,7 +194,7 @@ void test_schedule_next_maintains_lookahead() {
     assert(driver.read_count() == 3);
 
     // Read timestep 0 -> should schedule timestep 0+3=3.
-    StagingBuffer* buf = nullptr;
+    StagingBuffer *buf = nullptr;
     amio_status_t rc = pq.get_buffer(0, nullptr, &buf);
     assert(rc == AMIO_OK);
     pool.release(buf);
@@ -235,7 +235,7 @@ void test_schedule_next_bounds_check() {
 
     // Read timestep 2 -> T+N = 2+3 = 5, which is NOT within bounds
     // (total_timesteps=5, valid range [0,4]).
-    StagingBuffer* buf = nullptr;
+    StagingBuffer *buf = nullptr;
     pq.get_buffer(2, nullptr, &buf);
     pool.release(buf);
 
@@ -260,11 +260,11 @@ void test_schedule_next_bounds_check() {
 // ---------------------------------------------------------------
 class FailingDriver : public Backend_Driver {
    public:
-    void open_write(const conf::Config&) override {}
-    void open_read(const conf::Config&) override {}
-    void write(const StagingBuffer&, const VarMeta&) override {}
+    void open_write(const conf::Config &) override {}
+    void open_read(const conf::Config &) override {}
+    void write(const StagingBuffer &, const VarMeta &) override {}
 
-    void read(StagingBuffer& /*dst*/, const VarMeta& /*meta*/, std::int64_t timestep, const std::optional<BoundingBox>&) override {
+    void read(StagingBuffer & /*dst*/, const VarMeta & /*meta*/, std::int64_t timestep, const std::optional<BoundingBox> &) override {
         if (timestep == fail_timestep_) {
             throw std::runtime_error("simulated read failure");
         }
@@ -299,7 +299,7 @@ void test_failed_prefetch_surfaces_error() {
     assert(pq.failed_count() == 1);     // 2 failed
 
     // Reading timestep 2 should return an error.
-    StagingBuffer* buf = nullptr;
+    StagingBuffer *buf = nullptr;
     amio_status_t rc = pq.get_buffer(2, nullptr, &buf);
     assert(rc != AMIO_OK);
     assert(buf == nullptr);
@@ -338,7 +338,7 @@ void test_bbox_read_selectivity() {
     bbox.strides[1] = 1;
 
     // Request timestep 0 with bbox.
-    StagingBuffer* buf = nullptr;
+    StagingBuffer *buf = nullptr;
     amio_status_t rc = pq.get_buffer(0, &bbox, &buf);
     assert(rc == AMIO_OK);
     assert(buf != nullptr);
@@ -399,7 +399,7 @@ void test_read_timeout() {
     // To test timeout, we'd need an async scenario.  For now, verify
     // that the queue handles the case where a timestep is not yet
     // scheduled -- it schedules it synchronously and returns.
-    StagingBuffer* buf = nullptr;
+    StagingBuffer *buf = nullptr;
     amio_status_t rc = pq.get_buffer(5, nullptr, &buf);
     // With null worker pool, sync_fetch is called, which should succeed.
     assert(rc == AMIO_OK);

@@ -42,7 +42,7 @@ int get_max_cpu_id() {
 
 // Generate a manifest YAML with invalid CPU core bindings.
 // The cores are guaranteed to be outside the valid range.
-std::string make_manifest_with_invalid_cores(const TempDir& dir, const std::vector<int>& invalid_cores) {
+std::string make_manifest_with_invalid_cores(const TempDir &dir, const std::vector<int> &invalid_cores) {
     std::string yaml;
     yaml += "staging_pool:\n";
     yaml += "  buffer_count: 4\n";
@@ -67,7 +67,7 @@ std::string make_manifest_with_invalid_cores(const TempDir& dir, const std::vect
 }
 
 // Generate a manifest YAML with an invalid NUMA domain.
-std::string make_manifest_with_invalid_numa(const TempDir& dir, int invalid_numa_domain) {
+std::string make_manifest_with_invalid_numa(const TempDir &dir, int invalid_numa_domain) {
     std::string yaml;
     yaml += "staging_pool:\n";
     yaml += "  buffer_count: 4\n";

@@ -59,7 +59,7 @@ rc::Gen<WatermarkConfig> genWatermarkConfig() {
 }
 
 // Helper: Create a WorkerPoolConfig with backpressure enabled.
-amio::detail::WorkerPoolConfig make_backpressure_config(const WatermarkConfig& wm) {
+amio::detail::WorkerPoolConfig make_backpressure_config(const WatermarkConfig &wm) {
     amio::detail::WorkerPoolConfig config;
     config.thread_count = 1;  // Single worker thread for deterministic testing.
     config.backpressure.enabled = true;

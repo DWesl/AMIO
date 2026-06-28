@@ -53,7 +53,9 @@
 
 // Forward-declare conf::Config to avoid pulling the full CONF header
 // into every translation unit that includes this private header.
-namespace conf { class Config; }
+namespace conf {
+class Config;
+}
 
 namespace amio::detail {
 
@@ -160,7 +162,7 @@ class ConfigLoader {
     // Lossless codec allow-list: the set of codec names that are
     // permitted in any AMIO manifest.  Any codec not in this set
     // is rejected with AMIO_ERR_LOSSY_CODEC_FORBIDDEN.
-    static const std::vector<std::string>& valid_codecs();
+    static const std::vector<std::string> &valid_codecs();
 
     // parse -- load and validate a manifest file.
     //
@@ -169,65 +171,65 @@ class ConfigLoader {
     // populates `error_out` with the first failing validation rule.
     //
     // The file format is auto-detected: .json → JSON, otherwise YAML.
-    static amio_err_t parse(const std::string& path, Config& config_out, ValidationError& error_out);
+    static amio_err_t parse(const std::string &path, Config &config_out, ValidationError &error_out);
 
     // parse_string -- parse a manifest from a string (for testing).
     //
     // `format` should be "yaml" or "json".
-    static amio_err_t parse_string(const std::string& content, const std::string& format, Config& config_out, ValidationError& error_out);
+    static amio_err_t parse_string(const std::string &content, const std::string &format, Config &config_out, ValidationError &error_out);
 
     // serialize -- emit a YAML string from a Config struct.
     //
     // Round-trip guarantee: parse(serialize(config)) == config
     // for all valid Config values (R11.5).
-    static std::string serialize(const Config& config);
+    static std::string serialize(const Config &config);
 
     // validate -- validate a Config struct against all schema rules.
     //
     // Returns AMIO_OK if valid, or the appropriate error code with
     // `error_out` populated on the first failing rule.
-    static amio_err_t validate(const Config& config, ValidationError& error_out);
+    static amio_err_t validate(const Config &config, ValidationError &error_out);
 
    private:
     // Populate Config from a conf::Config object using CONF typed accessors.
     // Reads scalar and list values via dotted-path keys matching the manifest schema.
-    static amio_err_t populate_from_conf(const conf::Config& manifest, Config& config_out, ValidationError& error_out);
+    static amio_err_t populate_from_conf(const conf::Config &manifest, Config &config_out, ValidationError &error_out);
 
     // Check if a codec name is in the valid codecs list.
-    static bool is_valid_codec(const std::string& name);
+    static bool is_valid_codec(const std::string &name);
 };
 
 // ===================================================================
 // Equality operator for Config (supports round-trip testing).
 // ===================================================================
 
-inline bool operator==(const StagingPoolConfig& a, const StagingPoolConfig& b) {
+inline bool operator==(const StagingPoolConfig &a, const StagingPoolConfig &b) {
     return a.buffer_count == b.buffer_count && a.buffer_capacity_bytes == b.buffer_capacity_bytes;
 }
 
-inline bool operator==(const WorkerPoolCfg& a, const WorkerPoolCfg& b) {
+inline bool operator==(const WorkerPoolCfg &a, const WorkerPoolCfg &b) {
     return a.threads == b.threads && a.cpu_cores == b.cpu_cores && a.numa_domain == b.numa_domain;
 }
 
-inline bool operator==(const PrefetchConfig& a, const PrefetchConfig& b) {
+inline bool operator==(const PrefetchConfig &a, const PrefetchConfig &b) {
     return a.depth == b.depth && a.read_timeout_s == b.read_timeout_s;
 }
 
-inline bool operator==(const BackpressureCfg& a, const BackpressureCfg& b) {
+inline bool operator==(const BackpressureCfg &a, const BackpressureCfg &b) {
     return a.low_watermark == b.low_watermark && a.high_watermark == b.high_watermark && a.queue_capacity == b.queue_capacity;
 }
 
-inline bool operator==(const CodecConfig& a, const CodecConfig& b) {
+inline bool operator==(const CodecConfig &a, const CodecConfig &b) {
     return a.lossless_allow_list == b.lossless_allow_list && a.active_codec == b.active_codec;
 }
 
-inline bool operator==(const Config& a, const Config& b) {
+inline bool operator==(const Config &a, const Config &b) {
     return a.staging_pool == b.staging_pool && a.worker_pool == b.worker_pool && a.prefetch == b.prefetch &&
            a.staging_timeout_ms == b.staging_timeout_ms && a.backpressure == b.backpressure && a.backend == b.backend && a.codec == b.codec &&
            a.io_ranks == b.io_ranks;
 }
 
-inline bool operator!=(const Config& a, const Config& b) {
+inline bool operator!=(const Config &a, const Config &b) {
     return !(a == b);
 }
 

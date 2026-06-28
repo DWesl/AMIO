@@ -278,7 +278,9 @@ void test_backend_registrar() {
     reset_factory();
 
     // Use BackendRegistrar to register a driver.
-    { BackendRegistrar<MockNetCDF_Driver> reg("test_driver"); }
+    {
+        BackendRegistrar<MockNetCDF_Driver> reg("test_driver");
+    }
     // The registrar registered the driver; it should persist even
     // after the registrar object is destroyed (consistent with
     // factory behavior).

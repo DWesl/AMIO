@@ -45,13 +45,13 @@ enum class BadHandleKind : int {
 // Generate a bad handle of the specified kind.
 // For Finalized and DoubleReleased, we create a real handle and
 // then invalidate it.
-static void* make_bad_handle(BadHandleKind kind) {
+static void *make_bad_handle(BadHandleKind kind) {
     switch (kind) {
         case BadHandleKind::Null:
             return nullptr;
 
         case BadHandleKind::GarbageFixed:
-            return reinterpret_cast<void*>(static_cast<uintptr_t>(0xDEADBEEF));
+            return reinterpret_cast<void *>(static_cast<uintptr_t>(0xDEADBEEF));
 
         case BadHandleKind::GarbageRandom: {
             // Generate a random non-zero 64-bit value that is
@@ -61,7 +61,7 @@ static void* make_bad_handle(BadHandleKind kind) {
             while (val == 0) {
                 val = static_cast<uintptr_t>(rng());
             }
-            return reinterpret_cast<void*>(val);
+            return reinterpret_cast<void *>(val);
         }
 
         case BadHandleKind::Finalized: {
@@ -74,9 +74,9 @@ static void* make_bad_handle(BadHandleKind kind) {
             amio_status_t rc = amio_init(path.c_str(), &core);
             if (rc != AMIO_OK || core == nullptr) {
                 // If init fails, fall back to garbage handle.
-                return reinterpret_cast<void*>(static_cast<uintptr_t>(0xBAADF00D));
+                return reinterpret_cast<void *>(static_cast<uintptr_t>(0xBAADF00D));
             }
-            void* stale = core;
+            void *stale = core;
             amio_finalize(core);
             return stale;
         }
@@ -91,9 +91,9 @@ static void* make_bad_handle(BadHandleKind kind) {
             amio_core_handle core = nullptr;
             amio_status_t rc = amio_init(path.c_str(), &core);
             if (rc != AMIO_OK || core == nullptr) {
-                return reinterpret_cast<void*>(static_cast<uintptr_t>(0xDEADC0DE));
+                return reinterpret_cast<void *>(static_cast<uintptr_t>(0xDEADC0DE));
             }
-            void* stale = core;
+            void *stale = core;
             amio_finalize(core);
             // The handle is now released; any subsequent use is "double-released".
             return stale;
@@ -134,7 +134,7 @@ TEST_CASE("P4: amio_open_dataset rejects bad core handles", "[pbt][handles][safe
         "bad core handle → AMIO_ERR_NULL_HANDLE or AMIO_ERR_INVALID_HANDLE, "
         "output arg unmodified",
         [](BadHandleKind kind) {
-            void* bad_core = make_bad_handle(kind);
+            void *bad_core = make_bad_handle(kind);
 
             // Set output arg to sentinel.
             amio_dataset_handle out_dataset = reinterpret_cast<amio_dataset_handle>(kSentinelValue);
@@ -157,7 +157,7 @@ TEST_CASE("P4: amio_open_dataset rejects bad core handles", "[pbt][handles][safe
 
 TEST_CASE("P4: amio_close_dataset rejects bad dataset handles", "[pbt][handles][safety][P4]") {
     rc::check("bad dataset handle → AMIO_ERR_NULL_HANDLE or AMIO_ERR_INVALID_HANDLE", [](BadHandleKind kind) {
-        void* bad_dataset = make_bad_handle(kind);
+        void *bad_dataset = make_bad_handle(kind);
 
         amio_status_t rc = amio_close_dataset(static_cast<amio_dataset_handle>(bad_dataset));
 
@@ -174,7 +174,7 @@ TEST_CASE("P4: amio_write rejects bad dataset handles", "[pbt][handles][safety][
         "bad dataset handle → AMIO_ERR_NULL_HANDLE or AMIO_ERR_INVALID_HANDLE, "
         "output io handle unmodified",
         [](BadHandleKind kind) {
-            void* bad_dataset = make_bad_handle(kind);
+            void *bad_dataset = make_bad_handle(kind);
 
             // Prepare valid-looking arguments.
             float data[4] = {1.0f, 2.0f, 3.0f, 4.0f};
@@ -202,7 +202,7 @@ TEST_CASE("P4: amio_read rejects bad dataset handles", "[pbt][handles][safety][P
         "bad dataset handle → AMIO_ERR_NULL_HANDLE or AMIO_ERR_INVALID_HANDLE, "
         "output view handle unmodified",
         [](BadHandleKind kind) {
-            void* bad_dataset = make_bad_handle(kind);
+            void *bad_dataset = make_bad_handle(kind);
 
             // Set output arg to sentinel.
             amio_view_handle out_view = reinterpret_cast<amio_view_handle>(kSentinelValue);
@@ -219,7 +219,7 @@ TEST_CASE("P4: amio_read rejects bad dataset handles", "[pbt][handles][safety][P
 
 TEST_CASE("P4: amio_flush rejects bad dataset handles", "[pbt][handles][safety][P4]") {
     rc::check("bad dataset handle → AMIO_ERR_NULL_HANDLE or AMIO_ERR_INVALID_HANDLE", [](BadHandleKind kind) {
-        void* bad_dataset = make_bad_handle(kind);
+        void *bad_dataset = make_bad_handle(kind);
 
         amio_status_t rc = amio_flush(static_cast<amio_dataset_handle>(bad_dataset), 1000);
 
@@ -233,7 +233,7 @@ TEST_CASE("P4: amio_flush rejects bad dataset handles", "[pbt][handles][safety][
 
 TEST_CASE("P4: amio_close rejects bad dataset handles", "[pbt][handles][safety][P4]") {
     rc::check("bad dataset handle → AMIO_ERR_NULL_HANDLE or AMIO_ERR_INVALID_HANDLE", [](BadHandleKind kind) {
-        void* bad_dataset = make_bad_handle(kind);
+        void *bad_dataset = make_bad_handle(kind);
 
         amio_status_t rc = amio_close(static_cast<amio_dataset_handle>(bad_dataset));
 
@@ -247,7 +247,7 @@ TEST_CASE("P4: amio_close rejects bad dataset handles", "[pbt][handles][safety][
 
 TEST_CASE("P4: amio_wait rejects bad io handles", "[pbt][handles][safety][P4]") {
     rc::check("bad io handle → AMIO_ERR_NULL_HANDLE or AMIO_ERR_INVALID_HANDLE", [](BadHandleKind kind) {
-        void* bad_io = make_bad_handle(kind);
+        void *bad_io = make_bad_handle(kind);
 
         amio_status_t rc = amio_wait(static_cast<amio_io_handle>(bad_io), 1000);
 
@@ -261,7 +261,7 @@ TEST_CASE("P4: amio_wait rejects bad io handles", "[pbt][handles][safety][P4]") 
 
 TEST_CASE("P4: amio_release_view rejects bad view handles", "[pbt][handles][safety][P4]") {
     rc::check("bad view handle → AMIO_ERR_NULL_HANDLE or AMIO_ERR_INVALID_HANDLE", [](BadHandleKind kind) {
-        void* bad_view = make_bad_handle(kind);
+        void *bad_view = make_bad_handle(kind);
 
         amio_status_t rc = amio_release_view(static_cast<amio_view_handle>(bad_view));
 
@@ -275,7 +275,7 @@ TEST_CASE("P4: amio_release_view rejects bad view handles", "[pbt][handles][safe
 
 TEST_CASE("P4: amio_finalize rejects bad core handles", "[pbt][handles][safety][P4]") {
     rc::check("bad core handle → AMIO_ERR_NULL_HANDLE or AMIO_ERR_INVALID_HANDLE", [](BadHandleKind kind) {
-        void* bad_core = make_bad_handle(kind);
+        void *bad_core = make_bad_handle(kind);
 
         amio_status_t rc = amio_finalize(static_cast<amio_core_handle>(bad_core));
 
@@ -408,7 +408,7 @@ TEST_CASE("P4: any bad handle × any API entry point → safe rejection", "[pbt]
         "returns AMIO_ERR_NULL_HANDLE or AMIO_ERR_INVALID_HANDLE, "
         "no crash, no state mutation",
         [](BadHandleKind kind) {
-            void* bad = make_bad_handle(kind);
+            void *bad = make_bad_handle(kind);
 
             // Test all API entry points that take handles.
             // Each must return a handle error without crashing.

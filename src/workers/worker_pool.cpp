@@ -42,8 +42,6 @@
 
 #include <cassert>
 
-
-
 namespace amio::detail {
 
 WorkerPool::WorkerPool(std::size_t thread_count) : thread_count_(thread_count) {
@@ -59,7 +57,7 @@ WorkerPool::WorkerPool(std::size_t thread_count) : thread_count_(thread_count) {
     }
 }
 
-WorkerPool::WorkerPool(const WorkerPoolConfig& config)
+WorkerPool::WorkerPool(const WorkerPoolConfig &config)
     : thread_count_(config.thread_count), thread_configs_(config.thread_configs), io_comm_(config.io_comm), backpressure_(config.backpressure) {
     assert(config.thread_count >= kMinThreadCount && config.thread_count <= kMaxThreadCount);
 
@@ -84,7 +82,7 @@ void WorkerPool::shutdown() {
     bool expected = false;
     if (!shutdown_.compare_exchange_strong(expected, true)) {
         // Already shut down -- just ensure threads are joined.
-        for (auto& t : workers_) {
+        for (auto &t : workers_) {
             if (t.joinable()) {
                 t.join();
             }
@@ -96,7 +94,7 @@ void WorkerPool::shutdown() {
     cv_.notify_all();
     backpressure_cv_.notify_all();  // Unblock any writers waiting on backpressure.
 
-    for (auto& t : workers_) {
+    for (auto &t : workers_) {
         if (t.joinable()) {
             t.join();
         }
@@ -135,7 +133,7 @@ std::uint64_t WorkerPool::submit_write(DatasetVariableKey dv_key, std::uint64_t 
         }
     }
 
-    DvOrderState& state = get_dv_state(dv_key);
+    DvOrderState &state = get_dv_state(dv_key);
     std::uint64_t seq = state.next_seq++;
 
     WriteTask task;
@@ -150,7 +148,7 @@ std::uint64_t WorkerPool::submit_write(DatasetVariableKey dv_key, std::uint64_t 
     return seq;
 }
 
-amio_err_t WorkerPool::submit_write(DatasetVariableKey dv_key, std::function<void()> callback, std::uint64_t* seq_out) {
+amio_err_t WorkerPool::submit_write(DatasetVariableKey dv_key, std::function<void()> callback, std::uint64_t *seq_out) {
     if (shutdown_.load(std::memory_order_acquire)) {
         if (seq_out) *seq_out = 0;
         return AMIO_OK;  // No-op after shutdown.
@@ -179,7 +177,7 @@ amio_err_t WorkerPool::submit_write(DatasetVariableKey dv_key, std::function<voi
         }
     }
 
-    DvOrderState& state = get_dv_state(dv_key);
+    DvOrderState &state = get_dv_state(dv_key);
     std::uint64_t seq = state.next_seq++;
 
     WriteTask task;
@@ -270,7 +268,7 @@ bool WorkerPool::is_shutdown() const noexcept {
     return shutdown_.load(std::memory_order_acquire);
 }
 
-const IOCommunicator& WorkerPool::io_communicator() const noexcept {
+const IOCommunicator &WorkerPool::io_communicator() const noexcept {
     return io_comm_;
 }
 
@@ -294,11 +292,11 @@ std::size_t WorkerPool::high_watermark() const noexcept {
     return backpressure_.high_watermark;
 }
 
-OutcomeRegistry& WorkerPool::outcome_registry() noexcept {
+OutcomeRegistry &WorkerPool::outcome_registry() noexcept {
     return outcome_registry_;
 }
 
-const OutcomeRegistry& WorkerPool::outcome_registry() const noexcept {
+const OutcomeRegistry &WorkerPool::outcome_registry() const noexcept {
     return outcome_registry_;
 }
 
@@ -309,7 +307,7 @@ void WorkerPool::worker_loop_pinned(std::size_t thread_index) {
     // If the thread_configs_ vector has a config for this index,
     // apply it.  Otherwise, use default (no pinning).
     if (thread_index < thread_configs_.size()) {
-        const ThreadConfig& tc = thread_configs_[thread_index];
+        const ThreadConfig &tc = thread_configs_[thread_index];
         amio_err_t pin_rc = apply_thread_pinning(tc);
         if (pin_rc != AMIO_OK) {
             // Record the pinning failure.  The thread continues
@@ -350,7 +348,7 @@ void WorkerPool::worker_loop() {
     }
 }
 
-bool WorkerPool::try_execute_one(std::unique_lock<std::mutex>& lock) {
+bool WorkerPool::try_execute_one(std::unique_lock<std::mutex> &lock) {
     // Priority: write tasks first, then prefetch tasks.
 
     // --- Try write queue ---
@@ -358,7 +356,7 @@ bool WorkerPool::try_execute_one(std::unique_lock<std::mutex>& lock) {
         WriteTask task = std::move(write_queue_.front());
         write_queue_.pop();
 
-        DvOrderState& state = get_dv_state(task.dv_key);
+        DvOrderState &state = get_dv_state(task.dv_key);
 
         // Check if this task is the next one to execute for its
         // (dataset, variable) pair.
@@ -367,7 +365,7 @@ bool WorkerPool::try_execute_one(std::unique_lock<std::mutex>& lock) {
             write_queue_.push(std::move(task));
             // Try a prefetch task instead.
             if (!prefetch_queue_.empty()) {
-                PrefetchTask ptask = std::move(const_cast<PrefetchTask&>(prefetch_queue_.top()));
+                PrefetchTask ptask = std::move(const_cast<PrefetchTask &>(prefetch_queue_.top()));
                 prefetch_queue_.pop();
 
                 in_flight_.fetch_add(1, std::memory_order_acq_rel);
@@ -384,11 +382,11 @@ bool WorkerPool::try_execute_one(std::unique_lock<std::mutex>& lock) {
                         }
                     }
 #ifdef AMIO_HAS_ECKIT
-                    catch (const eckit::Exception& e) {
+                    catch (const eckit::Exception &e) {
                         emit_parallel_stacktrace(io_comm_, AMIO_ERR_BACKEND_FAILURE, e.what());
                     }
 #endif
-                    catch (const std::exception& e) {
+                    catch (const std::exception &e) {
                         emit_parallel_stacktrace(io_comm_, AMIO_ERR_BACKEND_FAILURE, e.what());
                     } catch (...) {
                         emit_parallel_stacktrace(io_comm_, AMIO_ERR_BACKEND_FAILURE, "Unknown exception (non-std)");
@@ -433,12 +431,12 @@ bool WorkerPool::try_execute_one(std::unique_lock<std::mutex>& lock) {
                     }
                 }
 #ifdef AMIO_HAS_ECKIT
-                catch (const eckit::Exception& e) {
+                catch (const eckit::Exception &e) {
                     // Emit stack trace and swallow (R12.2).
                     emit_parallel_stacktrace(io_comm_, AMIO_ERR_BACKEND_FAILURE, e.what());
                 }
 #endif
-                catch (const std::exception& e) {
+                catch (const std::exception &e) {
                     emit_parallel_stacktrace(io_comm_, AMIO_ERR_BACKEND_FAILURE, e.what());
                 } catch (...) {
                     emit_parallel_stacktrace(io_comm_, AMIO_ERR_BACKEND_FAILURE, "Unknown exception (non-std)");
@@ -463,7 +461,7 @@ bool WorkerPool::try_execute_one(std::unique_lock<std::mutex>& lock) {
 
     // --- Try prefetch queue ---
     if (!prefetch_queue_.empty()) {
-        PrefetchTask task = std::move(const_cast<PrefetchTask&>(prefetch_queue_.top()));
+        PrefetchTask task = std::move(const_cast<PrefetchTask &>(prefetch_queue_.top()));
         prefetch_queue_.pop();
 
         in_flight_.fetch_add(1, std::memory_order_acq_rel);
@@ -479,11 +477,11 @@ bool WorkerPool::try_execute_one(std::unique_lock<std::mutex>& lock) {
                 }
             }
 #ifdef AMIO_HAS_ECKIT
-            catch (const eckit::Exception& e) {
+            catch (const eckit::Exception &e) {
                 emit_parallel_stacktrace(io_comm_, AMIO_ERR_BACKEND_FAILURE, e.what());
             }
 #endif
-            catch (const std::exception& e) {
+            catch (const std::exception &e) {
                 emit_parallel_stacktrace(io_comm_, AMIO_ERR_BACKEND_FAILURE, e.what());
             } catch (...) {
                 emit_parallel_stacktrace(io_comm_, AMIO_ERR_BACKEND_FAILURE, "Unknown exception (non-std)");
@@ -499,7 +497,7 @@ bool WorkerPool::try_execute_one(std::unique_lock<std::mutex>& lock) {
     return false;
 }
 
-WorkerPool::DvOrderState& WorkerPool::get_dv_state(const DatasetVariableKey& key) {
+WorkerPool::DvOrderState &WorkerPool::get_dv_state(const DatasetVariableKey &key) {
     // Caller must hold mu_.
     auto it = dv_states_.find(key);
     if (it == dv_states_.end()) {

@@ -42,7 +42,7 @@ namespace {
 int g_passed = 0;
 int g_failed = 0;
 
-void report_failure(const char* expr, const char* file, int line, const std::string& ctx) {
+void report_failure(const char *expr, const char *file, int line, const std::string &ctx) {
     std::fprintf(stderr, "FAIL %s:%d: %s   (%s)\n", file, line, expr, ctx.c_str());
     ++g_failed;
 }
@@ -71,7 +71,7 @@ float source_value(int t, int lat, int lon) {
 }  // namespace
 
 int main() {
-    const char* OUTPUT_PATH = "/tmp/amio_test_netcdf4_multistep.nc";
+    const char *OUTPUT_PATH = "/tmp/amio_test_netcdf4_multistep.nc";
     const std::string var_name = "temperature";
 
     // Initialize MPI (required for parallel HDF5).
@@ -108,7 +108,7 @@ int main() {
         writer.open_write(cfg);
 
         StagingBuffer buf{};
-        buf.data = reinterpret_cast<std::byte*>(source.data());
+        buf.data = reinterpret_cast<std::byte *>(source.data());
         buf.capacity_bytes = source.size() * sizeof(float);
         buf.used_bytes = source.size() * sizeof(float);
 
@@ -123,7 +123,7 @@ int main() {
         writer.write(buf, meta);
         writer.flush();
         writer.close();
-    } catch (const std::exception& e) {
+    } catch (const std::exception &e) {
         std::fprintf(stdout, "NOTE: NetCDF write path unavailable, skipping: %s\n", e.what());
         functional = false;
     }
@@ -168,7 +168,7 @@ int main() {
 
                 std::vector<float> out(POINTS_PER_STEP, 0.0f);
                 StagingBuffer dst{};
-                dst.data = reinterpret_cast<std::byte*>(out.data());
+                dst.data = reinterpret_cast<std::byte *>(out.data());
                 dst.capacity_bytes = out.size() * sizeof(float);
                 dst.used_bytes = 0;
 
@@ -178,13 +178,13 @@ int main() {
                 EXPECT_TRUE(dst.used_bytes == expected_bytes, "timestep " + std::to_string(t) + " used_bytes == expected");
 
                 // Compare against the corresponding source slice.
-                const float* src_slice = source.data() + static_cast<std::size_t>(t) * POINTS_PER_STEP;
+                const float *src_slice = source.data() + static_cast<std::size_t>(t) * POINTS_PER_STEP;
                 const bool eq = std::memcmp(out.data(), src_slice, expected_bytes) == 0;
                 EXPECT_TRUE(eq, "timestep " + std::to_string(t) + " byte-equal to source slice");
             }
 
             reader.close();
-        } catch (const std::exception& e) {
+        } catch (const std::exception &e) {
             report_failure("read phase", __FILE__, __LINE__, e.what());
         }
     }

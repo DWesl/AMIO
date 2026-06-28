@@ -19,6 +19,7 @@
 
 #include <atomic>
 #include <cstdint>
+#include <logs/logger.hpp>
 #include <memory>
 #include <mutex>
 #include <optional>
@@ -32,8 +33,6 @@
 #include "config/config_loader.hpp"
 #include "factory/backend_driver.hpp"
 #include "prefetch/prefetch_queue.hpp"
-
-#include <logs/logger.hpp>
 
 namespace amio::detail {
 

@@ -267,11 +267,9 @@ void test_io_communicator_accessors_after_default_split() {
     EXPECT_TRUE(result.rank() == 0, "rank() should be 0 after default split (no io_comm)");
     EXPECT_TRUE(result.size() == 1, "size() should be 1 after default split (no io_comm)");
 #ifdef AMIO_HAS_MPI
-    EXPECT_TRUE(result.handle() == MPI_COMM_WORLD,
-                "handle() should be MPI_COMM_WORLD after default split");
+    EXPECT_TRUE(result.handle() == MPI_COMM_WORLD, "handle() should be MPI_COMM_WORLD after default split");
 #else
-    EXPECT_TRUE(result.handle() == 0,
-                "handle() should be 0 sentinel after default split (no MPI)");
+    EXPECT_TRUE(result.handle() == 0, "handle() should be 0 sentinel after default split (no MPI)");
 #endif
 }
 
@@ -288,8 +286,7 @@ void test_io_communicator_accessors_non_mpi_split() {
     amio_err_t rc = split_communicator(config, 0, result);
 
 #if !defined(AMIO_HAS_MPI)
-    EXPECT_TRUE(rc == AMIO_ERR_COMM_SPLIT_FAILED,
-                "non-MPI non-default split should fail");
+    EXPECT_TRUE(rc == AMIO_ERR_COMM_SPLIT_FAILED, "non-MPI non-default split should fail");
     EXPECT_TRUE(!result.valid, "result should not be valid on failed split");
     // Accessors on invalid communicator still return safe defaults.
     EXPECT_TRUE(result.rank() == 0, "rank() should be 0 on invalid communicator");
@@ -304,8 +301,7 @@ void test_io_communicator_accessors_non_mpi_split() {
         // handle() should not be MPI_COMM_NULL (0) for a valid split.
         EXPECT_TRUE(result.handle() != 0, "handle() should be a valid MPI_Comm after successful split");
     } else {
-        EXPECT_TRUE(rc == AMIO_ERR_COMM_SPLIT_FAILED,
-                    "if not OK, should be AMIO_ERR_COMM_SPLIT_FAILED");
+        EXPECT_TRUE(rc == AMIO_ERR_COMM_SPLIT_FAILED, "if not OK, should be AMIO_ERR_COMM_SPLIT_FAILED");
     }
 #endif
 }

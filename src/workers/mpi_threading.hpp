@@ -83,7 +83,7 @@ static constexpr int kMpiThreadMultiple = 3;
 //   AMIO_ERR_THREADING_UNSUPPORTED if background MPI-IO is
 //   requested but the host did not initialize at
 //   MPI_THREAD_MULTIPLE.
-amio_err_t validate_mpi_threading(const MpiThreadingConfig& config);
+amio_err_t validate_mpi_threading(const MpiThreadingConfig &config);
 
 // query_mpi_thread_level -- query the MPI thread level that was
 // provided by MPI_Init_thread.

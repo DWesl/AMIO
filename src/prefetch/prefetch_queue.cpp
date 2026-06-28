@@ -17,8 +17,8 @@
 
 namespace amio::detail {
 
-PrefetchQueue::PrefetchQueue(std::size_t depth, std::int64_t read_timeout_s, StagingPool* pool, WorkerPool* workers, Backend_Driver* driver,
-                             std::uint64_t dataset_id, const std::string& var_name, const VariableInfo& info, std::int64_t total_timesteps)
+PrefetchQueue::PrefetchQueue(std::size_t depth, std::int64_t read_timeout_s, StagingPool *pool, WorkerPool *workers, Backend_Driver *driver,
+                             std::uint64_t dataset_id, const std::string &var_name, const VariableInfo &info, std::int64_t total_timesteps)
     : depth_(depth),
       read_timeout_s_(read_timeout_s),
       total_timesteps_(total_timesteps),
@@ -50,7 +50,7 @@ void PrefetchQueue::schedule_initial() {
     }
 }
 
-amio_status_t PrefetchQueue::get_buffer(std::int64_t timestep, const amio_bbox_t* bbox, StagingBuffer** out_buf) {
+amio_status_t PrefetchQueue::get_buffer(std::int64_t timestep, const amio_bbox_t *bbox, StagingBuffer **out_buf) {
     assert(out_buf != nullptr);
     *out_buf = nullptr;
 
@@ -160,7 +160,7 @@ void PrefetchQueue::schedule_next(std::int64_t current_timestep) {
     }
 }
 
-void PrefetchQueue::mark_complete(std::int64_t timestep, StagingBuffer* buf) {
+void PrefetchQueue::mark_complete(std::int64_t timestep, StagingBuffer *buf) {
     std::lock_guard<std::mutex> lock(mu_);
     pending_.erase(timestep);
     completed_[timestep] = buf;
@@ -181,7 +181,7 @@ void PrefetchQueue::cancel_pending() {
 
     // Release completed buffers back to the pool.
     if (pool_) {
-        for (auto& [ts, buf] : completed_) {
+        for (auto &[ts, buf] : completed_) {
             if (buf) {
                 pool_->release(buf);
             }
@@ -207,7 +207,7 @@ std::size_t PrefetchQueue::failed_count() const noexcept {
     return failed_.size();
 }
 
-void PrefetchQueue::schedule_fetch(std::int64_t timestep, const amio_bbox_t* bbox) {
+void PrefetchQueue::schedule_fetch(std::int64_t timestep, const amio_bbox_t *bbox) {
     {
         std::lock_guard<std::mutex> lock(mu_);
         if (cancelled_) return;
@@ -234,7 +234,7 @@ void PrefetchQueue::schedule_fetch(std::int64_t timestep, const amio_bbox_t* bbo
     }
 }
 
-void PrefetchQueue::sync_fetch(std::int64_t timestep, const amio_bbox_t* bbox) {
+void PrefetchQueue::sync_fetch(std::int64_t timestep, const amio_bbox_t *bbox) {
     // Check cancellation before doing work.
     {
         std::lock_guard<std::mutex> lock(mu_);
@@ -252,7 +252,7 @@ void PrefetchQueue::sync_fetch(std::int64_t timestep, const amio_bbox_t* bbox) {
     // be derived; fall back to the pool's per-buffer capacity so the
     // acquire stays safe and the read path keeps working (the previous
     // behavior).
-    StagingBuffer* buf = nullptr;
+    StagingBuffer *buf = nullptr;
     if (pool_) {
         std::size_t payload_bytes = 0;
         const std::size_t elem = element_size(info_.dtype);

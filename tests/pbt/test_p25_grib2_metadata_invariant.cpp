@@ -116,7 +116,7 @@ TEST_CASE("P25: GRIB2 metadata invariant - invalid DRT names rejected", "[pbt][p
         bool threw = false;
         try {
             parse_drt_name(drt_name);
-        } catch (const std::runtime_error&) {
+        } catch (const std::runtime_error &) {
             threw = true;
         }
 
@@ -217,7 +217,7 @@ TEST_CASE("P25: GRIB2 metadata invariant - DRT missing vs unrecognized", "[pbt][
         std::string error_msg;
         try {
             parse_drt_name(invalid_name);
-        } catch (const std::runtime_error& e) {
+        } catch (const std::runtime_error &e) {
             threw = true;
             error_msg = e.what();
         }

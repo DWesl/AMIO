@@ -55,7 +55,7 @@ class BackendFactory {
     using BuilderFn = std::function<std::unique_ptr<Backend_Driver>()>;
 
     // instance -- access the singleton factory.
-    static BackendFactory& instance();
+    static BackendFactory &instance();
 
     // register_driver -- register a builder under the given key.
     //
@@ -63,7 +63,7 @@ class BackendFactory {
     // the previous registration is silently replaced (last-writer-wins).
     //
     // Returns true if registration succeeded, false if key was empty.
-    bool register_driver(const std::string& key, BuilderFn builder);
+    bool register_driver(const std::string &key, BuilderFn builder);
 
     // build -- look up a driver by key and instantiate it.
     //
@@ -76,12 +76,12 @@ class BackendFactory {
     // no internal state is modified (R4.6).
     //
     // Thread-safe (shared lock for lookup).
-    std::unique_ptr<Backend_Driver> build(const std::string& key, amio_err_t& err_out) const;
+    std::unique_ptr<Backend_Driver> build(const std::string &key, amio_err_t &err_out) const;
 
     // has -- check if a key is registered (case-sensitive).
     //
     // Thread-safe (shared lock).
-    bool has(const std::string& key) const;
+    bool has(const std::string &key) const;
 
     // registered_keys -- return a copy of all registered keys.
     //
@@ -94,10 +94,10 @@ class BackendFactory {
     void clear();
 
     // Non-copyable, non-movable singleton.
-    BackendFactory(const BackendFactory&) = delete;
-    BackendFactory& operator=(const BackendFactory&) = delete;
-    BackendFactory(BackendFactory&&) = delete;
-    BackendFactory& operator=(BackendFactory&&) = delete;
+    BackendFactory(const BackendFactory &) = delete;
+    BackendFactory &operator=(const BackendFactory &) = delete;
+    BackendFactory(BackendFactory &&) = delete;
+    BackendFactory &operator=(BackendFactory &&) = delete;
 
    private:
     BackendFactory() = default;
@@ -120,7 +120,7 @@ class BackendFactory {
 template <typename ConcreteDriver>
 class BackendRegistrar {
    public:
-    explicit BackendRegistrar(const std::string& key) {
+    explicit BackendRegistrar(const std::string &key) {
         BackendFactory::instance().register_driver(key, []() -> std::unique_ptr<Backend_Driver> { return std::make_unique<ConcreteDriver>(); });
     }
 };

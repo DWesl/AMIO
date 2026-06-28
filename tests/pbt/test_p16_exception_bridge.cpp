@@ -38,13 +38,13 @@ namespace {
 // handling of derived exception types.
 class DomainSpecificException : public std::runtime_error {
    public:
-    explicit DomainSpecificException(const std::string& msg) : std::runtime_error(msg) {}
+    explicit DomainSpecificException(const std::string &msg) : std::runtime_error(msg) {}
 };
 
 // A standard library exception.
 class StandardException : public std::logic_error {
    public:
-    explicit StandardException(const std::string& msg) : std::logic_error(msg) {}
+    explicit StandardException(const std::string &msg) : std::logic_error(msg) {}
 };
 
 // Exception kind enum for generation.
@@ -56,7 +56,7 @@ enum class ExceptionKind {
 };
 
 // Throw the specified kind of exception.
-[[noreturn]] void throw_exception(ExceptionKind kind, const std::string& msg) {
+[[noreturn]] void throw_exception(ExceptionKind kind, const std::string &msg) {
     switch (kind) {
         case ExceptionKind::StdRuntimeError:
             throw std::runtime_error(msg);
@@ -117,7 +117,7 @@ TEST_CASE("P16: Exception bridge - exception recorded against handle", "[pbt][p1
         pool.drain();
 
         // Verify: the outcome registry has a failure for this handle.
-        const auto& registry = pool.outcome_registry();
+        const auto &registry = pool.outcome_registry();
         RC_ASSERT(registry.has_failure(handle_id));
 
         // Verify: the recorded error code is non-zero (AMIO_ERR_*).
@@ -165,7 +165,7 @@ TEST_CASE("P16: Exception bridge - message preserved", "[pbt][p16][exception_bri
         pool.drain();
 
         // Verify: the outcome message contains the exception text.
-        const auto& registry = pool.outcome_registry();
+        const auto &registry = pool.outcome_registry();
         auto first_failure = registry.get_first_failure(handle_id);
         RC_ASSERT(first_failure.is_failure());
 
@@ -210,14 +210,14 @@ TEST_CASE("P16: Exception bridge - multiple failures accumulate", "[pbt][p16][ex
         pool.drain();
 
         // Verify: all failures are recorded.
-        const auto& registry = pool.outcome_registry();
+        const auto &registry = pool.outcome_registry();
         RC_ASSERT(registry.has_failure(handle_id));
 
         auto outcomes = registry.get_outcomes(handle_id);
         RC_ASSERT(outcomes.size() == num_failures);
 
         // Each outcome should be a failure.
-        for (const auto& outcome : outcomes) {
+        for (const auto &outcome : outcomes) {
             RC_ASSERT(outcome.is_failure());
             RC_ASSERT(outcome.error_code == AMIO_ERR_BACKEND_FAILURE);
         }
@@ -298,7 +298,7 @@ TEST_CASE("P16: Exception bridge - stack trace recorded", "[pbt][p16][exception_
         pool.drain();
 
         // Verify: outcome exists and has a stack trace.
-        const auto& registry = pool.outcome_registry();
+        const auto &registry = pool.outcome_registry();
         auto first = registry.get_first_failure(handle_id);
         RC_ASSERT(first.is_failure());
 

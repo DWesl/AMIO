@@ -25,7 +25,7 @@ using namespace amio::pbt;
 // the declared numeric ranges and codec allow-list rules.
 // ===================================================================
 
-static bool is_config_expected_valid(const Config& cfg) {
+static bool is_config_expected_valid(const Config &cfg) {
     // staging_pool.buffer_count [1, 4096]
     if (cfg.staging_pool.buffer_count < 1 || cfg.staging_pool.buffer_count > 4096) {
         return false;
@@ -68,7 +68,7 @@ static bool is_config_expected_valid(const Config& cfg) {
 
     // Codec allow-list: all codecs must be recognized lossless codecs
     static const std::vector<std::string> valid_codecs = {"blosc", "zstandard", "libaec", "lossless_jpeg2000"};
-    for (const auto& codec : cfg.codec.lossless_allow_list) {
+    for (const auto &codec : cfg.codec.lossless_allow_list) {
         if (std::find(valid_codecs.begin(), valid_codecs.end(), codec) == valid_codecs.end()) {
             return false;
         }

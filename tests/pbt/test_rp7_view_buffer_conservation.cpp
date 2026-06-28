@@ -87,7 +87,7 @@ TEST_CASE("RP7: view-buffer conservation - held buffers never on free list, coun
 
         // Our model of the read coordinator's outstanding-view tracking.
         std::int64_t outstanding_views = 0;  // the counter
-        std::vector<StagingBuffer*> held;    // the actual views
+        std::vector<StagingBuffer *> held;   // the actual views
         std::int64_t next_ts = 0;            // next timestep to read
 
         auto num_ops = *rc::gen::inRange<std::size_t>(1, 40);
@@ -101,7 +101,7 @@ TEST_CASE("RP7: view-buffer conservation - held buffers never on free list, coun
                 if (next_ts >= total_timesteps) continue;
                 if (held.size() + 1 >= buffer_count) continue;
 
-                StagingBuffer* buf = nullptr;
+                StagingBuffer *buf = nullptr;
                 amio_status_t status = pq.get_buffer(next_ts, nullptr, &buf);
                 ++next_ts;
                 if (status == AMIO_OK && buf != nullptr) {
@@ -111,7 +111,7 @@ TEST_CASE("RP7: view-buffer conservation - held buffers never on free list, coun
             } else {
                 if (!held.empty()) {
                     auto idx = *rc::gen::inRange<std::size_t>(0, held.size());
-                    StagingBuffer* buf = held[idx];
+                    StagingBuffer *buf = held[idx];
                     pool.release(buf);
                     held.erase(held.begin() + static_cast<std::ptrdiff_t>(idx));
                     --outstanding_views;  // each release -1
@@ -133,7 +133,7 @@ TEST_CASE("RP7: view-buffer conservation - held buffers never on free list, coun
         }
 
         // Release everything still held; outstanding returns to 0.
-        for (auto* buf : held) {
+        for (auto *buf : held) {
             pool.release(buf);
             --outstanding_views;
         }

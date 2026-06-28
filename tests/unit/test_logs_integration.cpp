@@ -14,10 +14,9 @@
 
 #include <atomic>
 #include <cstdio>
-#include <string>
-
 #include <logs/logger.hpp>
 #include <logs/severity.hpp>
+#include <string>
 
 #include "workers/exception_bridge.hpp"
 
@@ -59,12 +58,10 @@ void test_logger_default_state() {
     std::atomic<bool> logs_initialized{false};
 
     // Logger should be unconfigured: rank == -1.
-    EXPECT_TRUE(logger.rank() == -1,
-                "Logger should default to rank -1 (unconfigured)");
+    EXPECT_TRUE(logger.rank() == -1, "Logger should default to rank -1 (unconfigured)");
 
     // logs_initialized should default to false.
-    EXPECT_TRUE(logs_initialized.load() == false,
-                "logs_initialized should default to false");
+    EXPECT_TRUE(logs_initialized.load() == false, "logs_initialized should default to false");
 }
 
 // ---- Test: logs_initialized flag can transition (Req 6.8) ----
@@ -72,14 +69,12 @@ void test_logger_default_state() {
 void test_logs_initialized_transition() {
     std::atomic<bool> logs_initialized{false};
 
-    EXPECT_TRUE(logs_initialized.load(std::memory_order_acquire) == false,
-                "logs_initialized should start as false");
+    EXPECT_TRUE(logs_initialized.load(std::memory_order_acquire) == false, "logs_initialized should start as false");
 
     // Simulate amio_init completing communicator setup.
     logs_initialized.store(true, std::memory_order_release);
 
-    EXPECT_TRUE(logs_initialized.load(std::memory_order_acquire) == true,
-                "logs_initialized should be true after store");
+    EXPECT_TRUE(logs_initialized.load(std::memory_order_acquire) == true, "logs_initialized should be true after store");
 }
 
 // ---- Test: Pre-initialization fallback to stderr (logger=nullptr, Req 6.7) ----
@@ -95,17 +90,12 @@ void test_pre_init_fallback_stderr() {
     io_comm.is_io_rank = true;
 
     // Call with logger=nullptr (pre-initialization state).
-    std::string trace = emit_parallel_stacktrace(
-        io_comm, AMIO_ERR_BACKEND_FAILURE, "pre-init diagnostic test", nullptr);
+    std::string trace = emit_parallel_stacktrace(io_comm, AMIO_ERR_BACKEND_FAILURE, "pre-init diagnostic test", nullptr);
 
-    EXPECT_TRUE(!trace.empty(),
-                "pre-init fallback should produce non-empty trace");
-    EXPECT_TRUE(trace.find("pre-init diagnostic test") != std::string::npos,
-                "pre-init trace should contain the error message");
-    EXPECT_TRUE(trace.find("AMIO FATAL") != std::string::npos,
-                "pre-init trace should contain AMIO FATAL marker");
-    EXPECT_TRUE(trace.find("AMIO_ERR_BACKEND_FAILURE") != std::string::npos,
-                "pre-init trace should contain the error code description");
+    EXPECT_TRUE(!trace.empty(), "pre-init fallback should produce non-empty trace");
+    EXPECT_TRUE(trace.find("pre-init diagnostic test") != std::string::npos, "pre-init trace should contain the error message");
+    EXPECT_TRUE(trace.find("AMIO FATAL") != std::string::npos, "pre-init trace should contain AMIO FATAL marker");
+    EXPECT_TRUE(trace.find("AMIO_ERR_BACKEND_FAILURE") != std::string::npos, "pre-init trace should contain the error code description");
 }
 
 // ---- Test: Post-initialization routing through Logger (Req 6.1, 6.7) ----
@@ -126,17 +116,12 @@ void test_post_init_routes_through_logger() {
     logger.set_threshold(logs::Severity_Level::DEBUG);
 
     // Call with a valid logger pointer (post-initialization state).
-    std::string trace = emit_parallel_stacktrace(
-        io_comm, AMIO_ERR_BACKEND_FAILURE, "post-init logger test", &logger);
+    std::string trace = emit_parallel_stacktrace(io_comm, AMIO_ERR_BACKEND_FAILURE, "post-init logger test", &logger);
 
-    EXPECT_TRUE(!trace.empty(),
-                "post-init Logger path should produce non-empty trace");
-    EXPECT_TRUE(trace.find("post-init logger test") != std::string::npos,
-                "post-init trace should contain the error message");
-    EXPECT_TRUE(trace.find("AMIO FATAL") != std::string::npos,
-                "post-init trace should contain AMIO FATAL marker");
-    EXPECT_TRUE(trace.find("AMIO_ERR_BACKEND_FAILURE") != std::string::npos,
-                "post-init trace should contain the error code description");
+    EXPECT_TRUE(!trace.empty(), "post-init Logger path should produce non-empty trace");
+    EXPECT_TRUE(trace.find("post-init logger test") != std::string::npos, "post-init trace should contain the error message");
+    EXPECT_TRUE(trace.find("AMIO FATAL") != std::string::npos, "post-init trace should contain AMIO FATAL marker");
+    EXPECT_TRUE(trace.find("AMIO_ERR_BACKEND_FAILURE") != std::string::npos, "post-init trace should contain the error code description");
 }
 
 // ---- Test: Logger routes FATAL for unrecoverable errors (Req 6.4) ----
@@ -154,15 +139,11 @@ void test_logger_fatal_for_unrecoverable() {
     logger.set_threshold(logs::Severity_Level::DEBUG);
 
     // AMIO_ERR_COMM_SPLIT_FAILED is classified as unrecoverable.
-    std::string trace = emit_parallel_stacktrace(
-        io_comm, AMIO_ERR_COMM_SPLIT_FAILED, "communicator split failed", &logger);
+    std::string trace = emit_parallel_stacktrace(io_comm, AMIO_ERR_COMM_SPLIT_FAILED, "communicator split failed", &logger);
 
-    EXPECT_TRUE(!trace.empty(),
-                "unrecoverable error should produce non-empty trace");
-    EXPECT_TRUE(trace.find("communicator split failed") != std::string::npos,
-                "trace should contain the error message for unrecoverable error");
-    EXPECT_TRUE(trace.find("AMIO_ERR_COMM_SPLIT_FAILED") != std::string::npos,
-                "trace should contain the unrecoverable error code description");
+    EXPECT_TRUE(!trace.empty(), "unrecoverable error should produce non-empty trace");
+    EXPECT_TRUE(trace.find("communicator split failed") != std::string::npos, "trace should contain the error message for unrecoverable error");
+    EXPECT_TRUE(trace.find("AMIO_ERR_COMM_SPLIT_FAILED") != std::string::npos, "trace should contain the unrecoverable error code description");
 }
 
 // ---- Test: Logger routes ERROR for recoverable errors (Req 6.1) ----
@@ -179,15 +160,11 @@ void test_logger_error_for_recoverable() {
     logger.set_threshold(logs::Severity_Level::DEBUG);
 
     // AMIO_ERR_MANIFEST_INVALID is a recoverable error.
-    std::string trace = emit_parallel_stacktrace(
-        io_comm, AMIO_ERR_MANIFEST_INVALID, "manifest parse error", &logger);
+    std::string trace = emit_parallel_stacktrace(io_comm, AMIO_ERR_MANIFEST_INVALID, "manifest parse error", &logger);
 
-    EXPECT_TRUE(!trace.empty(),
-                "recoverable error should produce non-empty trace");
-    EXPECT_TRUE(trace.find("manifest parse error") != std::string::npos,
-                "trace should contain the error message for recoverable error");
-    EXPECT_TRUE(trace.find("AMIO_ERR_MANIFEST_INVALID") != std::string::npos,
-                "trace should contain the recoverable error code description");
+    EXPECT_TRUE(!trace.empty(), "recoverable error should produce non-empty trace");
+    EXPECT_TRUE(trace.find("manifest parse error") != std::string::npos, "trace should contain the error message for recoverable error");
+    EXPECT_TRUE(trace.find("AMIO_ERR_MANIFEST_INVALID") != std::string::npos, "trace should contain the recoverable error code description");
 }
 
 }  // namespace
@@ -200,8 +177,7 @@ int main() {
     test_logger_fatal_for_unrecoverable();
     test_logger_error_for_recoverable();
 
-    std::fprintf(stdout, "test_logs_integration: passed=%d failed=%d\n",
-                 g_result.passed, g_result.failed);
+    std::fprintf(stdout, "test_logs_integration: passed=%d failed=%d\n", g_result.passed, g_result.failed);
 
     return g_result.failed == 0 ? 0 : 1;
 }

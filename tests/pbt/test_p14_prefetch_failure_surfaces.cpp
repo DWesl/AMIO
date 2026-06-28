@@ -48,14 +48,14 @@ class FailingDriver : public Backend_Driver {
     FailingDriver() = default;
     ~FailingDriver() override = default;
 
-    void open_write(const conf::Config& /*config*/) override {}
-    void open_read(const conf::Config& /*config*/) override {}
+    void open_write(const conf::Config & /*config*/) override {}
+    void open_read(const conf::Config & /*config*/) override {}
     void flush() override {}
     void close() override {}
 
-    void write(const StagingBuffer& /*src*/, const VarMeta& /*meta*/) override {}
+    void write(const StagingBuffer & /*src*/, const VarMeta & /*meta*/) override {}
 
-    void read(StagingBuffer& dst, const VarMeta& /*meta*/, std::int64_t timestep, const std::optional<BoundingBox>& /*bbox*/) override {
+    void read(StagingBuffer &dst, const VarMeta & /*meta*/, std::int64_t timestep, const std::optional<BoundingBox> & /*bbox*/) override {
         std::lock_guard<std::mutex> lock(mu_);
 
         read_count_++;
@@ -72,7 +72,7 @@ class FailingDriver : public Backend_Driver {
     }
 
     // Configure which timesteps should fail.
-    void set_fail_timesteps(const std::set<std::int64_t>& timesteps) {
+    void set_fail_timesteps(const std::set<std::int64_t> &timesteps) {
         std::lock_guard<std::mutex> lock(mu_);
         fail_timesteps_ = timesteps;
     }
@@ -156,7 +156,7 @@ TEST_CASE("P14: Prefetch failure surfaces - failed fetch returns error on read",
         RC_ASSERT(pq.completed_count() + pq.failed_count() == expected_total);
 
         // Now read the failed timestep.
-        StagingBuffer* buf = nullptr;
+        StagingBuffer *buf = nullptr;
         amio_status_t status = pq.get_buffer(fail_timestep, nullptr, &buf);
 
         // Verify: non-zero error code returned.
@@ -230,7 +230,7 @@ TEST_CASE("P14: Prefetch failure surfaces - multiple failures retained", "[pbt][
 
         // Verify: each failed timestep returns an error.
         for (std::int64_t t : fail_set) {
-            StagingBuffer* buf = nullptr;
+            StagingBuffer *buf = nullptr;
             amio_status_t status = pq.get_buffer(t, nullptr, &buf);
             RC_ASSERT(status != AMIO_OK);
             RC_ASSERT(status == AMIO_ERR_BACKEND_FAILURE);
@@ -240,7 +240,7 @@ TEST_CASE("P14: Prefetch failure surfaces - multiple failures retained", "[pbt][
         // Verify: non-failed timesteps return successfully.
         for (std::int64_t t = 0; t < max_prefetched; ++t) {
             if (fail_set.count(t) == 0) {
-                StagingBuffer* buf = nullptr;
+                StagingBuffer *buf = nullptr;
                 amio_status_t status = pq.get_buffer(t, nullptr, &buf);
                 RC_ASSERT(status == AMIO_OK);
                 RC_ASSERT(buf != nullptr);
@@ -299,7 +299,7 @@ TEST_CASE("P14: Prefetch failure surfaces - async with Worker_Pool", "[pbt][p14]
         workers->drain();
 
         // Verify: the failed timestep returns an error.
-        StagingBuffer* buf = nullptr;
+        StagingBuffer *buf = nullptr;
         amio_status_t status = pq.get_buffer(fail_timestep, nullptr, &buf);
         RC_ASSERT(status != AMIO_OK);
         RC_ASSERT(status == AMIO_ERR_BACKEND_FAILURE);
@@ -308,7 +308,7 @@ TEST_CASE("P14: Prefetch failure surfaces - async with Worker_Pool", "[pbt][p14]
         // Verify: non-failed timesteps succeed.
         for (std::int64_t t = 0; t < max_prefetched; ++t) {
             if (t != fail_timestep) {
-                StagingBuffer* nbuf = nullptr;
+                StagingBuffer *nbuf = nullptr;
                 amio_status_t nstatus = pq.get_buffer(t, nullptr, &nbuf);
                 RC_ASSERT(nstatus == AMIO_OK);
                 RC_ASSERT(nbuf != nullptr);

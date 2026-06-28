@@ -55,7 +55,7 @@ struct OrderRecorder {
     // indices are in strictly increasing order.
     bool all_in_order() const {
         std::lock_guard<std::mutex> lock(mu);
-        for (const auto& [key, indices] : observed_order) {
+        for (const auto &[key, indices] : observed_order) {
             for (std::size_t i = 1; i < indices.size(); ++i) {
                 if (indices[i] <= indices[i - 1]) {
                     return false;

@@ -36,12 +36,11 @@
 #ifndef AMIO_SRC_FACTORY_BACKEND_DRIVER_HPP
 #define AMIO_SRC_FACTORY_BACKEND_DRIVER_HPP
 
+#include <conf/config.hpp>
 #include <cstddef>
 #include <cstdint>
 #include <optional>
 #include <string>
-
-#include <conf/config.hpp>
 
 #ifdef AMIO_HAS_MPI
 #include <mpi.h>
@@ -218,7 +217,7 @@ class Backend_Driver {
     // Throws std::exception (or conf::Conf_Error) on failure
     // (e.g., missing Parallel HDF5 support, invalid data model,
     // missing required fields).
-    virtual void open_write(const conf::Config& config) = 0;
+    virtual void open_write(const conf::Config &config) = 0;
 
     // open_read -- prepare the driver for read operations.
     //
@@ -226,7 +225,7 @@ class Backend_Driver {
     // file path / URI and any driver-specific options.
     //
     // Throws std::exception (or conf::Conf_Error) on failure.
-    virtual void open_read(const conf::Config& config) = 0;
+    virtual void open_read(const conf::Config &config) = 0;
 
     // write -- serialize a staging buffer payload to storage.
     //
@@ -243,7 +242,7 @@ class Backend_Driver {
     // The caller (Worker_Pool) holds the per-(dataset, variable)
     // ordering mutex during this call, ensuring writes to the same
     // (dataset, variable) pair execute in submission order (R6.3).
-    virtual void write(const StagingBuffer& src, const VarMeta& meta) = 0;
+    virtual void write(const StagingBuffer &src, const VarMeta &meta) = 0;
 
     // read -- deserialize a payload from storage into a staging buffer.
     //
@@ -258,7 +257,7 @@ class Backend_Driver {
     //
     // On success, dst.data[0..dst.used_bytes) contains the decoded
     // payload.  On failure, throws std::exception.
-    virtual void read(StagingBuffer& dst, const VarMeta& meta, std::int64_t timestep, const std::optional<BoundingBox>& bbox) = 0;
+    virtual void read(StagingBuffer &dst, const VarMeta &meta, std::int64_t timestep, const std::optional<BoundingBox> &bbox) = 0;
 
     // flush -- ensure all previously written data is durable.
     //
@@ -314,7 +313,7 @@ class Backend_Driver {
     //
     // Unlike the I/O methods, this is invoked from the calling thread
     // during variable resolution rather than from a Worker_Pool thread.
-    virtual VariableInfo describe_variable(const std::string& name) {
+    virtual VariableInfo describe_variable(const std::string &name) {
         (void)name;
         return VariableInfo{};
     }

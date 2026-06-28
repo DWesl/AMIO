@@ -75,10 +75,10 @@ class NetCDF_Driver : public Backend_Driver {
     ~NetCDF_Driver() override;
 
     // Backend_Driver interface.
-    void open_write(const conf::Config& config) override;
-    void open_read(const conf::Config& config) override;
-    void write(const StagingBuffer& src, const VarMeta& meta) override;
-    void read(StagingBuffer& dst, const VarMeta& meta, std::int64_t timestep, const std::optional<BoundingBox>& bbox) override;
+    void open_write(const conf::Config &config) override;
+    void open_read(const conf::Config &config) override;
+    void write(const StagingBuffer &src, const VarMeta &meta) override;
+    void read(StagingBuffer &dst, const VarMeta &meta, std::int64_t timestep, const std::optional<BoundingBox> &bbox) override;
     void flush() override;
     void close() override;
 
@@ -95,20 +95,20 @@ class NetCDF_Driver : public Backend_Driver {
     // VariableInfo{found = false} when the variable is absent, the
     // driver is not open for reading, or the netCDF element type has no
     // AMIO dtype mapping.  (Req 4.1, 4.2, 4.5, 9.1)
-    VariableInfo describe_variable(const std::string& name) override;
+    VariableInfo describe_variable(const std::string &name) override;
 
    public:
     // ----- Static utility methods (public for testability) -----
 
     // Validate the data model string from configuration.
-    static NetCDF4DataModel parse_data_model(const std::string& model_str);
+    static NetCDF4DataModel parse_data_model(const std::string &model_str);
 
    private:
     // Verify that the linked netCDF library has Parallel HDF5 + MPI-IO.
     static void verify_parallel_support();
 
     // Validate that a codec is on the lossless allow-list.
-    static void validate_codec(const std::string& codec, const std::vector<std::string>& allow_list);
+    static void validate_codec(const std::string &codec, const std::vector<std::string> &allow_list);
 
     // Map amio_dtype_t to netCDF type constant.
     static int dtype_to_nc_type(amio_dtype_t dtype);

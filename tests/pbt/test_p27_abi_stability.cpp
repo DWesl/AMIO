@@ -34,7 +34,7 @@ namespace {
 
 struct ErrorCodeEntry {
     int value;
-    const char* name;
+    const char *name;
 };
 
 // The complete set of defined AMIO_ERR_* codes with their frozen
@@ -76,7 +76,7 @@ TEST_CASE("P27: ABI stability - error code integer values frozen", "[pbt][p27][a
     auto result = rc::check("AMIO_ERR_* integer values match frozen ABI definition", []() {
         // Pick a random defined error code to verify.
         auto idx = *rc::gen::inRange<std::size_t>(0, kDefinedErrorCodes.size());
-        const auto& entry = kDefinedErrorCodes[idx];
+        const auto &entry = kDefinedErrorCodes[idx];
 
         // Verify the enum value matches the expected frozen value.
         // We check by casting the enum constants to int.
@@ -164,8 +164,8 @@ TEST_CASE("P27: ABI stability - strerror consistent for defined codes", "[pbt][p
         int code = kDefinedErrorCodes[idx].value;
 
         // Call amio_strerror twice.
-        const char* str1 = amio_strerror(code);
-        const char* str2 = amio_strerror(code);
+        const char *str1 = amio_strerror(code);
+        const char *str2 = amio_strerror(code);
 
         // Must be non-null.
         RC_ASSERT(str1 != nullptr);
@@ -206,7 +206,7 @@ TEST_CASE("P27: ABI stability - strerror non-null for undefined codes", "[pbt][p
         }
 
         // Call amio_strerror.
-        const char* str = amio_strerror(code);
+        const char *str = amio_strerror(code);
 
         // Must be non-null (R12.5 totality).
         RC_ASSERT(str != nullptr);
@@ -304,8 +304,8 @@ TEST_CASE("P27: ABI stability - strerror is side-effect free", "[pbt][p27][abi][
         int code2 = kDefinedErrorCodes[idx2].value;
 
         // Get baseline results.
-        const char* baseline1 = amio_strerror(code1);
-        const char* baseline2 = amio_strerror(code2);
+        const char *baseline1 = amio_strerror(code1);
+        const char *baseline2 = amio_strerror(code2);
 
         // Call strerror with various codes (including undefined).
         amio_strerror(-999);
@@ -314,8 +314,8 @@ TEST_CASE("P27: ABI stability - strerror is side-effect free", "[pbt][p27][abi][
         amio_strerror(code1);
 
         // Results should be unchanged (side-effect free).
-        const char* after1 = amio_strerror(code1);
-        const char* after2 = amio_strerror(code2);
+        const char *after1 = amio_strerror(code1);
+        const char *after2 = amio_strerror(code2);
 
         RC_ASSERT(std::strcmp(baseline1, after1) == 0);
         RC_ASSERT(std::strcmp(baseline2, after2) == 0);

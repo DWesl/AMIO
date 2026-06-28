@@ -98,7 +98,7 @@ namespace {
 int g_passed = 0;
 int g_failed = 0;
 
-void report_failure(const char* expr, const char* file, int line, const std::string& ctx) {
+void report_failure(const char *expr, const char *file, int line, const std::string &ctx) {
     std::fprintf(stderr, "FAIL %s:%d: %s   (%s)\n", file, line, expr, ctx.c_str());
     ++g_failed;
 }
@@ -135,7 +135,7 @@ const std::string kGribVar = "d0_c3_n5_s100_l50000";
 
 // NetCDF source manifest: classic data model, no compression codec ->
 // dependency-free, lossless.
-std::string make_netcdf_yaml(const std::string& path) {
+std::string make_netcdf_yaml(const std::string &path) {
     return std::string("path: ") + path +
            "\n"
            "data_model: classic\n";
@@ -143,7 +143,7 @@ std::string make_netcdf_yaml(const std::string& path) {
 
 // GRIB2 target manifest for a given lossless DRT.  Matches the field
 // identity encoded into kGribVar.
-std::string make_grib2_yaml(const std::string& path, const std::string& drt) {
+std::string make_grib2_yaml(const std::string &path, const std::string &drt) {
     return std::string("path: ") + path +
            "\n"
            "drt: " +
@@ -165,8 +165,8 @@ std::string make_grib2_yaml(const std::string& path, const std::string& drt) {
 // hard-checked); false if it was skipped because the underlying NetCDF
 // or GRIB2 encoder is unavailable in this environment.
 // ---------------------------------------------------------------------
-bool run_netcdf_to_grib2(const std::string& drt) {
-    const char* NC_PATH = "/tmp/amio_test_mixed_src.nc";
+bool run_netcdf_to_grib2(const std::string &drt) {
+    const char *NC_PATH = "/tmp/amio_test_mixed_src.nc";
     const std::string grib_path = "/tmp/amio_test_mixed_tgt_" + drt + ".grib2";
     const std::string ctx = "[netcdf->grib2 drt=" + drt + "]";
 
@@ -193,7 +193,7 @@ bool run_netcdf_to_grib2(const std::string& drt) {
         nc_writer.open_write(nc_cfg);
 
         StagingBuffer buf{};
-        buf.data = reinterpret_cast<std::byte*>(source.data());
+        buf.data = reinterpret_cast<std::byte *>(source.data());
         buf.capacity_bytes = payload_bytes;
         buf.used_bytes = payload_bytes;
 
@@ -207,7 +207,7 @@ bool run_netcdf_to_grib2(const std::string& drt) {
         nc_writer.write(buf, meta);
         nc_writer.flush();
         nc_writer.close();
-    } catch (const std::exception& e) {
+    } catch (const std::exception &e) {
         std::fprintf(stdout, "NOTE: %s NetCDF source unavailable, skipping leg: %s\n", ctx.c_str(), e.what());
         std::remove(NC_PATH);
         return false;
@@ -228,7 +228,7 @@ bool run_netcdf_to_grib2(const std::string& drt) {
     // The NetCDF reader stays open across the GRIB2 write so both
     // datasets are concurrently live on the shared runtime (Req 14.1).
     NetCDF_Driver nc_reader;
-    StagingBuffer* shared = nullptr;
+    StagingBuffer *shared = nullptr;
     try {
         nc_reader.open_read(nc_cfg);
 
@@ -262,7 +262,7 @@ bool run_netcdf_to_grib2(const std::string& drt) {
         // staged source (NetCDF round trip is bit-exact, Req 9.4).
         std::memcpy(nc_read.data(), shared->data, payload_bytes);
         EXPECT_TRUE(std::memcmp(nc_read.data(), source.data(), payload_bytes) == 0, ctx + " NetCDF read byte-equal to source");
-    } catch (const std::exception& e) {
+    } catch (const std::exception &e) {
         // After a successful NetCDF write, a thrown read is a REAL failure.
         report_failure("mixed netcdf read phase", __FILE__, __LINE__, ctx + " " + e.what());
         if (shared != nullptr) {
@@ -302,7 +302,7 @@ bool run_netcdf_to_grib2(const std::string& drt) {
         grib_writer.flush();
         grib_writer.close();
         grib_encoded = true;
-    } catch (const std::exception& e) {
+    } catch (const std::exception &e) {
         std::fprintf(stdout, "NOTE: %s GRIB2 encoder unavailable, skipping leg: %s\n", ctx.c_str(), e.what());
     }
 
@@ -338,7 +338,7 @@ bool run_netcdf_to_grib2(const std::string& drt) {
 
         std::vector<float> out(source.size(), -1.0f);
         StagingBuffer dst{};
-        dst.data = reinterpret_cast<std::byte*>(out.data());
+        dst.data = reinterpret_cast<std::byte *>(out.data());
         dst.capacity_bytes = out.size() * sizeof(float);
         dst.used_bytes = 0;
 
@@ -352,7 +352,7 @@ bool run_netcdf_to_grib2(const std::string& drt) {
         EXPECT_TRUE(std::memcmp(out.data(), source.data(), payload_bytes) == 0, ctx + " GRIB2 read byte-equal to source (full round trip)");
 
         grib_reader.close();
-    } catch (const std::exception& e) {
+    } catch (const std::exception &e) {
         report_failure("mixed grib2 read-back phase", __FILE__, __LINE__, ctx + " " + e.what());
         std::remove(NC_PATH);
         std::remove(grib_path.c_str());
@@ -376,7 +376,7 @@ bool run_netcdf_to_grib2(const std::string& drt) {
 // Returns true if functional, false if skipped (NetCDF unavailable).
 // ---------------------------------------------------------------------
 bool run_netcdf_to_zarr() {
-    const char* NC_PATH = "/tmp/amio_test_mixed_src_zarr.nc";
+    const char *NC_PATH = "/tmp/amio_test_mixed_src_zarr.nc";
     const std::string zarr_uri = "/tmp/amio_test_mixed_tgt.zarr";
     const std::string ctx = "[netcdf->zarr]";
 
@@ -412,7 +412,7 @@ bool run_netcdf_to_zarr() {
         nc_writer.open_write(nc_cfg);
 
         StagingBuffer buf{};
-        buf.data = reinterpret_cast<std::byte*>(source.data());
+        buf.data = reinterpret_cast<std::byte *>(source.data());
         buf.capacity_bytes = payload_bytes;
         buf.used_bytes = payload_bytes;
 
@@ -426,7 +426,7 @@ bool run_netcdf_to_zarr() {
         nc_writer.write(buf, meta);
         nc_writer.flush();
         nc_writer.close();
-    } catch (const std::exception& e) {
+    } catch (const std::exception &e) {
         std::fprintf(stdout, "NOTE: %s NetCDF source unavailable, skipping leg: %s\n", ctx.c_str(), e.what());
         std::remove(NC_PATH);
         return false;
@@ -443,7 +443,7 @@ bool run_netcdf_to_zarr() {
         Zarr_Driver zarr_writer;
         zarr_writer.open_write(zarr_cfg);
 
-        StagingBuffer* buf = pool.acquire(payload_bytes);
+        StagingBuffer *buf = pool.acquire(payload_bytes);
         EXPECT_TRUE(buf != nullptr, ctx + " shared staging buffer acquired");
         if (buf == nullptr) {
             nc_reader.close();
@@ -475,7 +475,7 @@ bool run_netcdf_to_zarr() {
 
         pool.release(buf);
         nc_reader.close();
-    } catch (const std::exception& e) {
+    } catch (const std::exception &e) {
         report_failure("mixed netcdf->zarr translate phase", __FILE__, __LINE__, ctx + " " + e.what());
         std::remove(NC_PATH);
         return false;
@@ -495,7 +495,7 @@ bool run_netcdf_to_zarr() {
 
         std::vector<float> out(source.size(), -1.0f);
         StagingBuffer dst{};
-        dst.data = reinterpret_cast<std::byte*>(out.data());
+        dst.data = reinterpret_cast<std::byte *>(out.data());
         dst.capacity_bytes = out.size() * sizeof(float);
         dst.used_bytes = 0;
 
@@ -505,7 +505,7 @@ bool run_netcdf_to_zarr() {
         EXPECT_TRUE(std::memcmp(out.data(), source.data(), payload_bytes) == 0, ctx + " Zarr read byte-equal to source (full round trip)");
 
         zarr_reader.close();
-    } catch (const std::exception& e) {
+    } catch (const std::exception &e) {
         report_failure("mixed zarr read-back phase", __FILE__, __LINE__, ctx + " " + e.what());
     }
 

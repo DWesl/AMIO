@@ -69,7 +69,7 @@ namespace {
 int g_passed = 0;
 int g_failed = 0;
 
-void report_failure(const char* expr, const char* file, int line, const std::string& ctx) {
+void report_failure(const char *expr, const char *file, int line, const std::string &ctx) {
     std::fprintf(stderr, "FAIL %s:%d: %s   (%s)\n", file, line, expr, ctx.c_str());
     ++g_failed;
 }
@@ -101,7 +101,7 @@ float source_value(int t, int i, int j) {
 const std::string kVarName = "d0_c3_n5_s100_l50000";
 
 // Build the YAML manifest for a given lossless DRT and output path.
-std::string make_yaml(const std::string& path, const std::string& drt) {
+std::string make_yaml(const std::string &path, const std::string &drt) {
     return std::string("path: ") + path +
            "\n"
            "drt: " +
@@ -128,7 +128,7 @@ struct RoundTripResult {
 // is a build property.  When the DRT does encode, decode / bbox / byte
 // equality are all hard-asserted (lossless DRTs must round-trip
 // byte-equal, Req 13.4).
-RoundTripResult run_roundtrip(const std::string& drt, const char* output_path) {
+RoundTripResult run_roundtrip(const std::string &drt, const char *output_path) {
     RoundTripResult result{};
     std::remove(output_path);
 
@@ -151,7 +151,7 @@ RoundTripResult run_roundtrip(const std::string& drt, const char* output_path) {
         writer.open_write(cfg);
         for (int t = 0; t < 2; ++t) {
             StagingBuffer buf{};
-            buf.data = reinterpret_cast<std::byte*>(source[t].data());
+            buf.data = reinterpret_cast<std::byte *>(source[t].data());
             buf.capacity_bytes = source[t].size() * sizeof(float);
             buf.used_bytes = source[t].size() * sizeof(float);
 
@@ -167,7 +167,7 @@ RoundTripResult run_roundtrip(const std::string& drt, const char* output_path) {
         writer.flush();
         writer.close();
         result.encoded = true;
-    } catch (const std::exception& e) {
+    } catch (const std::exception &e) {
         std::fprintf(stdout, "NOTE: %s encoder unavailable in this g2c build, skipping (%s)\n", ctx.c_str(), e.what());
         std::remove(output_path);
         return result;  // encoded == false -> skipped
@@ -204,7 +204,7 @@ RoundTripResult run_roundtrip(const std::string& drt, const char* output_path) {
         for (int t = 0; t < 2; ++t) {
             std::vector<float> out(static_cast<std::size_t>(NY) * NX, -1.0f);
             StagingBuffer dst{};
-            dst.data = reinterpret_cast<std::byte*>(out.data());
+            dst.data = reinterpret_cast<std::byte *>(out.data());
             dst.capacity_bytes = out.size() * sizeof(float);
             dst.used_bytes = 0;
 
@@ -234,7 +234,7 @@ RoundTripResult run_roundtrip(const std::string& drt, const char* output_path) {
             const std::size_t n = static_cast<std::size_t>(box.extents[0]) * box.extents[1];
             std::vector<float> out(n, -1.0f);
             StagingBuffer dst{};
-            dst.data = reinterpret_cast<std::byte*>(out.data());
+            dst.data = reinterpret_cast<std::byte *>(out.data());
             dst.capacity_bytes = out.size() * sizeof(float);
             dst.used_bytes = 0;
 
@@ -270,7 +270,7 @@ RoundTripResult run_roundtrip(const std::string& drt, const char* output_path) {
             const std::size_t n = static_cast<std::size_t>(box.extents[0]) * box.extents[1];
             std::vector<float> out(n, -1.0f);
             StagingBuffer dst{};
-            dst.data = reinterpret_cast<std::byte*>(out.data());
+            dst.data = reinterpret_cast<std::byte *>(out.data());
             dst.capacity_bytes = out.size() * sizeof(float);
             dst.used_bytes = 0;
 
@@ -295,7 +295,7 @@ RoundTripResult run_roundtrip(const std::string& drt, const char* output_path) {
         }
 
         reader.close();
-    } catch (const std::exception& e) {
+    } catch (const std::exception &e) {
         // After a successful write, a thrown read is a real failure.
         report_failure("grib2 read phase", __FILE__, __LINE__, ctx + " " + e.what());
         result.byte_equal = false;

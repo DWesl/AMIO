@@ -57,8 +57,8 @@ class Config;
 namespace amio::detail {
 
 // Default convention strings.
-inline constexpr const char* kDefaultCFConventions = "CF-1.10";
-inline constexpr const char* kDefaultCFUGRIDConventions = "CF-1.10 UGRID-1.0";
+inline constexpr const char *kDefaultCFConventions = "CF-1.10";
+inline constexpr const char *kDefaultCFUGRIDConventions = "CF-1.10 UGRID-1.0";
 
 // AttrValue -- a single attribute value.
 //
@@ -81,8 +81,8 @@ struct AttrValue {
 struct VarAttributes {
     std::vector<std::pair<std::string, AttrValue>> items;
 
-    void set(const std::string& key, const AttrValue& value) {
-        for (auto& kv : items) {
+    void set(const std::string &key, const AttrValue &value) {
+        for (auto &kv : items) {
             if (kv.first == key) {
                 kv.second = value;
                 return;
@@ -114,7 +114,7 @@ struct DatasetAttributes {
 
     // Look up a variable's attributes; returns nullptr when none were
     // declared for `var_name`.
-    const VarAttributes* find(const std::string& var_name) const {
+    const VarAttributes *find(const std::string &var_name) const {
         auto it = per_variable.find(var_name);
         return it == per_variable.end() ? nullptr : &it->second;
     }
@@ -122,7 +122,7 @@ struct DatasetAttributes {
 
 // Parse a single scalar string into an AttrValue, detecting numeric
 // literals.  Always succeeds; non-numeric strings become text-only.
-AttrValue parse_attr_value(const std::string& raw);
+AttrValue parse_attr_value(const std::string &raw);
 
 // Parse the dataset attribute model from a conf::Config.
 //
@@ -130,7 +130,7 @@ AttrValue parse_attr_value(const std::string& raw);
 // `variables.<name>.attributes.*`.  Applies the CF (or CF+UGRID)
 // default to `conventions` when the manifest does not set it
 // explicitly.
-DatasetAttributes parse_dataset_attributes(const conf::Config& config);
+DatasetAttributes parse_dataset_attributes(const conf::Config &config);
 
 }  // namespace amio::detail
 

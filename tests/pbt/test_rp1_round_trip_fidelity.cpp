@@ -87,7 +87,7 @@ TEST_CASE("RP1: read round-trip fidelity - read(write(x)) == x", "[pbt][rp1][rou
 
         // Generate the original payload bytes.
         std::vector<std::byte> original(payload_bytes);
-        for (auto& b : original) {
+        for (auto &b : original) {
             b = static_cast<std::byte>(*rc::gen::inRange(0, 256));
         }
 
@@ -117,7 +117,7 @@ TEST_CASE("RP1: read round-trip fidelity - read(write(x)) == x", "[pbt][rp1][rou
         auto info = make_var_info(dtype, shape, /*total_timesteps=*/1);
         PrefetchQueue pq(1, 60, &pool, nullptr, driver.get(), 1, "test_var", info, 1);
 
-        StagingBuffer* buf = nullptr;
+        StagingBuffer *buf = nullptr;
         amio_status_t status = pq.get_buffer(0, nullptr, &buf);
         RC_ASSERT(status == AMIO_OK);
         RC_ASSERT(buf != nullptr);

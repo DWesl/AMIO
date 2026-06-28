@@ -73,7 +73,7 @@ TEST_CASE("Property 6: Staging_Pool conservation - all buffers returned after re
         const auto num_ops = *rc::gen::inRange<std::size_t>(1, 65);
 
         // Track acquired buffers (outstanding).
-        std::vector<amio::detail::StagingBuffer*> outstanding;
+        std::vector<amio::detail::StagingBuffer *> outstanding;
 
         for (std::size_t i = 0; i < num_ops; ++i) {
             auto op = *rc::gen::arbitrary<PoolOp>();
@@ -82,7 +82,7 @@ TEST_CASE("Property 6: Staging_Pool conservation - all buffers returned after re
                 case PoolOp::Acquire: {
                     // Try to acquire a buffer with a random required size.
                     auto req_bytes = *rc::gen::inRange<std::size_t>(1, buffer_capacity + 1);
-                    auto* buf = pool.acquire(req_bytes);
+                    auto *buf = pool.acquire(req_bytes);
                     if (buf != nullptr) {
                         buf->used_bytes = req_bytes;
                         outstanding.push_back(buf);
@@ -127,7 +127,7 @@ TEST_CASE("Property 6: Staging_Pool conservation - all buffers returned after re
         }
 
         // Release all remaining outstanding references.
-        for (auto* buf : outstanding) {
+        for (auto *buf : outstanding) {
             pool.release(buf);
         }
         outstanding.clear();
@@ -149,7 +149,7 @@ TEST_CASE("Property 6: Staging_Pool conservation - no buffer simultaneously free
         const auto num_ops = *rc::gen::inRange<std::size_t>(4, 65);
 
         // Track acquired buffer pointers.
-        std::vector<amio::detail::StagingBuffer*> acquired;
+        std::vector<amio::detail::StagingBuffer *> acquired;
 
         for (std::size_t i = 0; i < num_ops; ++i) {
             // Bias towards acquire to stress the pool.
@@ -157,13 +157,13 @@ TEST_CASE("Property 6: Staging_Pool conservation - no buffer simultaneously free
 
             if (do_acquire) {
                 auto req = *rc::gen::inRange<std::size_t>(1, buffer_capacity + 1);
-                auto* buf = pool.acquire(req);
+                auto *buf = pool.acquire(req);
                 if (buf != nullptr) {
                     buf->used_bytes = req;
 
                     // Verify this buffer is NOT already in our acquired set.
                     // (A buffer returned by acquire must not be one we already hold.)
-                    for (auto* held : acquired) {
+                    for (auto *held : acquired) {
                         RC_ASSERT(held != buf);
                     }
 
@@ -184,7 +184,7 @@ TEST_CASE("Property 6: Staging_Pool conservation - no buffer simultaneously free
         }
 
         // Cleanup: release all.
-        for (auto* buf : acquired) {
+        for (auto *buf : acquired) {
             pool.release(buf);
         }
         acquired.clear();
@@ -205,20 +205,20 @@ TEST_CASE("Property 6: Staging_Pool conservation - ref_count multi-view sharing"
         const auto num_acquire = *rc::gen::inRange<std::size_t>(1, buffer_count + 1);
 
         struct BufRef {
-            amio::detail::StagingBuffer* buf;
+            amio::detail::StagingBuffer *buf;
             int refs;  // total refs held (including initial acquire)
         };
 
         std::vector<BufRef> held;
         for (std::size_t i = 0; i < num_acquire; ++i) {
-            auto* buf = pool.acquire(1);
+            auto *buf = pool.acquire(1);
             RC_ASSERT(buf != nullptr);
             buf->used_bytes = 1;
             held.push_back({buf, 1});
         }
 
         // Add random extra references (simulating read-side multi-view).
-        for (auto& h : held) {
+        for (auto &h : held) {
             int extra_refs = *rc::gen::inRange(0, 4);
             for (int r = 0; r < extra_refs; ++r) {
                 pool.add_ref(h.buf);
@@ -231,7 +231,7 @@ TEST_CASE("Property 6: Staging_Pool conservation - ref_count multi-view sharing"
 
         // Release refs one by one; buffer should not return to pool
         // until all refs are released.
-        for (auto& h : held) {
+        for (auto &h : held) {
             // Release all but the last ref.
             for (int r = 0; r < h.refs - 1; ++r) {
                 pool.release(h.buf);

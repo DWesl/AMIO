@@ -78,7 +78,7 @@ rc::Gen<std::string> genFailingURI() {
 }
 
 // Generate a categorized error description for a given URI.
-std::string expected_error_category(const std::string& uri) {
+std::string expected_error_category(const std::string &uri) {
     if (uri.find("ftp://") == 0 || uri.find("hdfs://") == 0) {
         return "unsupported_scheme";
     }
@@ -133,7 +133,7 @@ TEST_CASE("P26: Zarr cloud failure idempotence - error categorization", "[pbt][p
             "Permission denied",           "No such file or directory"};
 
         auto idx = *rc::gen::inRange<std::size_t>(0, error_messages.size());
-        const auto& msg = error_messages[idx];
+        const auto &msg = error_messages[idx];
 
         // categorize_error should return a non-empty string.
         std::string category = Zarr_Driver::categorize_error(msg);
@@ -213,7 +213,7 @@ TEST_CASE("P26: Zarr cloud failure idempotence - existing content unchanged", "[
         // Write the original content to the file.
         {
             std::ofstream ofs(target_file, std::ios::binary);
-            ofs.write(reinterpret_cast<const char*>(original_content.data()), static_cast<std::streamsize>(content_size));
+            ofs.write(reinterpret_cast<const char *>(original_content.data()), static_cast<std::streamsize>(content_size));
         }
 
         // Verify the file exists with the expected content.
@@ -229,7 +229,7 @@ TEST_CASE("P26: Zarr cloud failure idempotence - existing content unchanged", "[
         {
             std::ifstream ifs(target_file, std::ios::binary);
             std::vector<uint8_t> read_back(content_size);
-            ifs.read(reinterpret_cast<char*>(read_back.data()), static_cast<std::streamsize>(content_size));
+            ifs.read(reinterpret_cast<char *>(read_back.data()), static_cast<std::streamsize>(content_size));
 
             RC_ASSERT(read_back == original_content);
         }

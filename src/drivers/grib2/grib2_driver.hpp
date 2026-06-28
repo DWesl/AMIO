@@ -132,7 +132,7 @@ enum class GRIB2_DRT : std::int32_t {
 //   "adaptive_entropy_coding" or "libaec" -> AdaptiveEntropyCoding
 //   "lossless_jpeg2000" or "jpeg2000"     -> LosslessJPEG2000
 // Throws on unrecognized name.
-GRIB2_DRT parse_drt_name(const std::string& name);
+GRIB2_DRT parse_drt_name(const std::string &name);
 
 // Grib2Settings -- the numeric GRIB2 product identifiers read from
 // the manifest.  Every field is a WMO/NCEP code-table value; the
@@ -213,10 +213,10 @@ class GRIB2_Driver : public Backend_Driver {
     ~GRIB2_Driver() override;
 
     // Backend_Driver interface
-    void open_write(const conf::Config& config) override;
-    void open_read(const conf::Config& config) override;
-    void write(const StagingBuffer& src, const VarMeta& meta) override;
-    void read(StagingBuffer& dst, const VarMeta& meta, std::int64_t timestep, const std::optional<BoundingBox>& bbox) override;
+    void open_write(const conf::Config &config) override;
+    void open_read(const conf::Config &config) override;
+    void write(const StagingBuffer &src, const VarMeta &meta) override;
+    void read(StagingBuffer &dst, const VarMeta &meta, std::int64_t timestep, const std::optional<BoundingBox> &bbox) override;
     void flush() override;
     void close() override;
 
@@ -231,22 +231,22 @@ class GRIB2_Driver : public Backend_Driver {
     // total_timesteps.  Returns VariableInfo{found = false} for an
     // unknown variable or when the driver is not open for reading.
     // (Req 4.1, 4.2, 4.5)
-    VariableInfo describe_variable(const std::string& name) override;
+    VariableInfo describe_variable(const std::string &name) override;
 
    private:
     // Read the GRIB2 product identifiers from the manifest and open
     // the output file.  Throws on failure.  Called from open_write.
-    void initialize(const conf::Config& config);
+    void initialize(const conf::Config &config);
 
     // Scan the GRIB2 source file and build the in-memory record index
     // (records_), keyed by field-identity name.  Throws on failure.
     // Called from open_read.  Only compiled when AMIO_HAS_G2C is set.
-    void build_record_index(const conf::Config& config);
+    void build_record_index(const conf::Config &config);
 
     // Validate that the DRT field is present and in the allowed set.
     // Throws with appropriate message on failure, identifying whether
     // the field was missing or the name was unrecognized (R9.7).
-    GRIB2_DRT validate_drt(const conf::Config& config) const;
+    GRIB2_DRT validate_drt(const conf::Config &config) const;
 
    public:
     // field_identity_name -- the variable-name <-> field-identity
@@ -300,19 +300,19 @@ class GRIB2_Driver : public Backend_Driver {
     // Takes a std::vector<std::int64_t> (not a gribfield*) so it can be
     // tested without g2c dependency.  The caller in build_record_index
     // converts g2c arrays to this vector before calling.
-    static CompositionMetadata extract_composition_metadata(std::int64_t pdt_number, const std::vector<std::int64_t>& ipdtmpl);
+    static CompositionMetadata extract_composition_metadata(std::int64_t pdt_number, const std::vector<std::int64_t> &ipdtmpl);
 
     // Check if a buffer described by shape is contiguous and row-major.
     // Returns true if the data can be passed directly to g2c (fast path).
     // Implements the is_always_contiguous() + row-major check (R9.4).
-    static bool is_contiguous_row_major(const amio_shape_t& shape);
+    static bool is_contiguous_row_major(const amio_shape_t &shape);
 
     // Pack non-contiguous data into a contiguous row-major buffer (R9.5).
     // Returns the packed buffer as a vector of bytes.
-    static std::vector<std::byte> pack_row_major(const std::byte* src_data, const amio_shape_t& shape, std::size_t element_size);
+    static std::vector<std::byte> pack_row_major(const std::byte *src_data, const amio_shape_t &shape, std::size_t element_size);
 
     // Compute total element count from shape.
-    static std::size_t total_elements(const amio_shape_t& shape);
+    static std::size_t total_elements(const amio_shape_t &shape);
 
     // Compute element size in bytes from dtype.
     static std::size_t dtype_size(amio_dtype_t dtype);
@@ -330,69 +330,69 @@ class GRIB2_Driver : public Backend_Driver {
     // Grid Definition Template 3.0 (regular lat/lon), 19 entries.
     // ni = points along a parallel (longitudes), nj = points along a
     // meridian (latitudes).
-    static std::vector<std::int64_t> build_gdt_3_0(const Grib2Settings& s, std::int64_t ni, std::int64_t nj);
+    static std::vector<std::int64_t> build_gdt_3_0(const Grib2Settings &s, std::int64_t ni, std::int64_t nj);
 
     // Grid Definition Template 3.40 (Gaussian latitude/longitude),
     // 19 entries.  Identical to GDT 3.0 except index 17 carries N
     // (number of parallels between equator and pole) instead of Dj.
-    static std::vector<std::int64_t> build_gdt_3_40(const Grib2Settings& s, std::int64_t ni, std::int64_t nj);
+    static std::vector<std::int64_t> build_gdt_3_40(const Grib2Settings &s, std::int64_t ni, std::int64_t nj);
 
     // Product Definition Template 4.0 (analysis/forecast at a level),
     // 15 entries.
-    static std::vector<std::int64_t> build_pdt_4_0(const Grib2Settings& s);
+    static std::vector<std::int64_t> build_pdt_4_0(const Grib2Settings &s);
 
     // Product Definition Template 4.40 (chemical constituent at a
     // horizontal level at a point in time), 16 entries.
-    static std::vector<std::int64_t> build_pdt_4_40(const Grib2Settings& s);
+    static std::vector<std::int64_t> build_pdt_4_40(const Grib2Settings &s);
 
     // Product Definition Template 4.44 (aerosol at a horizontal level
     // at a point in time), 21 entries.  Carries aerosol type at index 2
     // and size distribution parameters at indices 5/7.
-    static std::vector<std::int64_t> build_pdt_4_44(const Grib2Settings& s);
+    static std::vector<std::int64_t> build_pdt_4_44(const Grib2Settings &s);
 
     // Product Definition Template 4.8 (statistically processed at a
     // level), 29 entries.  Indices 0–14 share PDT 4.0 layout; indices
     // 15–28 carry the statistical processing interval fields.
-    static std::vector<std::int64_t> build_pdt_4_8(const Grib2Settings& s);
+    static std::vector<std::int64_t> build_pdt_4_8(const Grib2Settings &s);
 
     // Product Definition Template 4.46 (statistically processed aerosol),
     // 35 entries.  Aerosol fields at indices 2–7, common forecast fields
     // at 8–20, end-of-time-interval at 21–26, statistical processing at
     // 27–34.
-    static std::vector<std::int64_t> build_pdt_4_46(const Grib2Settings& s);
+    static std::vector<std::int64_t> build_pdt_4_46(const Grib2Settings &s);
 
     // Product Definition Template 4.45 (individual ensemble forecast
     // for aerosol), 24 entries.  Aerosol fields at indices 2–7,
     // ensemble fields at indices 15–17, fixed surfaces at 18–23.
-    static std::vector<std::int64_t> build_pdt_4_45(const Grib2Settings& s);
+    static std::vector<std::int64_t> build_pdt_4_45(const Grib2Settings &s);
 
     // Product Definition Template 4.48 (aerosol optical properties at
     // a wavelength), 26 entries.  Aerosol type at index 2, optical
     // property type at index 8, wavelength values at indices 10/12,
     // common forecast fields at 13–19, fixed surfaces at 20–25.
-    static std::vector<std::int64_t> build_pdt_4_48(const Grib2Settings& s);
+    static std::vector<std::int64_t> build_pdt_4_48(const Grib2Settings &s);
 
     // Product Definition Template 4.49 (individual ensemble forecast
     // for aerosol optical properties), 29 entries.  Aerosol/optical
     // fields at indices 2–12, common forecast fields at 13–19,
     // ensemble fields at 20–22, fixed surfaces at 23–28.
-    static std::vector<std::int64_t> build_pdt_4_49(const Grib2Settings& s);
+    static std::vector<std::int64_t> build_pdt_4_49(const Grib2Settings &s);
 
     // Data Representation Template values for the selected DRT.
     // DRT 40 (JPEG2000) -> 7 entries; DRT 42 (AEC/CCSDS) -> 8 entries.
-    static std::vector<std::int64_t> build_drs_template(GRIB2_DRT drt, const Grib2Settings& s);
+    static std::vector<std::int64_t> build_drs_template(GRIB2_DRT drt, const Grib2Settings &s);
 
    private:
     // Read all Grib2Settings fields from the configuration, applying
     // defaults for any absent key.
-    static Grib2Settings read_settings(const conf::Config& config);
+    static Grib2Settings read_settings(const conf::Config &config);
 
     // State
     bool initialized_ = false;
     Grib2Settings settings_;
     std::string output_path_;
     GRIB2_DRT active_drt_ = GRIB2_DRT::AdaptiveEntropyCoding;
-    std::FILE* out_file_ = nullptr;
+    std::FILE *out_file_ = nullptr;
 
     // ----- Read-side state -----
     // Set when the driver is opened via open_read (vs open_write).

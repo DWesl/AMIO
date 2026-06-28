@@ -47,7 +47,7 @@ namespace amio::detail {
 
 namespace {
 
-void nczarr_check(int status, const std::string& context) {
+void nczarr_check(int status, const std::string &context) {
     if (status != NC_NOERR) {
         std::string msg = "Zarr_Driver [NCZarr]: error in " + context + ": " + nc_strerror(status) + " (nc_errno=" + std::to_string(status) + ")";
         throw std::runtime_error(msg);
@@ -97,10 +97,10 @@ int nczarr_dtype_to_nc_type(amio_dtype_t dtype) {
 // Write one attribute set onto `varid` (NC_GLOBAL for file-level).
 // Must be called in define mode.  Numeric attributes use a type
 // matching their literal form; `_FillValue` uses the variable's type.
-void nczarr_write_attributes(int ncid, int varid, const VarAttributes& attrs, int var_nc_type) {
-    for (const auto& kv : attrs.items) {
-        const std::string& name = kv.first;
-        const AttrValue& val = kv.second;
+void nczarr_write_attributes(int ncid, int varid, const VarAttributes &attrs, int var_nc_type) {
+    for (const auto &kv : attrs.items) {
+        const std::string &name = kv.first;
+        const AttrValue &val = kv.second;
 
         if (val.is_numeric) {
             if (name == "_FillValue" && varid != NC_GLOBAL && var_nc_type != NC_NAT) {
@@ -138,7 +138,7 @@ void nczarr_write_attributes(int ncid, int varid, const VarAttributes& attrs, in
 
 // Convert a local filesystem path to an NCZarr URI.
 // NCZarr uses file:// URIs with #mode=nczarr,<format> fragment.
-std::string to_nczarr_uri(const std::string& path) {
+std::string to_nczarr_uri(const std::string &path) {
     // NCZarr requires a file:// URI with mode fragment.
     // Format: file://<absolute_path>#mode=nczarr,file
     if (path.empty()) {
@@ -183,7 +183,7 @@ std::string to_nczarr_uri(const std::string& path) {
 // diagnostic, and opens the NCZarr store for writing.
 // ===================================================================
 
-void Zarr_Driver::open_write(const conf::Config& config) {
+void Zarr_Driver::open_write(const conf::Config &config) {
     if (is_open_) {
         throw std::runtime_error("Zarr_Driver: already open");
     }
@@ -227,7 +227,7 @@ void Zarr_Driver::open_write(const conf::Config& config) {
     // global attributes.  These surface as Zarr group attributes
     // (.zattrs) through NCZarr.
     {
-        const std::string& conv = attributes_.conventions;
+        const std::string &conv = attributes_.conventions;
         nczarr_check(nc_put_att_text(ncid_, NC_GLOBAL, "Conventions", conv.size(), conv.c_str()), "nc_put_att_text(Conventions)");
         nczarr_write_attributes(ncid_, NC_GLOBAL, attributes_.global, NC_NAT);
         global_attrs_written_ = true;
@@ -241,7 +241,7 @@ void Zarr_Driver::open_write(const conf::Config& config) {
 // open_read -- NCZarr fallback: open for reading via netCDF-c.
 // ===================================================================
 
-void Zarr_Driver::open_read(const conf::Config& config) {
+void Zarr_Driver::open_read(const conf::Config &config) {
     if (is_open_) {
         throw std::runtime_error("Zarr_Driver: already open");
     }
@@ -281,7 +281,7 @@ void Zarr_Driver::open_read(const conf::Config& config) {
 // NCZarr with lossless compression (R8.7).
 // ===================================================================
 
-void Zarr_Driver::write(const StagingBuffer& src, const VarMeta& meta) {
+void Zarr_Driver::write(const StagingBuffer &src, const VarMeta &meta) {
     if (!is_open_ || !is_write_mode_) {
         throw std::runtime_error("Zarr_Driver: write called on driver not open for writing");
     }
@@ -322,7 +322,7 @@ void Zarr_Driver::write(const StagingBuffer& src, const VarMeta& meta) {
         // Apply CF/UGRID per-variable attributes from the manifest.
         // Written as Zarr attributes (.zattrs) via NCZarr.  Still in
         // define mode here.
-        if (const VarAttributes* var_attrs = attributes_.find(meta.name)) {
+        if (const VarAttributes *var_attrs = attributes_.find(meta.name)) {
             nczarr_write_attributes(ncid_, varid, *var_attrs, nc_type);
         }
 
@@ -427,7 +427,7 @@ void Zarr_Driver::write(const StagingBuffer& src, const VarMeta& meta) {
 // read -- NCZarr fallback: read from NCZarr store into StagingBuffer.
 // ===================================================================
 
-void Zarr_Driver::read(StagingBuffer& dst, const VarMeta& meta, std::int64_t timestep, const std::optional<BoundingBox>& bbox) {
+void Zarr_Driver::read(StagingBuffer &dst, const VarMeta &meta, std::int64_t timestep, const std::optional<BoundingBox> &bbox) {
     if (!is_open_ || is_write_mode_) {
         throw std::runtime_error("Zarr_Driver: read called on driver not open for reading");
     }
@@ -444,7 +444,7 @@ void Zarr_Driver::read(StagingBuffer& dst, const VarMeta& meta, std::int64_t tim
     std::vector<std::size_t> count(meta.shape.rank);
 
     if (bbox.has_value()) {
-        const auto& box = bbox.value();
+        const auto &box = bbox.value();
         for (int32_t d = 0; d < box.rank; ++d) {
             start[d] = static_cast<std::size_t>(box.offsets[d]);
             count[d] = static_cast<std::size_t>(box.extents[d]);
@@ -471,7 +471,7 @@ void Zarr_Driver::read(StagingBuffer& dst, const VarMeta& meta, std::int64_t tim
 
     // Handle strided reads if bounding box has strides.
     if (bbox.has_value()) {
-        const auto& box = bbox.value();
+        const auto &box = bbox.value();
         bool has_strides = false;
         std::vector<ptrdiff_t> strides(meta.shape.rank, 1);
         for (int32_t d = 0; d < box.rank; ++d) {

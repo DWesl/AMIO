@@ -52,7 +52,9 @@
 
 // Forward declaration -- avoids pulling in <logs/logger.hpp> from this
 // internal header.  The full definition is only needed in the .cpp.
-namespace logs { class Logger; }
+namespace logs {
+class Logger;
+}
 
 namespace amio::detail {
 
@@ -88,7 +90,7 @@ struct TaskOutcome {
 //   out_message - if non-null, receives the exception's what() string
 //
 // Returns: the AMIO_ERR_* code for the current exception.
-amio_err_t translate_exception_to_error(std::string* out_message = nullptr);
+amio_err_t translate_exception_to_error(std::string *out_message = nullptr);
 
 // emit_parallel_stacktrace -- collective stack trace emission on
 // the I/O communicator.
@@ -116,8 +118,8 @@ amio_err_t translate_exception_to_error(std::string* out_message = nullptr);
 //                 nullptr means LOGS is not yet initialized (Req 6.7)
 //
 // Returns: the formatted stack trace string (retained for R12.10).
-std::string emit_parallel_stacktrace(const IOCommunicator& io_comm, amio_err_t error_code, const std::string& message,
-                                     logs::Logger* logger = nullptr);
+std::string emit_parallel_stacktrace(const IOCommunicator &io_comm, amio_err_t error_code, const std::string &message,
+                                     logs::Logger *logger = nullptr);
 
 // OutcomeRegistry -- thread-safe registry of task outcomes keyed by
 // opaque handle identifier.
@@ -180,8 +182,8 @@ class OutcomeRegistry {
 //                nullptr means LOGS is not yet initialized (Req 6.7)
 //
 // Returns: the TaskOutcome (AMIO_OK on success, error code on failure)
-TaskOutcome execute_with_exception_cordon(const std::function<void()>& callback, std::uint64_t handle_id, const IOCommunicator& io_comm,
-                                          OutcomeRegistry& registry, logs::Logger* logger = nullptr);
+TaskOutcome execute_with_exception_cordon(const std::function<void()> &callback, std::uint64_t handle_id, const IOCommunicator &io_comm,
+                                          OutcomeRegistry &registry, logs::Logger *logger = nullptr);
 
 }  // namespace amio::detail
 

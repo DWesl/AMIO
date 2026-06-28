@@ -41,7 +41,7 @@ using namespace amio::pbt;
 
 namespace {
 
-std::vector<int64_t> compute_row_major_strides(const amio_shape_t& shape) {
+std::vector<int64_t> compute_row_major_strides(const amio_shape_t &shape) {
     std::vector<int64_t> strides(shape.rank, 0);
     if (shape.rank <= 0) return strides;
 
@@ -54,7 +54,7 @@ std::vector<int64_t> compute_row_major_strides(const amio_shape_t& shape) {
 }
 
 // Generate a shape with explicit row-major strides (contiguous).
-amio_shape_t make_contiguous_row_major_shape(int32_t rank, const std::vector<int64_t>& extents) {
+amio_shape_t make_contiguous_row_major_shape(int32_t rank, const std::vector<int64_t> &extents) {
     amio_shape_t shape = {};
     shape.rank = rank;
     for (int32_t d = 0; d < rank; ++d) {
@@ -65,7 +65,7 @@ amio_shape_t make_contiguous_row_major_shape(int32_t rank, const std::vector<int
 }
 
 // Generate a shape with non-contiguous strides (strided view).
-amio_shape_t make_strided_shape(int32_t rank, const std::vector<int64_t>& extents, const std::vector<int64_t>& strides) {
+amio_shape_t make_strided_shape(int32_t rank, const std::vector<int64_t> &extents, const std::vector<int64_t> &strides) {
     amio_shape_t shape = {};
     shape.rank = rank;
     for (int32_t d = 0; d < rank; ++d) {
@@ -76,7 +76,7 @@ amio_shape_t make_strided_shape(int32_t rank, const std::vector<int64_t>& extent
 }
 
 // Compute total elements from shape.
-std::size_t total_elements(const amio_shape_t& shape) {
+std::size_t total_elements(const amio_shape_t &shape) {
     if (shape.rank <= 0 || shape.rank > AMIO_MAX_RANK) return 0;
     std::size_t count = 1;
     for (int32_t d = 0; d < shape.rank; ++d) {

@@ -32,26 +32,24 @@
 
 #include "workers/exception_bridge.hpp"
 
+#include <conf/error.hpp>
 #include <cstdio>
 #include <ctime>
 #include <exception>
-#include <sstream>
-#include <stdexcept>
-
-#include <conf/error.hpp>
 #include <logs/logger.hpp>
 #include <logs/severity.hpp>
+#include <sstream>
+#include <stdexcept>
 
 namespace amio::detail {
 
 // ---- Exception translation ----
 
-amio_err_t translate_exception_to_error(std::string* out_message) {
+amio_err_t translate_exception_to_error(std::string *out_message) {
     try {
         // Re-throw the current exception to inspect it.
         throw;
-    }
-    catch (const conf::Conf_Error& e) {
+    } catch (const conf::Conf_Error &e) {
         // conf::Conf_Error is the most specific; map by error code.
         if (out_message) *out_message = e.what();
         switch (e.code()) {
@@ -66,16 +64,13 @@ amio_err_t translate_exception_to_error(std::string* out_message) {
             default:
                 return AMIO_ERR_BACKEND_FAILURE;
         }
-    }
-    catch (const std::invalid_argument& e) {
+    } catch (const std::invalid_argument &e) {
         if (out_message) *out_message = e.what();
         return AMIO_ERR_INVALID_INPUT;
-    }
-    catch (const std::exception& e) {
+    } catch (const std::exception &e) {
         if (out_message) *out_message = e.what();
         return AMIO_ERR_BACKEND_FAILURE;
-    }
-    catch (...) {
+    } catch (...) {
         if (out_message) *out_message = "Unknown exception (non-std)";
         return AMIO_ERR_BACKEND_FAILURE;
     }
@@ -97,8 +92,7 @@ static bool is_unrecoverable(amio_err_t error_code) {
     }
 }
 
-std::string emit_parallel_stacktrace(const IOCommunicator& io_comm, amio_err_t error_code, const std::string& message,
-                                     logs::Logger* logger) {
+std::string emit_parallel_stacktrace(const IOCommunicator &io_comm, amio_err_t error_code, const std::string &message, logs::Logger *logger) {
     // Build a local stack trace record.
     std::ostringstream oss;
 
@@ -110,8 +104,8 @@ std::string emit_parallel_stacktrace(const IOCommunicator& io_comm, amio_err_t e
     oss << "[AMIO FATAL] " << time_buf << "\n"
         << "  Error code: " << error_code << " (" << amio_strerror(error_code) << ")\n"
         << "  Message: " << message << "\n"
-        << "  I/O Communicator: " << (io_comm.valid ? "valid" : "invalid") << ", rank=" << io_comm.rank()
-        << ", size=" << io_comm.size() << ", is_io_rank=" << (io_comm.is_io_rank ? "true" : "false") << "\n";
+        << "  I/O Communicator: " << (io_comm.valid ? "valid" : "invalid") << ", rank=" << io_comm.rank() << ", size=" << io_comm.size()
+        << ", is_io_rank=" << (io_comm.is_io_rank ? "true" : "false") << "\n";
 
 #ifdef AMIO_HAS_MPI
     // In a real MPI build, this would perform a collective operation
@@ -128,9 +122,7 @@ std::string emit_parallel_stacktrace(const IOCommunicator& io_comm, amio_err_t e
 
     // Route diagnostics through LOGS if initialized (Req 6.1, 6.4, 6.7).
     if (logger) {
-        auto severity = is_unrecoverable(error_code)
-                            ? logs::Severity_Level::FATAL
-                            : logs::Severity_Level::ERROR;
+        auto severity = is_unrecoverable(error_code) ? logs::Severity_Level::FATAL : logs::Severity_Level::ERROR;
         logger->log(severity, trace);
     } else {
         // Pre-initialization fallback: emit to stderr directly (Req 6.7).
@@ -151,7 +143,7 @@ bool OutcomeRegistry::has_failure(std::uint64_t handle_id) const {
     std::lock_guard<std::mutex> lock(mu_);
     auto it = outcomes_.find(handle_id);
     if (it == outcomes_.end()) return false;
-    for (const auto& o : it->second) {
+    for (const auto &o : it->second) {
         if (o.is_failure()) return true;
     }
     return false;
@@ -168,7 +160,7 @@ TaskOutcome OutcomeRegistry::get_first_failure(std::uint64_t handle_id) const {
     std::lock_guard<std::mutex> lock(mu_);
     auto it = outcomes_.find(handle_id);
     if (it == outcomes_.end()) return TaskOutcome{};
-    for (const auto& o : it->second) {
+    for (const auto &o : it->second) {
         if (o.is_failure()) return o;
     }
     return TaskOutcome{};
@@ -187,8 +179,8 @@ void OutcomeRegistry::clear_all() {
 std::size_t OutcomeRegistry::failure_count() const {
     std::lock_guard<std::mutex> lock(mu_);
     std::size_t count = 0;
-    for (const auto& [id, outcomes] : outcomes_) {
-        for (const auto& o : outcomes) {
+    for (const auto &[id, outcomes] : outcomes_) {
+        for (const auto &o : outcomes) {
             if (o.is_failure()) {
                 ++count;
                 break;  // Count each handle only once.
@@ -200,8 +192,8 @@ std::size_t OutcomeRegistry::failure_count() const {
 
 // ---- Exception cordon execution ----
 
-TaskOutcome execute_with_exception_cordon(const std::function<void()>& callback, std::uint64_t handle_id, const IOCommunicator& io_comm,
-                                          OutcomeRegistry& registry, logs::Logger* logger) {
+TaskOutcome execute_with_exception_cordon(const std::function<void()> &callback, std::uint64_t handle_id, const IOCommunicator &io_comm,
+                                          OutcomeRegistry &registry, logs::Logger *logger) {
     TaskOutcome outcome;
 
     try {
@@ -210,8 +202,7 @@ TaskOutcome execute_with_exception_cordon(const std::function<void()>& callback,
         }
         // Success path: record AMIO_OK.
         outcome.error_code = AMIO_OK;
-    }
-    catch (...) {
+    } catch (...) {
         // Delegate all exception-to-error mapping to translate_exception_to_error
         // for consistent behaviour between the cordon and direct translation callers.
         outcome.error_code = translate_exception_to_error(&outcome.message);

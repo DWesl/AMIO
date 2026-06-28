@@ -47,7 +47,7 @@ namespace {
 int g_passed = 0;
 int g_failed = 0;
 
-void report_failure(const char* expr, const char* file, int line, const std::string& ctx) {
+void report_failure(const char *expr, const char *file, int line, const std::string &ctx) {
     std::fprintf(stderr, "FAIL %s:%d: %s   (%s)\n", file, line, expr, ctx.c_str());
     ++g_failed;
 }
@@ -81,7 +81,7 @@ const std::string kVarName = "d0_c3_n5_s100_l50000";
 }  // namespace
 
 int main() {
-    const char* OUTPUT_PATH = "/tmp/amio_test_grib2_multistep.grib2";
+    const char *OUTPUT_PATH = "/tmp/amio_test_grib2_multistep.grib2";
     std::remove(OUTPUT_PATH);
 
     // Build source data: 4 timesteps, each [181, 360].
@@ -114,7 +114,7 @@ int main() {
 
         for (int t = 0; t < NTIMES; ++t) {
             StagingBuffer buf{};
-            buf.data = reinterpret_cast<std::byte*>(source[t].data());
+            buf.data = reinterpret_cast<std::byte *>(source[t].data());
             buf.capacity_bytes = source[t].size() * sizeof(float);
             buf.used_bytes = source[t].size() * sizeof(float);
 
@@ -129,7 +129,7 @@ int main() {
         }
         writer.flush();
         writer.close();
-    } catch (const std::exception& e) {
+    } catch (const std::exception &e) {
         std::fprintf(stdout, "NOTE: GRIB2 write path unavailable (JPEG2000 encoder not in this g2c build), skipping: %s\n", e.what());
         functional = false;
     }
@@ -160,7 +160,7 @@ int main() {
             for (int t = 0; t < NTIMES; ++t) {
                 std::vector<float> out(POINTS_PER_STEP, -1.0f);
                 StagingBuffer dst{};
-                dst.data = reinterpret_cast<std::byte*>(out.data());
+                dst.data = reinterpret_cast<std::byte *>(out.data());
                 dst.capacity_bytes = out.size() * sizeof(float);
                 dst.used_bytes = 0;
 
@@ -174,7 +174,7 @@ int main() {
             }
 
             reader.close();
-        } catch (const std::exception& e) {
+        } catch (const std::exception &e) {
             report_failure("read phase", __FILE__, __LINE__, e.what());
         }
     }

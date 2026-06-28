@@ -59,7 +59,7 @@ namespace amio::detail {
 //   seq            - generation counter, incremented on every
 //                    acquire; used to detect stale references
 struct StagingBuffer {
-    std::byte* data = nullptr;
+    std::byte *data = nullptr;
     std::size_t capacity_bytes = 0;
     std::size_t used_bytes = 0;
     int ref_count = 0;
@@ -96,10 +96,10 @@ class StagingPool {
     StagingPool(std::size_t buffer_count, std::size_t buffer_capacity, std::int64_t timeout_ms = kDefaultTimeoutMs);
 
     // Non-copyable, non-movable (owns raw memory).
-    StagingPool(const StagingPool&) = delete;
-    StagingPool& operator=(const StagingPool&) = delete;
-    StagingPool(StagingPool&&) = delete;
-    StagingPool& operator=(StagingPool&&) = delete;
+    StagingPool(const StagingPool &) = delete;
+    StagingPool &operator=(const StagingPool &) = delete;
+    StagingPool(StagingPool &&) = delete;
+    StagingPool &operator=(StagingPool &&) = delete;
 
     ~StagingPool();
 
@@ -114,7 +114,7 @@ class StagingPool {
     //   used_bytes set to `required_bytes`, seq incremented).
     //   nullptr on timeout (caller should return
     //   AMIO_ERR_STAGING_BACKPRESSURE).
-    StagingBuffer* acquire(std::size_t required_bytes);
+    StagingBuffer *acquire(std::size_t required_bytes);
 
     // release -- return a buffer to the free list.
     //
@@ -123,14 +123,14 @@ class StagingPool {
     //
     // Precondition: `buf` must be a buffer owned by this pool with
     // ref_count > 0.
-    void release(StagingBuffer* buf);
+    void release(StagingBuffer *buf);
 
     // add_ref -- increment the reference count on a buffer.
     //
     // Used for read-side multi-view sharing: when multiple
     // Memory_Views reference the same prefetched buffer, each
     // outstanding view holds a reference.
-    void add_ref(StagingBuffer* buf);
+    void add_ref(StagingBuffer *buf);
 
     // ----- Diagnostics / test helpers -----
 
@@ -156,7 +156,7 @@ class StagingPool {
 
     // Remove a buffer at the given free-list index and return it.
     // Caller must hold mu_.
-    StagingBuffer* remove_from_free_list(std::size_t free_idx);
+    StagingBuffer *remove_from_free_list(std::size_t free_idx);
 
     mutable std::mutex mu_;
     std::condition_variable cv_;

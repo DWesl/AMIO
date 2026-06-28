@@ -23,12 +23,11 @@
 #include <atomic>
 #include <cassert>
 #include <chrono>
+#include <conf/error.hpp>
 #include <cstdio>
 #include <stdexcept>
 #include <string>
 #include <thread>
-
-#include <conf/error.hpp>
 
 #include "workers/exception_bridge.hpp"
 #include "workers/worker_pool.hpp"
@@ -126,10 +125,8 @@ void test_translate_conf_error_file_not_found() {
         code = translate_exception_to_error(&msg);
     }
 
-    EXPECT_TRUE(code == AMIO_ERR_MANIFEST_NOT_FOUND,
-                "conf::Conf_Error{File_Not_Found} should map to AMIO_ERR_MANIFEST_NOT_FOUND");
-    EXPECT_TRUE(msg.find("test file not found") != std::string::npos,
-                "message should contain the original error text");
+    EXPECT_TRUE(code == AMIO_ERR_MANIFEST_NOT_FOUND, "conf::Conf_Error{File_Not_Found} should map to AMIO_ERR_MANIFEST_NOT_FOUND");
+    EXPECT_TRUE(msg.find("test file not found") != std::string::npos, "message should contain the original error text");
 }
 
 // ---- Test: translate_exception_to_error with conf::Conf_Error{Parse_Error} ----
@@ -144,10 +141,8 @@ void test_translate_conf_error_parse_error() {
         code = translate_exception_to_error(&msg);
     }
 
-    EXPECT_TRUE(code == AMIO_ERR_MANIFEST_INVALID,
-                "conf::Conf_Error{Parse_Error} should map to AMIO_ERR_MANIFEST_INVALID");
-    EXPECT_TRUE(msg.find("invalid YAML at line 5") != std::string::npos,
-                "message should contain the original error text");
+    EXPECT_TRUE(code == AMIO_ERR_MANIFEST_INVALID, "conf::Conf_Error{Parse_Error} should map to AMIO_ERR_MANIFEST_INVALID");
+    EXPECT_TRUE(msg.find("invalid YAML at line 5") != std::string::npos, "message should contain the original error text");
 }
 
 // ---- Test: translate_exception_to_error with conf::Conf_Error{Key_Not_Found} ----
@@ -162,10 +157,8 @@ void test_translate_conf_error_key_not_found() {
         code = translate_exception_to_error(&msg);
     }
 
-    EXPECT_TRUE(code == AMIO_ERR_MANIFEST_INVALID,
-                "conf::Conf_Error{Key_Not_Found} should map to AMIO_ERR_MANIFEST_INVALID");
-    EXPECT_TRUE(msg.find("staging_pool.buffer_count") != std::string::npos,
-                "message should contain the missing key path");
+    EXPECT_TRUE(code == AMIO_ERR_MANIFEST_INVALID, "conf::Conf_Error{Key_Not_Found} should map to AMIO_ERR_MANIFEST_INVALID");
+    EXPECT_TRUE(msg.find("staging_pool.buffer_count") != std::string::npos, "message should contain the missing key path");
 }
 
 // ---- Test: translate_exception_to_error with conf::Conf_Error{Type_Mismatch} ----
@@ -180,10 +173,8 @@ void test_translate_conf_error_type_mismatch() {
         code = translate_exception_to_error(&msg);
     }
 
-    EXPECT_TRUE(code == AMIO_ERR_INVALID_INPUT,
-                "conf::Conf_Error{Type_Mismatch} should map to AMIO_ERR_INVALID_INPUT");
-    EXPECT_TRUE(msg.find("expected int, got string") != std::string::npos,
-                "message should contain the type mismatch description");
+    EXPECT_TRUE(code == AMIO_ERR_INVALID_INPUT, "conf::Conf_Error{Type_Mismatch} should map to AMIO_ERR_INVALID_INPUT");
+    EXPECT_TRUE(msg.find("expected int, got string") != std::string::npos, "message should contain the type mismatch description");
 }
 
 // ---- Test: translate_exception_to_error with conf::Conf_Error{Invalid_Arg} ----
@@ -198,10 +189,8 @@ void test_translate_conf_error_invalid_arg() {
         code = translate_exception_to_error(&msg);
     }
 
-    EXPECT_TRUE(code == AMIO_ERR_INVALID_INPUT,
-                "conf::Conf_Error{Invalid_Arg} should map to AMIO_ERR_INVALID_INPUT");
-    EXPECT_TRUE(msg.find("null pointer passed to Config") != std::string::npos,
-                "message should contain the invalid argument description");
+    EXPECT_TRUE(code == AMIO_ERR_INVALID_INPUT, "conf::Conf_Error{Invalid_Arg} should map to AMIO_ERR_INVALID_INPUT");
+    EXPECT_TRUE(msg.find("null pointer passed to Config") != std::string::npos, "message should contain the invalid argument description");
 }
 
 // ---- Test: emit_parallel_stacktrace produces non-empty trace ----

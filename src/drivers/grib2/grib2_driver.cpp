@@ -75,7 +75,7 @@ BackendRegistrar<GRIB2_Driver> grib2_registrar("grib2");
 // Read a single int64 manifest field, falling back to `def` when the
 // key is absent.  Centralizes the integer getter pattern for the CONF
 // configuration interface.
-std::int64_t cfg_int(const conf::Config& config, const std::string& key, std::int64_t def) {
+std::int64_t cfg_int(const conf::Config &config, const std::string &key, std::int64_t def) {
     if (!config.has(key)) {
         return def;
     }
@@ -87,7 +87,7 @@ std::int64_t cfg_int(const conf::Config& config, const std::string& key, std::in
 // DRT name parsing
 // ---------------------------------------------------------------
 
-GRIB2_DRT parse_drt_name(const std::string& name) {
+GRIB2_DRT parse_drt_name(const std::string &name) {
     // Normalize to lowercase for comparison.
     std::string lower = name;
     std::transform(lower.begin(), lower.end(), lower.begin(), [](unsigned char c) { return std::tolower(c); });
@@ -102,9 +102,9 @@ GRIB2_DRT parse_drt_name(const std::string& name) {
 
     // Not in the allowed set -- this is an unrecognized DRT (R9.6, R9.7).
     throw std::runtime_error("GRIB2_Driver: unrecognized Data Representation Template: '" + name +
-                           "'. DRT name is not recognized. "
-                           "Allowed values: {Adaptive Entropy Coding via libaec, "
-                           "Lossless JPEG2000}. Zero record bytes emitted.");
+                             "'. DRT name is not recognized. "
+                             "Allowed values: {Adaptive Entropy Coding via libaec, "
+                             "Lossless JPEG2000}. Zero record bytes emitted.");
 }
 
 // ---------------------------------------------------------------
@@ -136,7 +136,7 @@ GRIB2_Driver::~GRIB2_Driver() {
 // read_settings -- pull the numeric GRIB2 identifiers from manifest
 // ---------------------------------------------------------------
 
-Grib2Settings GRIB2_Driver::read_settings(const conf::Config& config) {
+Grib2Settings GRIB2_Driver::read_settings(const conf::Config &config) {
     Grib2Settings s{};  // start from NCEP-flavored defaults
 
     s.discipline = cfg_int(config, "grib2.discipline", s.discipline);
@@ -193,12 +193,12 @@ Grib2Settings GRIB2_Driver::read_settings(const conf::Config& config) {
 // open_write / open_read
 // ---------------------------------------------------------------
 
-void GRIB2_Driver::open_write(const conf::Config& config) {
+void GRIB2_Driver::open_write(const conf::Config &config) {
     active_drt_ = validate_drt(config);
     initialize(config);
 }
 
-void GRIB2_Driver::open_read(const conf::Config& config) {
+void GRIB2_Driver::open_read(const conf::Config &config) {
 #ifndef AMIO_HAS_G2C
     // g2c is not available in this build.  A read open must fail so the
     // C-boundary cordon translates the throw to AMIO_ERR_BACKEND_FAILURE
@@ -326,7 +326,7 @@ std::string GRIB2_Driver::field_identity_name(std::int64_t discipline, std::int6
 // compatible identity.  (Req 13.1, 13.2, 13.3, 13.4, 13.5, 13.6)
 // ---------------------------------------------------------------
 
-CompositionMetadata GRIB2_Driver::extract_composition_metadata(std::int64_t pdt_number, const std::vector<std::int64_t>& ipdtmpl) {
+CompositionMetadata GRIB2_Driver::extract_composition_metadata(std::int64_t pdt_number, const std::vector<std::int64_t> &ipdtmpl) {
     CompositionMetadata meta{};
     meta.pdt_number = pdt_number;
 
@@ -420,7 +420,7 @@ constexpr int kPdtNumberIdx = 1;
 constexpr int kGdtNiIdx = 7;
 constexpr int kGdtNjIdx = 8;
 
-std::int64_t pdt_value(const gribfield* gfld, int idx) {
+std::int64_t pdt_value(const gribfield *gfld, int idx) {
     if (gfld->ipdtmpl != nullptr && idx < gfld->ipdtlen) {
         return static_cast<std::int64_t>(gfld->ipdtmpl[idx]);
     }
@@ -461,7 +461,7 @@ int pdt_surface_value_index(std::int64_t pdt_number) {
 }  // namespace
 #endif  // AMIO_HAS_G2C
 
-void GRIB2_Driver::build_record_index(const conf::Config& config) {
+void GRIB2_Driver::build_record_index(const conf::Config &config) {
 #ifndef AMIO_HAS_G2C
     (void)config;
     throw std::runtime_error("GRIB2_Driver::build_record_index: nceplibs-g2c not available");
@@ -469,14 +469,14 @@ void GRIB2_Driver::build_record_index(const conf::Config& config) {
     (void)config;
     records_.clear();
 
-    std::FILE* fp = std::fopen(input_path_.c_str(), "rb");
+    std::FILE *fp = std::fopen(input_path_.c_str(), "rb");
     if (fp == nullptr) {
         throw std::runtime_error("GRIB2_Driver::open_read: failed to open input file '" + input_path_ + "' for reading.");
     }
 
     // RAII-ish guard: ensure the scan handle is closed on every path.
     struct FileGuard {
-        std::FILE* f;
+        std::FILE *f;
         ~FileGuard() {
             if (f != nullptr) std::fclose(f);
         }
@@ -511,13 +511,13 @@ void GRIB2_Driver::build_record_index(const conf::Config& config) {
         g2int ret = g2_info(cgrib.data(), listsec0, listsec1, &numfields, &numlocal);
         if (ret != 0) {
             throw std::runtime_error("GRIB2_Driver::open_read: g2_info failed (code " + std::to_string(static_cast<long long>(ret)) +
-                                   ") while indexing '" + input_path_ + "'.");
+                                     ") while indexing '" + input_path_ + "'.");
         }
 
         const std::int64_t discipline = static_cast<std::int64_t>(listsec0[0]);
 
         for (g2int n = 1; n <= numfields; ++n) {
-            gribfield* gfld = nullptr;
+            gribfield *gfld = nullptr;
             // unpack=0, expand=0: metadata only -- fast, no data decode.
             ret = g2_getfld(cgrib.data(), n, 0, 0, &gfld);
             if (ret != 0 || gfld == nullptr) {
@@ -525,7 +525,7 @@ void GRIB2_Driver::build_record_index(const conf::Config& config) {
                     g2_free(gfld);
                 }
                 throw std::runtime_error("GRIB2_Driver::open_read: g2_getfld (metadata) failed (code " + std::to_string(static_cast<long long>(ret)) +
-                                       ") while indexing '" + input_path_ + "'.");
+                                         ") while indexing '" + input_path_ + "'.");
             }
 
             const std::int64_t category = pdt_value(gfld, kPdtCategoryIdx);
@@ -572,7 +572,7 @@ void GRIB2_Driver::build_record_index(const conf::Config& config) {
                 nj = 1;
             }
 
-            GribFieldIndex& entry = records_[key];
+            GribFieldIndex &entry = records_[key];
             if (entry.records.empty()) {
                 entry.ni = ni;
                 entry.nj = nj;
@@ -595,7 +595,7 @@ void GRIB2_Driver::build_record_index(const conf::Config& config) {
 // from the record index (Req 4.1, 4.2, 4.5, 13.x)
 // ---------------------------------------------------------------
 
-VariableInfo GRIB2_Driver::describe_variable(const std::string& name) {
+VariableInfo GRIB2_Driver::describe_variable(const std::string &name) {
     VariableInfo info{};  // found == false by default.
 
 #ifdef AMIO_HAS_G2C
@@ -608,7 +608,7 @@ VariableInfo GRIB2_Driver::describe_variable(const std::string& name) {
         return info;  // Unknown variable.
     }
 
-    const GribFieldIndex& entry = it->second;
+    const GribFieldIndex &entry = it->second;
 
     // GRIB2 grid-point fields are delivered as F32 (Req 13.3).
     info.dtype = AMIO_DTYPE_F32;
@@ -639,7 +639,7 @@ VariableInfo GRIB2_Driver::describe_variable(const std::string& name) {
 // initialize -- read product identifiers + open output file
 // ---------------------------------------------------------------
 
-void GRIB2_Driver::initialize(const conf::Config& config) {
+void GRIB2_Driver::initialize(const conf::Config &config) {
     if (initialized_) {
         return;  // Already initialized.
     }
@@ -678,7 +678,7 @@ void GRIB2_Driver::initialize(const conf::Config& config) {
 // getdrstemplate) for the matching layout; we only supply values.
 // ---------------------------------------------------------------
 
-std::vector<std::int64_t> GRIB2_Driver::build_gdt_3_0(const Grib2Settings& s, std::int64_t ni, std::int64_t nj) {
+std::vector<std::int64_t> GRIB2_Driver::build_gdt_3_0(const Grib2Settings &s, std::int64_t ni, std::int64_t nj) {
     // Grid Definition Template 3.0 (regular lat/lon), 19 entries.
     // Layout per WMO GRIB2 Template 3.0 / NCEP getgridtemplate(0).
     std::vector<std::int64_t> t(19, 0);
@@ -707,7 +707,7 @@ std::vector<std::int64_t> GRIB2_Driver::build_gdt_3_0(const Grib2Settings& s, st
     return t;
 }
 
-std::vector<std::int64_t> GRIB2_Driver::build_gdt_3_40(const Grib2Settings& s, std::int64_t ni, std::int64_t nj) {
+std::vector<std::int64_t> GRIB2_Driver::build_gdt_3_40(const Grib2Settings &s, std::int64_t ni, std::int64_t nj) {
     // Grid Definition Template 3.40 (Gaussian latitude/longitude), 19 entries.
     // Layout per WMO GRIB2 Template 3.40 / NCEP getgridtemplate(40).
     // Identical to GDT 3.0 except index 17 carries N (number of parallels
@@ -737,7 +737,7 @@ std::vector<std::int64_t> GRIB2_Driver::build_gdt_3_40(const Grib2Settings& s, s
     return t;
 }
 
-std::vector<std::int64_t> GRIB2_Driver::build_pdt_4_0(const Grib2Settings& s) {
+std::vector<std::int64_t> GRIB2_Driver::build_pdt_4_0(const Grib2Settings &s) {
     // Product Definition Template 4.0, 15 entries.
     std::vector<std::int64_t> t(15, 0);
     t[0] = s.parameter_category;           // Table 4.1
@@ -758,7 +758,7 @@ std::vector<std::int64_t> GRIB2_Driver::build_pdt_4_0(const Grib2Settings& s) {
     return t;
 }
 
-std::vector<std::int64_t> GRIB2_Driver::build_pdt_4_8(const Grib2Settings& s) {
+std::vector<std::int64_t> GRIB2_Driver::build_pdt_4_8(const Grib2Settings &s) {
     // Product Definition Template 4.8 (statistically processed at a
     // horizontal level), 29 entries.
     // Indices 0–14 share the PDT 4.0 layout; indices 15–28 carry
@@ -804,7 +804,7 @@ std::vector<std::int64_t> GRIB2_Driver::build_pdt_4_8(const Grib2Settings& s) {
     return t;
 }
 
-std::vector<std::int64_t> GRIB2_Driver::build_pdt_4_40(const Grib2Settings& s) {
+std::vector<std::int64_t> GRIB2_Driver::build_pdt_4_40(const Grib2Settings &s) {
     // Product Definition Template 4.40 (chemical constituent at a
     // horizontal level at a point in time), 16 entries.
     // Layout per WMO GRIB2 Template 4.40 / NCEP getpdstemplate(40).
@@ -828,7 +828,7 @@ std::vector<std::int64_t> GRIB2_Driver::build_pdt_4_40(const Grib2Settings& s) {
     return t;
 }
 
-std::vector<std::int64_t> GRIB2_Driver::build_pdt_4_44(const Grib2Settings& s) {
+std::vector<std::int64_t> GRIB2_Driver::build_pdt_4_44(const Grib2Settings &s) {
     // Product Definition Template 4.44 (aerosol at a horizontal level
     // at a point in time), 21 entries.
     // Layout per WMO GRIB2 Template 4.44 / NCEP getpdstemplate(44).
@@ -857,7 +857,7 @@ std::vector<std::int64_t> GRIB2_Driver::build_pdt_4_44(const Grib2Settings& s) {
     return t;
 }
 
-std::vector<std::int64_t> GRIB2_Driver::build_pdt_4_45(const Grib2Settings& s) {
+std::vector<std::int64_t> GRIB2_Driver::build_pdt_4_45(const Grib2Settings &s) {
     // Product Definition Template 4.45 (individual ensemble forecast
     // for aerosol), 24 entries.
     // Layout per WMO GRIB2 Template 4.45 / NCEP getpdstemplate(45).
@@ -898,7 +898,7 @@ std::vector<std::int64_t> GRIB2_Driver::build_pdt_4_45(const Grib2Settings& s) {
     return t;
 }
 
-std::vector<std::int64_t> GRIB2_Driver::build_pdt_4_46(const Grib2Settings& s) {
+std::vector<std::int64_t> GRIB2_Driver::build_pdt_4_46(const Grib2Settings &s) {
     // Product Definition Template 4.46 (statistically processed aerosol),
     // 35 entries.
     // Aerosol-specific fields at indices 2-7, common forecast fields at
@@ -956,7 +956,7 @@ std::vector<std::int64_t> GRIB2_Driver::build_pdt_4_46(const Grib2Settings& s) {
     return t;
 }
 
-std::vector<std::int64_t> GRIB2_Driver::build_pdt_4_48(const Grib2Settings& s) {
+std::vector<std::int64_t> GRIB2_Driver::build_pdt_4_48(const Grib2Settings &s) {
     // Product Definition Template 4.48 (aerosol optical properties at
     // a wavelength), 26 entries.
     // Layout per WMO GRIB2 Template 4.48 / NCEP getpdstemplate(48).
@@ -999,7 +999,7 @@ std::vector<std::int64_t> GRIB2_Driver::build_pdt_4_48(const Grib2Settings& s) {
     return t;
 }
 
-std::vector<std::int64_t> GRIB2_Driver::build_pdt_4_49(const Grib2Settings& s) {
+std::vector<std::int64_t> GRIB2_Driver::build_pdt_4_49(const Grib2Settings &s) {
     // Product Definition Template 4.49 (individual ensemble forecast
     // for aerosol optical properties), 29 entries.
     // Layout per WMO GRIB2 Template 4.49 / NCEP getpdstemplate(49).
@@ -1047,7 +1047,7 @@ std::vector<std::int64_t> GRIB2_Driver::build_pdt_4_49(const Grib2Settings& s) {
     return t;
 }
 
-std::vector<std::int64_t> GRIB2_Driver::build_drs_template(GRIB2_DRT drt, const Grib2Settings& s) {
+std::vector<std::int64_t> GRIB2_Driver::build_drs_template(GRIB2_DRT drt, const Grib2Settings &s) {
     if (drt == GRIB2_DRT::LosslessJPEG2000) {
         // Data Representation Template 5.40 (JPEG2000), 7 entries.
         // Entry 0 (reference value) is filled by g2c during packing.
@@ -1076,7 +1076,7 @@ std::vector<std::int64_t> GRIB2_Driver::build_drs_template(GRIB2_DRT drt, const 
 // write -- encode a GRIB2 record (R9.3, R9.4, R9.5, R9.6, R9.7, R9.8)
 // ---------------------------------------------------------------
 
-void GRIB2_Driver::write(const StagingBuffer& src, const VarMeta& meta) {
+void GRIB2_Driver::write(const StagingBuffer &src, const VarMeta &meta) {
     if (!initialized_) {
         throw std::runtime_error("GRIB2_Driver::write called before successful initialization");
     }
@@ -1097,7 +1097,7 @@ void GRIB2_Driver::write(const StagingBuffer& src, const VarMeta& meta) {
     }
 
     // Contiguity check gates fast vs slow path (R9.4, R9.5).
-    const std::byte* encode_ptr = nullptr;
+    const std::byte *encode_ptr = nullptr;
     std::vector<std::byte> packed_buffer;
     if (is_contiguous_row_major(meta.shape)) {
         // Fast path: pass the staging buffer through directly.
@@ -1167,7 +1167,7 @@ void GRIB2_Driver::write(const StagingBuffer& src, const VarMeta& meta) {
             break;
         default:
             throw std::runtime_error("GRIB2_Driver::write: unsupported GDT number " + std::to_string(settings_.gdt_number) +
-                                   ". Zero record bytes emitted.");
+                                     ". Zero record bytes emitted.");
     }
     std::vector<g2int> igdstmpl(gdt.begin(), gdt.end());
     g2int igds[5];
@@ -1212,7 +1212,7 @@ void GRIB2_Driver::write(const StagingBuffer& src, const VarMeta& meta) {
             break;
         default:
             throw std::runtime_error("GRIB2_Driver::write: unsupported PDT number " + std::to_string(settings_.pdt_number) +
-                                   ". Zero record bytes emitted.");
+                                     ". Zero record bytes emitted.");
     }
     std::vector<g2int> ipdstmpl(pdt.begin(), pdt.end());
 
@@ -1267,7 +1267,7 @@ void GRIB2_Driver::write(const StagingBuffer& src, const VarMeta& meta) {
 // read -- decode a GRIB2 record into StagingBuffer
 // ---------------------------------------------------------------
 
-void GRIB2_Driver::read(StagingBuffer& dst, const VarMeta& meta, std::int64_t timestep, const std::optional<BoundingBox>& bbox) {
+void GRIB2_Driver::read(StagingBuffer &dst, const VarMeta &meta, std::int64_t timestep, const std::optional<BoundingBox> &bbox) {
     if (!initialized_) {
         throw std::runtime_error("GRIB2_Driver::read called before successful initialization");
     }
@@ -1287,24 +1287,24 @@ void GRIB2_Driver::read(StagingBuffer& dst, const VarMeta& meta, std::int64_t ti
     if (it == records_.end() || it->second.records.empty()) {
         throw std::runtime_error("GRIB2_Driver::read: field '" + meta.name + "' not found in the GRIB2 record index.");
     }
-    const GribFieldIndex& entry = it->second;
+    const GribFieldIndex &entry = it->second;
 
     if (timestep < 0 || timestep >= static_cast<std::int64_t>(entry.records.size())) {
         throw std::runtime_error("GRIB2_Driver::read: timestep " + std::to_string(static_cast<long long>(timestep)) + " out of range for field '" +
-                               meta.name + "' (" + std::to_string(entry.records.size()) + " records).");
+                                 meta.name + "' (" + std::to_string(entry.records.size()) + " records).");
     }
-    const GribRecordLocation& loc = entry.records[static_cast<std::size_t>(timestep)];
+    const GribRecordLocation &loc = entry.records[static_cast<std::size_t>(timestep)];
     if (loc.length <= 0) {
         throw std::runtime_error("GRIB2_Driver::read: invalid record length for field '" + meta.name + "'.");
     }
 
     // ---- Read the GRIB2 message bytes from the source file ----
-    std::FILE* fp = std::fopen(input_path_.c_str(), "rb");
+    std::FILE *fp = std::fopen(input_path_.c_str(), "rb");
     if (fp == nullptr) {
         throw std::runtime_error("GRIB2_Driver::read: failed to open input file '" + input_path_ + "' for reading.");
     }
     struct FileGuard {
-        std::FILE* f;
+        std::FILE *f;
         ~FileGuard() {
             if (f != nullptr) std::fclose(f);
         }
@@ -1322,14 +1322,14 @@ void GRIB2_Driver::read(StagingBuffer& dst, const VarMeta& meta, std::int64_t ti
     // ---- Decode the requested record (unpack=1, expand=1) ----
     // expand=1 fills bit-mapped-out grid points so fld matches the grid,
     // keeping the decoded layout aligned with the encode path.
-    gribfield* gfld = nullptr;
+    gribfield *gfld = nullptr;
     g2int ret = g2_getfld(cgrib.data(), static_cast<g2int>(loc.field_number), /*unpack=*/1, /*expand=*/1, &gfld);
     if (ret != 0 || gfld == nullptr) {
         if (gfld != nullptr) {
             g2_free(gfld);
         }
         throw std::runtime_error("GRIB2_Driver::read: g2_getfld failed (code " + std::to_string(static_cast<long long>(ret)) + ") decoding field '" +
-                               meta.name + "'.");
+                                 meta.name + "'.");
     }
 
     // gfld->fld is a g2float* (== float*, confirmed in grib2.h) of
@@ -1377,7 +1377,7 @@ void GRIB2_Driver::read(StagingBuffer& dst, const VarMeta& meta, std::int64_t ti
         }
         std::memcpy(dst.data, full.data(), payload_bytes);
     } else {
-        const BoundingBox& b = *bbox;
+        const BoundingBox &b = *bbox;
         if (b.rank != grid_rank) {
             throw std::runtime_error("GRIB2_Driver::read: bounding-box rank does not match field rank.");
         }
@@ -1409,7 +1409,7 @@ void GRIB2_Driver::read(StagingBuffer& dst, const VarMeta& meta, std::int64_t ti
         }
 
         // Gather the sub-region into the destination buffer.
-        float* out = reinterpret_cast<float*>(dst.data);
+        float *out = reinterpret_cast<float *>(dst.data);
         std::int64_t idx[AMIO_MAX_RANK] = {};
         for (std::size_t e = 0; e < sub_elems; ++e) {
             std::int64_t src_off = 0;
@@ -1480,7 +1480,7 @@ void GRIB2_Driver::close() {
 // (R9.6, R9.7)
 // ---------------------------------------------------------------
 
-GRIB2_DRT GRIB2_Driver::validate_drt(const conf::Config& config) const {
+GRIB2_DRT GRIB2_Driver::validate_drt(const conf::Config &config) const {
     // Check if DRT field is present (R9.7 - "missing" case).
     if (!config.has("data_representation_template") && !config.has("drt")) {
         throw std::runtime_error(
@@ -1516,7 +1516,7 @@ GRIB2_DRT GRIB2_Driver::validate_drt(const conf::Config& config) const {
 // row-major layout (R9.4)
 // ---------------------------------------------------------------
 
-bool GRIB2_Driver::is_contiguous_row_major(const amio_shape_t& shape) {
+bool GRIB2_Driver::is_contiguous_row_major(const amio_shape_t &shape) {
     if (shape.rank <= 0 || shape.rank > AMIO_MAX_RANK) {
         return false;
     }
@@ -1554,7 +1554,7 @@ bool GRIB2_Driver::is_contiguous_row_major(const amio_shape_t& shape) {
 // (R9.5)
 // ---------------------------------------------------------------
 
-std::vector<std::byte> GRIB2_Driver::pack_row_major(const std::byte* src_data, const amio_shape_t& shape, std::size_t element_size) {
+std::vector<std::byte> GRIB2_Driver::pack_row_major(const std::byte *src_data, const amio_shape_t &shape, std::size_t element_size) {
     const std::size_t num_elements = total_elements(shape);
     std::vector<std::byte> packed(num_elements * element_size);
 
@@ -1608,7 +1608,7 @@ std::vector<std::byte> GRIB2_Driver::pack_row_major(const std::byte* src_data, c
 // total_elements -- compute total element count from shape
 // ---------------------------------------------------------------
 
-std::size_t GRIB2_Driver::total_elements(const amio_shape_t& shape) {
+std::size_t GRIB2_Driver::total_elements(const amio_shape_t &shape) {
     if (shape.rank <= 0 || shape.rank > AMIO_MAX_RANK) {
         return 0;
     }

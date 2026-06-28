@@ -22,12 +22,12 @@
 namespace amio::detail {
 
 // Singleton instance -- Meyers' singleton, thread-safe per C++11.
-BackendFactory& BackendFactory::instance() {
+BackendFactory &BackendFactory::instance() {
     static BackendFactory factory;
     return factory;
 }
 
-bool BackendFactory::register_driver(const std::string& key, BuilderFn builder) {
+bool BackendFactory::register_driver(const std::string &key, BuilderFn builder) {
     if (key.empty()) {
         return false;
     }
@@ -36,7 +36,7 @@ bool BackendFactory::register_driver(const std::string& key, BuilderFn builder) 
     return true;
 }
 
-std::unique_ptr<Backend_Driver> BackendFactory::build(const std::string& key, amio_err_t& err_out) const {
+std::unique_ptr<Backend_Driver> BackendFactory::build(const std::string &key, amio_err_t &err_out) const {
     // Empty or missing key → error, zero state mutation.
     if (key.empty()) {
         err_out = AMIO_ERR_UNKNOWN_BACKEND;
@@ -58,7 +58,7 @@ std::unique_ptr<Backend_Driver> BackendFactory::build(const std::string& key, am
     return it->second();
 }
 
-bool BackendFactory::has(const std::string& key) const {
+bool BackendFactory::has(const std::string &key) const {
     if (key.empty()) {
         return false;
     }
@@ -70,7 +70,7 @@ std::vector<std::string> BackendFactory::registered_keys() const {
     std::shared_lock lock(mu_);
     std::vector<std::string> keys;
     keys.reserve(registry_.size());
-    for (const auto& [k, _] : registry_) {
+    for (const auto &[k, _] : registry_) {
         keys.push_back(k);
     }
     std::sort(keys.begin(), keys.end());

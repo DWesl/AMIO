@@ -47,11 +47,11 @@ namespace {
 // When required_bytes <= capacity it writes exactly required_bytes.
 class CapacityDriver : public Backend_Driver {
    public:
-    void open_write(const conf::Config&) override {}
-    void open_read(const conf::Config&) override {}
+    void open_write(const conf::Config &) override {}
+    void open_read(const conf::Config &) override {}
     void flush() override {}
     void close() override {}
-    void write(const StagingBuffer&, const VarMeta&) override {}
+    void write(const StagingBuffer &, const VarMeta &) override {}
 
     void configure(std::size_t required_bytes, bool throw_on_overflow) {
         std::lock_guard<std::mutex> lock(mu_);
@@ -59,7 +59,7 @@ class CapacityDriver : public Backend_Driver {
         throw_on_overflow_ = throw_on_overflow;
     }
 
-    void read(StagingBuffer& dst, const VarMeta&, std::int64_t, const std::optional<BoundingBox>&) override {
+    void read(StagingBuffer &dst, const VarMeta &, std::int64_t, const std::optional<BoundingBox> &) override {
         std::lock_guard<std::mutex> lock(mu_);
         if (required_bytes_ > dst.capacity_bytes) {
             if (throw_on_overflow_) {
@@ -122,7 +122,7 @@ TEST_CASE("RP8: no write past capacity - over-capacity payload fails with BACKEN
 
         PrefetchQueue pq(1, 60, &pool, nullptr, driver.get(), 1, "test_var", info, 1);
 
-        StagingBuffer* buf = nullptr;
+        StagingBuffer *buf = nullptr;
         amio_status_t status = pq.get_buffer(0, nullptr, &buf);
 
         if (required <= capacity) {

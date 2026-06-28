@@ -103,7 +103,7 @@ TEST_CASE("P11: Prefetch zero-I/O on hit - no driver read on completed buffer", 
 
         // Call get_buffer(T) -- should return immediately from cache.
         auto start_time = std::chrono::steady_clock::now();
-        StagingBuffer* buf = nullptr;
+        StagingBuffer *buf = nullptr;
         amio_status_t status = pq.get_buffer(timestep_t, nullptr, &buf);
         auto elapsed = std::chrono::steady_clock::now() - start_time;
 
@@ -185,7 +185,7 @@ TEST_CASE("P11: Prefetch zero-I/O on hit - sequential reads all from cache", "[p
         std::int64_t prefetched_count = std::min(static_cast<std::int64_t>(depth), total_timesteps);
 
         for (std::int64_t t = 0; t < prefetched_count; ++t) {
-            StagingBuffer* buf = nullptr;
+            StagingBuffer *buf = nullptr;
             amio_status_t status = pq.get_buffer(t, nullptr, &buf);
             RC_ASSERT(status == AMIO_OK);
             RC_ASSERT(buf != nullptr);
@@ -260,7 +260,7 @@ TEST_CASE("P11: read-pipeline Property 3 - completed hit performs no calling-thr
         std::size_t reads_before = driver->call_count(CallRecord::Method::Read);
 
         auto start = std::chrono::steady_clock::now();
-        StagingBuffer* buf = nullptr;
+        StagingBuffer *buf = nullptr;
         amio_status_t status = pq.get_buffer(timestep_t, nullptr, &buf);
         auto elapsed = std::chrono::steady_clock::now() - start;
 
@@ -274,7 +274,7 @@ TEST_CASE("P11: read-pipeline Property 3 - completed hit performs no calling-thr
         RC_ASSERT(std::chrono::duration_cast<std::chrono::milliseconds>(elapsed).count() < 10);
 
         // (c) No Backend_Driver::read ever executed on the calling thread.
-        for (const auto& rec : driver->get_calls(CallRecord::Method::Read)) {
+        for (const auto &rec : driver->get_calls(CallRecord::Method::Read)) {
             RC_ASSERT(rec.thread_id != calling_thread);
         }
 

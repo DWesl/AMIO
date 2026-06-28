@@ -168,12 +168,12 @@ TEST_CASE("PBT infrastructure: manifest YAML helpers produce parseable files", "
 // ===================================================================
 
 TEST_CASE("PBT infrastructure: amio_strerror is accessible", "[pbt][infrastructure][api]") {
-    const char* msg = amio_strerror(AMIO_OK);
+    const char *msg = amio_strerror(AMIO_OK);
     REQUIRE(msg != nullptr);
     REQUIRE(std::strlen(msg) > 0);
 
     // Undefined code should also return non-null.
-    const char* unknown = amio_strerror(9999);
+    const char *unknown = amio_strerror(9999);
     REQUIRE(unknown != nullptr);
     REQUIRE(std::strlen(unknown) > 0);
 }

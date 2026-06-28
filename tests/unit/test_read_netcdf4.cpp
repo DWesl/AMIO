@@ -56,7 +56,7 @@ namespace {
 int g_passed = 0;
 int g_failed = 0;
 
-void report_failure(const char* expr, const char* file, int line, const std::string& ctx) {
+void report_failure(const char *expr, const char *file, int line, const std::string &ctx) {
     std::fprintf(stderr, "FAIL %s:%d: %s   (%s)\n", file, line, expr, ctx.c_str());
     ++g_failed;
 }
@@ -82,7 +82,7 @@ float source_value(int i, int j) {
 }  // namespace
 
 int main() {
-    const char* OUTPUT_PATH = "/tmp/amio_test_read_netcdf4.nc";
+    const char *OUTPUT_PATH = "/tmp/amio_test_read_netcdf4.nc";
     const std::string var_name = "temperature";
 
     // Host role: initialize MPI before the driver opens (parallel HDF5).
@@ -117,7 +117,7 @@ int main() {
         writer.open_write(cfg);
 
         StagingBuffer buf{};
-        buf.data = reinterpret_cast<std::byte*>(&source[0][0]);
+        buf.data = reinterpret_cast<std::byte *>(&source[0][0]);
         buf.capacity_bytes = sizeof(source);
         buf.used_bytes = sizeof(source);
 
@@ -131,7 +131,7 @@ int main() {
         writer.write(buf, meta);
         writer.flush();
         writer.close();
-    } catch (const std::exception& e) {
+    } catch (const std::exception &e) {
         // Parallel HDF5 / MPI-IO may be unavailable in this environment.
         // Treat the write path as a skip rather than a failure, mirroring
         // test_lifecycle_netcdf4's AMIO_ERR_BACKEND_FAILURE tolerance.
@@ -170,7 +170,7 @@ int main() {
             {
                 std::vector<float> out(static_cast<std::size_t>(NY) * NX, 0.0f);
                 StagingBuffer dst{};
-                dst.data = reinterpret_cast<std::byte*>(out.data());
+                dst.data = reinterpret_cast<std::byte *>(out.data());
                 dst.capacity_bytes = out.size() * sizeof(float);
                 dst.used_bytes = 0;
 
@@ -194,7 +194,7 @@ int main() {
                 const std::size_t n = static_cast<std::size_t>(box.extents[0]) * box.extents[1];
                 std::vector<float> out(n, 0.0f);
                 StagingBuffer dst{};
-                dst.data = reinterpret_cast<std::byte*>(out.data());
+                dst.data = reinterpret_cast<std::byte *>(out.data());
                 dst.capacity_bytes = out.size() * sizeof(float);
                 dst.used_bytes = 0;
 
@@ -230,7 +230,7 @@ int main() {
                 const std::size_t n = static_cast<std::size_t>(box.extents[0]) * box.extents[1];
                 std::vector<float> out(n, 0.0f);
                 StagingBuffer dst{};
-                dst.data = reinterpret_cast<std::byte*>(out.data());
+                dst.data = reinterpret_cast<std::byte *>(out.data());
                 dst.capacity_bytes = out.size() * sizeof(float);
                 dst.used_bytes = 0;
 
@@ -255,7 +255,7 @@ int main() {
             }
 
             reader.close();
-        } catch (const std::exception& e) {
+        } catch (const std::exception &e) {
             // After a successful write, a thrown read is a real failure.
             report_failure("read phase", __FILE__, __LINE__, e.what());
         }

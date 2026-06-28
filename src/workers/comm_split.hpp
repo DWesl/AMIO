@@ -35,9 +35,10 @@
 #include <vector>
 
 #ifdef AMIO_HAS_MPI
-#include <optional>
 #include <mpi.h>
+
 #include <halo/communicator.hpp>
+#include <optional>
 #endif
 
 #include "amio/amio_errors.h"
@@ -85,12 +86,11 @@ struct IOCommunicator {
 #endif
 
     IOCommunicator() = default;
-    IOCommunicator(IOCommunicator&&) = default;
-    IOCommunicator& operator=(IOCommunicator&&) = default;
+    IOCommunicator(IOCommunicator &&) = default;
+    IOCommunicator &operator=(IOCommunicator &&) = default;
 
     // Custom copy constructor and copy assignment operator to support duplicate wrapping
-    IOCommunicator(const IOCommunicator& other)
-        : valid(other.valid), is_io_rank(other.is_io_rank) {
+    IOCommunicator(const IOCommunicator &other) : valid(other.valid), is_io_rank(other.is_io_rank) {
 #ifdef AMIO_HAS_MPI
         if (other.io_comm.has_value()) {
             io_comm.emplace(other.io_comm->duplicate());
@@ -98,7 +98,7 @@ struct IOCommunicator {
 #endif
     }
 
-    IOCommunicator& operator=(const IOCommunicator& other) {
+    IOCommunicator &operator=(const IOCommunicator &other) {
         if (this != &other) {
             valid = other.valid;
             is_io_rank = other.is_io_rank;
@@ -135,7 +135,11 @@ struct IOCommunicator {
         if (io_comm.has_value()) {
             // halo::Communicator::rank() may throw on MPI failure,
             // but post-split the communicator is valid so this is safe.
-            try { return io_comm->rank(); } catch (...) { return 0; }
+            try {
+                return io_comm->rank();
+            } catch (...) {
+                return 0;
+            }
         }
 #endif
         return 0;
@@ -146,7 +150,11 @@ struct IOCommunicator {
     int size() const noexcept {
 #ifdef AMIO_HAS_MPI
         if (io_comm.has_value()) {
-            try { return io_comm->size(); } catch (...) { return 1; }
+            try {
+                return io_comm->size();
+            } catch (...) {
+                return 1;
+            }
         }
 #endif
         return 1;
@@ -186,18 +194,18 @@ struct IOCommunicator {
 //   AMIO_OK on success.
 //   AMIO_ERR_COMM_SPLIT_FAILED if the split fails or the I/O rank
 //   set is invalid.
-amio_err_t split_communicator(const CommConfig& config, int my_rank, IOCommunicator& result);
+amio_err_t split_communicator(const CommConfig &config, int my_rank, IOCommunicator &result);
 
 // validate_comm_config -- check that the CommConfig is internally
 // consistent without performing the actual MPI split.
 //
 // Returns AMIO_OK if valid, AMIO_ERR_COMM_SPLIT_FAILED if not.
-amio_err_t validate_comm_config(const CommConfig& config);
+amio_err_t validate_comm_config(const CommConfig &config);
 
 // is_io_rank -- convenience check: returns true if the given rank
 // is in the I/O rank set, or if the config is default (all ranks
 // do I/O).
-inline bool is_io_rank(const CommConfig& config, int my_rank) noexcept {
+inline bool is_io_rank(const CommConfig &config, int my_rank) noexcept {
     if (config.is_default()) {
         return true;
     }

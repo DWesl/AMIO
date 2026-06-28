@@ -9,11 +9,10 @@
 #include "config/config_loader.hpp"
 
 #include <algorithm>
-#include <sstream>
-#include <string_view>
-
 #include <conf/config.hpp>
 #include <conf/error.hpp>
+#include <sstream>
+#include <string_view>
 
 namespace amio::detail {
 
@@ -21,13 +20,13 @@ namespace amio::detail {
 // Static codec allow-list
 // ===================================================================
 
-const std::vector<std::string>& ConfigLoader::valid_codecs() {
+const std::vector<std::string> &ConfigLoader::valid_codecs() {
     static const std::vector<std::string> codecs = {"blosc", "zstandard", "libaec", "lossless_jpeg2000"};
     return codecs;
 }
 
-bool ConfigLoader::is_valid_codec(const std::string& name) {
-    const auto& vc = valid_codecs();
+bool ConfigLoader::is_valid_codec(const std::string &name) {
+    const auto &vc = valid_codecs();
     return std::find(vc.begin(), vc.end(), name) != vc.end();
 }
 
@@ -35,7 +34,7 @@ bool ConfigLoader::is_valid_codec(const std::string& name) {
 // Validation
 // ===================================================================
 
-amio_err_t ConfigLoader::validate(const Config& config, ValidationError& error_out) {
+amio_err_t ConfigLoader::validate(const Config &config, ValidationError &error_out) {
     // Single-pass validation: report first failing rule (R11.4).
 
     // staging_pool.buffer_count [1, 4096]
@@ -95,7 +94,7 @@ amio_err_t ConfigLoader::validate(const Config& config, ValidationError& error_o
     }
 
     // Codec allow-list enforcement (R11.6, R11.7).
-    for (const auto& codec : config.codec.lossless_allow_list) {
+    for (const auto &codec : config.codec.lossless_allow_list) {
         if (!is_valid_codec(codec)) {
             error_out.field_path = "codec.lossless_allow_list";
             error_out.message = "codec '" + codec + "' is not a recognized lossless codec";
@@ -111,7 +110,7 @@ amio_err_t ConfigLoader::validate(const Config& config, ValidationError& error_o
             return AMIO_ERR_LOSSY_CODEC_FORBIDDEN;
         }
         // Also check it's on the manifest's own allow-list.
-        const auto& al = config.codec.lossless_allow_list;
+        const auto &al = config.codec.lossless_allow_list;
         if (!al.empty() && std::find(al.begin(), al.end(), config.codec.active_codec) == al.end()) {
             error_out.field_path = "codec.active_codec";
             error_out.message = "active codec '" + config.codec.active_codec + "' is not on the manifest's lossless_allow_list";
@@ -134,7 +133,7 @@ amio_err_t ConfigLoader::validate(const Config& config, ValidationError& error_o
 // Validates: R1.3, R1.4, R1.7, R1.8, R1.9, R1.10
 // ===================================================================
 
-amio_err_t ConfigLoader::populate_from_conf(const conf::Config& manifest, Config& config_out, ValidationError& error_out) {
+amio_err_t ConfigLoader::populate_from_conf(const conf::Config &manifest, Config &config_out, ValidationError &error_out) {
     // Reset config to defaults.
     config_out = Config{};
 
@@ -144,73 +143,58 @@ amio_err_t ConfigLoader::populate_from_conf(const conf::Config& manifest, Config
     try {
         // -- Staging pool (integer scalars) --
         current_key = "staging_pool.buffer_count";
-        if (manifest.has(current_key))
-            config_out.staging_pool.buffer_count = static_cast<std::size_t>(manifest.get_int(current_key));
+        if (manifest.has(current_key)) config_out.staging_pool.buffer_count = static_cast<std::size_t>(manifest.get_int(current_key));
 
         current_key = "staging_pool.buffer_capacity_bytes";
-        if (manifest.has(current_key))
-            config_out.staging_pool.buffer_capacity_bytes = static_cast<std::size_t>(manifest.get_int(current_key));
+        if (manifest.has(current_key)) config_out.staging_pool.buffer_capacity_bytes = static_cast<std::size_t>(manifest.get_int(current_key));
 
         // -- Worker pool --
         current_key = "worker_pool.threads";
-        if (manifest.has(current_key))
-            config_out.worker_pool.threads = static_cast<std::size_t>(manifest.get_int(current_key));
+        if (manifest.has(current_key)) config_out.worker_pool.threads = static_cast<std::size_t>(manifest.get_int(current_key));
 
         current_key = "worker_pool.cpu_cores";
-        if (manifest.has(current_key))
-            config_out.worker_pool.cpu_cores = manifest.get_int_list(current_key);
+        if (manifest.has(current_key)) config_out.worker_pool.cpu_cores = manifest.get_int_list(current_key);
 
         current_key = "worker_pool.numa_domain";
-        if (manifest.has(current_key))
-            config_out.worker_pool.numa_domain = manifest.get_int(current_key);
+        if (manifest.has(current_key)) config_out.worker_pool.numa_domain = manifest.get_int(current_key);
 
         // -- Prefetch --
         current_key = "prefetch.depth";
-        if (manifest.has(current_key))
-            config_out.prefetch.depth = static_cast<std::size_t>(manifest.get_int(current_key));
+        if (manifest.has(current_key)) config_out.prefetch.depth = static_cast<std::size_t>(manifest.get_int(current_key));
 
         current_key = "prefetch.read_timeout_s";
-        if (manifest.has(current_key))
-            config_out.prefetch.read_timeout_s = static_cast<std::size_t>(manifest.get_int(current_key));
+        if (manifest.has(current_key)) config_out.prefetch.read_timeout_s = static_cast<std::size_t>(manifest.get_int(current_key));
 
         // -- Staging timeout --
         current_key = "staging_timeout_ms";
-        if (manifest.has(current_key))
-            config_out.staging_timeout_ms = static_cast<std::size_t>(manifest.get_int(current_key));
+        if (manifest.has(current_key)) config_out.staging_timeout_ms = static_cast<std::size_t>(manifest.get_int(current_key));
 
         // -- Backpressure --
         current_key = "backpressure.low_watermark";
-        if (manifest.has(current_key))
-            config_out.backpressure.low_watermark = static_cast<std::size_t>(manifest.get_int(current_key));
+        if (manifest.has(current_key)) config_out.backpressure.low_watermark = static_cast<std::size_t>(manifest.get_int(current_key));
 
         current_key = "backpressure.high_watermark";
-        if (manifest.has(current_key))
-            config_out.backpressure.high_watermark = static_cast<std::size_t>(manifest.get_int(current_key));
+        if (manifest.has(current_key)) config_out.backpressure.high_watermark = static_cast<std::size_t>(manifest.get_int(current_key));
 
         current_key = "backpressure.queue_capacity";
-        if (manifest.has(current_key))
-            config_out.backpressure.queue_capacity = static_cast<std::size_t>(manifest.get_int(current_key));
+        if (manifest.has(current_key)) config_out.backpressure.queue_capacity = static_cast<std::size_t>(manifest.get_int(current_key));
 
         // -- Backend (string scalar) --
         current_key = "backend";
-        if (manifest.has(current_key))
-            config_out.backend = manifest.get_string(current_key);
+        if (manifest.has(current_key)) config_out.backend = manifest.get_string(current_key);
 
         // -- Codec --
         current_key = "codec.active_codec";
-        if (manifest.has(current_key))
-            config_out.codec.active_codec = manifest.get_string(current_key);
+        if (manifest.has(current_key)) config_out.codec.active_codec = manifest.get_string(current_key);
 
         current_key = "codec.lossless_allow_list";
-        if (manifest.has(current_key))
-            config_out.codec.lossless_allow_list = manifest.get_string_list(current_key);
+        if (manifest.has(current_key)) config_out.codec.lossless_allow_list = manifest.get_string_list(current_key);
 
         // -- I/O ranks (integer list) --
         current_key = "io_ranks";
-        if (manifest.has(current_key))
-            config_out.io_ranks = manifest.get_int_list(current_key);
+        if (manifest.has(current_key)) config_out.io_ranks = manifest.get_int_list(current_key);
 
-    } catch (const conf::Conf_Error& e) {
+    } catch (const conf::Conf_Error &e) {
         error_out.field_path = std::string(current_key);
         switch (e.code()) {
             case conf::Error_Code::Key_Not_Found:
@@ -233,11 +217,11 @@ amio_err_t ConfigLoader::populate_from_conf(const conf::Config& manifest, Config
 // parse -- load and validate a manifest file.
 // ===================================================================
 
-amio_err_t ConfigLoader::parse(const std::string& path, Config& config_out, ValidationError& error_out) {
+amio_err_t ConfigLoader::parse(const std::string &path, Config &config_out, ValidationError &error_out) {
     try {
         conf::Config manifest = conf::Config::from_file(path);
         return populate_from_conf(manifest, config_out, error_out);
-    } catch (const conf::Conf_Error& e) {
+    } catch (const conf::Conf_Error &e) {
         switch (e.code()) {
             case conf::Error_Code::File_Not_Found:
                 error_out.field_path = "";
@@ -267,16 +251,13 @@ amio_err_t ConfigLoader::parse(const std::string& path, Config& config_out, Vali
 // completeness; CONF's from_string currently auto-detects format.
 // ===================================================================
 
-amio_err_t ConfigLoader::parse_string(const std::string& content,
-                                      const std::string& format,
-                                      Config& config_out,
-                                      ValidationError& error_out) {
+amio_err_t ConfigLoader::parse_string(const std::string &content, const std::string &format, Config &config_out, ValidationError &error_out) {
     (void)format;  // Reserved for future use; CONF auto-detects.
 
     try {
         conf::Config manifest = conf::Config::from_string(content);
         return populate_from_conf(manifest, config_out, error_out);
-    } catch (const conf::Conf_Error& e) {
+    } catch (const conf::Conf_Error &e) {
         switch (e.code()) {
             case conf::Error_Code::File_Not_Found:
                 error_out.field_path = "";
@@ -303,7 +284,7 @@ amio_err_t ConfigLoader::parse_string(const std::string& content,
 // Round-trip guarantee: parse_string(serialize(config), "yaml") == config
 // ===================================================================
 
-std::string ConfigLoader::serialize(const Config& config) {
+std::string ConfigLoader::serialize(const Config &config) {
     std::ostringstream out;
 
     out << "staging_pool:\n";
@@ -339,7 +320,7 @@ std::string ConfigLoader::serialize(const Config& config) {
     out << "  active_codec: " << config.codec.active_codec << "\n";
     if (!config.codec.lossless_allow_list.empty()) {
         out << "  lossless_allow_list:\n";
-        for (const auto& codec : config.codec.lossless_allow_list) {
+        for (const auto &codec : config.codec.lossless_allow_list) {
             out << "    - " << codec << "\n";
         }
     }

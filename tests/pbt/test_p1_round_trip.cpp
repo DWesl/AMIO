@@ -31,8 +31,8 @@
 
 namespace {
 
-std::string write_dataset_config(const amio::pbt::TempDir& dir, const std::string& backend, const std::string& output_path,
-                                 const std::string& filename = "dataset.yaml") {
+std::string write_dataset_config(const amio::pbt::TempDir &dir, const std::string &backend, const std::string &output_path,
+                                 const std::string &filename = "dataset.yaml") {
     std::string yaml;
     yaml += "backend: " + backend + "\n";
     yaml += "output_path: " + output_path + "\n";
@@ -144,7 +144,7 @@ TEST_CASE("P1: Round_Trip_Equivalence - netcdf4 backend", "[pbt][p1][round_trip]
 
         // Generate random payload bytes.
         std::vector<uint8_t> original_payload(payload_bytes);
-        for (auto& b : original_payload) {
+        for (auto &b : original_payload) {
             b = static_cast<uint8_t>(*rc::gen::inRange(0, 256));
         }
 
@@ -179,7 +179,7 @@ TEST_CASE("P1: Round_Trip_Equivalence - netcdf4 backend", "[pbt][p1][round_trip]
         RC_ASSERT(rc_write == AMIO_OK);
 
         // ---- Mutate the host buffer (proves snapshot was taken) ----
-        for (auto& b : host_buffer) {
+        for (auto &b : host_buffer) {
             b = static_cast<uint8_t>(~b);  // bitwise invert
         }
 
@@ -260,7 +260,7 @@ TEST_CASE("P1: Round_Trip_Equivalence - zarr3 backend", "[pbt][p1][round_trip][z
 
         // Generate random payload bytes.
         std::vector<uint8_t> original_payload(payload_bytes);
-        for (auto& b : original_payload) {
+        for (auto &b : original_payload) {
             b = static_cast<uint8_t>(*rc::gen::inRange(0, 256));
         }
 
@@ -294,7 +294,7 @@ TEST_CASE("P1: Round_Trip_Equivalence - zarr3 backend", "[pbt][p1][round_trip][z
         RC_ASSERT(rc_write == AMIO_OK);
 
         // ---- Mutate the host buffer (proves snapshot was taken) ----
-        for (auto& b : host_buffer) {
+        for (auto &b : host_buffer) {
             b = static_cast<uint8_t>(~b);
         }
 

@@ -77,19 +77,19 @@ class MockBackendDriver : public amio::detail::Backend_Driver {
 
     // ----- Backend_Driver interface implementation -----
 
-    void open_write(const conf::Config& /*config*/) override {
+    void open_write(const conf::Config & /*config*/) override {
         std::lock_guard<std::mutex> lock(mu_);
         record_call(CallRecord::Method::OpenWrite);
         check_and_throw(CallRecord::Method::OpenWrite);
     }
 
-    void open_read(const conf::Config& /*config*/) override {
+    void open_read(const conf::Config & /*config*/) override {
         std::lock_guard<std::mutex> lock(mu_);
         record_call(CallRecord::Method::OpenRead);
         check_and_throw(CallRecord::Method::OpenRead);
     }
 
-    void write(const amio::detail::StagingBuffer& src, const amio::detail::VarMeta& meta) override {
+    void write(const amio::detail::StagingBuffer &src, const amio::detail::VarMeta &meta) override {
         std::lock_guard<std::mutex> lock(mu_);
 
         CallRecord rec;
@@ -115,8 +115,8 @@ class MockBackendDriver : public amio::detail::Backend_Driver {
         check_and_throw(CallRecord::Method::Write);
     }
 
-    void read(amio::detail::StagingBuffer& dst, const amio::detail::VarMeta& meta, std::int64_t timestep,
-              const std::optional<amio::detail::BoundingBox>& bbox) override {
+    void read(amio::detail::StagingBuffer &dst, const amio::detail::VarMeta &meta, std::int64_t timestep,
+              const std::optional<amio::detail::BoundingBox> &bbox) override {
         std::lock_guard<std::mutex> lock(mu_);
 
         CallRecord rec;
@@ -141,7 +141,7 @@ class MockBackendDriver : public amio::detail::Backend_Driver {
         // If we have stored payloads, return the appropriate one
         if (!stored_payloads_.empty()) {
             std::size_t idx = static_cast<std::size_t>(timestep) % stored_payloads_.size();
-            const auto& payload = stored_payloads_[idx];
+            const auto &payload = stored_payloads_[idx];
             std::size_t copy_size = std::min(payload.size(), dst.capacity_bytes);
             std::memcpy(dst.data, payload.data(), copy_size);
             dst.used_bytes = copy_size;
@@ -163,13 +163,13 @@ class MockBackendDriver : public amio::detail::Backend_Driver {
     // ----- Test control interface -----
 
     // Inject a failure: the next call to `method` will throw.
-    void inject_failure(CallRecord::Method method, const std::string& message = "Injected failure") {
+    void inject_failure(CallRecord::Method method, const std::string &message = "Injected failure") {
         std::lock_guard<std::mutex> lock(mu_);
         pending_failures_.push_back({method, message});
     }
 
     // Inject a failure that triggers after N calls to `method`.
-    void inject_failure_after(CallRecord::Method method, std::size_t after_n_calls, const std::string& message = "Injected failure") {
+    void inject_failure_after(CallRecord::Method method, std::size_t after_n_calls, const std::string &message = "Injected failure") {
         std::lock_guard<std::mutex> lock(mu_);
         deferred_failures_.push_back({method, after_n_calls, message, 0});
     }
@@ -192,7 +192,7 @@ class MockBackendDriver : public amio::detail::Backend_Driver {
     std::vector<CallRecord> get_calls(CallRecord::Method method) const {
         std::lock_guard<std::mutex> lock(mu_);
         std::vector<CallRecord> filtered;
-        for (const auto& c : calls_) {
+        for (const auto &c : calls_) {
             if (c.method == method) {
                 filtered.push_back(c);
             }
@@ -204,7 +204,7 @@ class MockBackendDriver : public amio::detail::Backend_Driver {
     std::vector<CallRecord> get_writes_for(std::uint64_t dataset_id, std::uint64_t variable_id) const {
         std::lock_guard<std::mutex> lock(mu_);
         std::vector<CallRecord> filtered;
-        for (const auto& c : calls_) {
+        for (const auto &c : calls_) {
             if (c.method == CallRecord::Method::Write && c.dataset_id == dataset_id && c.variable_id == variable_id) {
                 filtered.push_back(c);
             }
@@ -222,7 +222,7 @@ class MockBackendDriver : public amio::detail::Backend_Driver {
     std::size_t call_count(CallRecord::Method method) const {
         std::lock_guard<std::mutex> lock(mu_);
         std::size_t count = 0;
-        for (const auto& c : calls_) {
+        for (const auto &c : calls_) {
             if (c.method == method) ++count;
         }
         return count;
@@ -289,7 +289,7 @@ class MockBackendDriver : public amio::detail::Backend_Driver {
         }
 
         // Check deferred failures
-        for (auto& df : deferred_failures_) {
+        for (auto &df : deferred_failures_) {
             if (df.method == method) {
                 df.current_count++;
                 if (df.current_count >= df.trigger_after) {

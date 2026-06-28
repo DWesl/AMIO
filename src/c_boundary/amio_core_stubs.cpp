@@ -793,7 +793,8 @@ static VariableReadState *resolve_variable(DatasetRecord *record, const std::str
         return nullptr;
     }
     VariableInfo info = record->driver->describe_variable(var_name);
-    std::cerr << "[AMIO STUBS DEBUG] resolve_variable: record->driver->describe_variable returned found = " << (info.found ? "true" : "false") << std::endl;
+    std::cerr << "[AMIO STUBS DEBUG] resolve_variable: record->driver->describe_variable returned found = " << (info.found ? "true" : "false")
+              << std::endl;
     if (!info.found) {
         // Variable absent or driver cannot introspect it (Req 4.5).
         return nullptr;

@@ -35,7 +35,7 @@ using namespace amio::pbt;
 namespace {
 
 // Generate a manifest YAML with invalid I/O ranks.
-std::string make_manifest_with_invalid_io_ranks(const TempDir& dir, const std::vector<int>& io_ranks) {
+std::string make_manifest_with_invalid_io_ranks(const TempDir &dir, const std::vector<int> &io_ranks) {
     std::string yaml;
     yaml += "staging_pool:\n";
     yaml += "  buffer_count: 4\n";

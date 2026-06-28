@@ -64,7 +64,7 @@ namespace {
 int g_passed = 0;
 int g_failed = 0;
 
-void report_failure(const char* expr, const char* file, int line, const std::string& ctx) {
+void report_failure(const char *expr, const char *file, int line, const std::string &ctx) {
     std::fprintf(stderr, "FAIL %s:%d: %s   (%s)\n", file, line, expr, ctx.c_str());
     ++g_failed;
 }
@@ -83,7 +83,7 @@ void report_failure(const char* expr, const char* file, int line, const std::str
 // constraint trivially satisfied (each chunk dim divides the shard
 // dim).  The dtype string drives the stored element type; an empty
 // string lets the driver default to float32.
-std::string make_yaml(const std::string& uri, int ny, int nx, const std::string& dtype_str) {
+std::string make_yaml(const std::string &uri, int ny, int nx, const std::string &dtype_str) {
     std::string yaml = "uri: " + uri + "\n";
     yaml += "chunk_shape: [" + std::to_string(ny) + ", " + std::to_string(nx) + "]\n";
     yaml += "shard_shape: [" + std::to_string(ny) + ", " + std::to_string(nx) + "]\n";
@@ -97,7 +97,7 @@ std::string make_yaml(const std::string& uri, int ny, int nx, const std::string&
 
 // Write a known 2-D array of `nbytes` bytes (row-major, ny x nx of
 // `dtype`) to a fresh Zarr store at `uri`.
-void write_array(const std::string& uri, const std::string& dtype_str, amio_dtype_t dtype, int ny, int nx, const void* data, std::size_t nbytes) {
+void write_array(const std::string &uri, const std::string &dtype_str, amio_dtype_t dtype, int ny, int nx, const void *data, std::size_t nbytes) {
     std::error_code ec;
     std::filesystem::remove_all(uri, ec);
 
@@ -107,7 +107,7 @@ void write_array(const std::string& uri, const std::string& dtype_str, amio_dtyp
     writer.open_write(cfg);
 
     StagingBuffer buf{};
-    buf.data = const_cast<std::byte*>(reinterpret_cast<const std::byte*>(data));
+    buf.data = const_cast<std::byte *>(reinterpret_cast<const std::byte *>(data));
     buf.capacity_bytes = nbytes;
     buf.used_bytes = nbytes;
 
@@ -133,7 +133,7 @@ float f32_source_value(int i, int j) {
 
 // Run the describe_variable + full-read + unit-stride + strided-read
 // assertions against a stored F32 [NY, NX] array.
-void run_f32_tests(const std::string& uri) {
+void run_f32_tests(const std::string &uri) {
     float source[NY][NX];
     for (int i = 0; i < NY; ++i) {
         for (int j = 0; j < NX; ++j) {
@@ -174,7 +174,7 @@ void run_f32_tests(const std::string& uri) {
     {
         std::vector<float> out(static_cast<std::size_t>(NY) * NX, 0.0f);
         StagingBuffer dst{};
-        dst.data = reinterpret_cast<std::byte*>(out.data());
+        dst.data = reinterpret_cast<std::byte *>(out.data());
         dst.capacity_bytes = out.size() * sizeof(float);
         dst.used_bytes = 0;
 
@@ -198,7 +198,7 @@ void run_f32_tests(const std::string& uri) {
         const std::size_t n = static_cast<std::size_t>(box.extents[0]) * box.extents[1];
         std::vector<float> out(n, 0.0f);
         StagingBuffer dst{};
-        dst.data = reinterpret_cast<std::byte*>(out.data());
+        dst.data = reinterpret_cast<std::byte *>(out.data());
         dst.capacity_bytes = out.size() * sizeof(float);
         dst.used_bytes = 0;
 
@@ -234,7 +234,7 @@ void run_f32_tests(const std::string& uri) {
         const std::size_t n = static_cast<std::size_t>(box.extents[0]) * box.extents[1];
         std::vector<float> out(n, 0.0f);
         StagingBuffer dst{};
-        dst.data = reinterpret_cast<std::byte*>(out.data());
+        dst.data = reinterpret_cast<std::byte *>(out.data());
         dst.capacity_bytes = out.size() * sizeof(float);
         dst.used_bytes = 0;
 
@@ -267,7 +267,7 @@ void run_f32_tests(const std::string& uri) {
 // dtype dispatch transfers the real element type rather than
 // reinterpreting it as float32 (Req 11.2, 11.3).
 template <typename T>
-void run_roundtrip(const std::string& uri, amio_dtype_t dtype, const std::string& dtype_str, const char* label) {
+void run_roundtrip(const std::string &uri, amio_dtype_t dtype, const std::string &dtype_str, const char *label) {
     constexpr int RNY = 4;
     constexpr int RNX = 5;
 
@@ -303,7 +303,7 @@ void run_roundtrip(const std::string& uri, amio_dtype_t dtype, const std::string
 
     std::vector<T> out(source.size(), static_cast<T>(0));
     StagingBuffer dst{};
-    dst.data = reinterpret_cast<std::byte*>(out.data());
+    dst.data = reinterpret_cast<std::byte *>(out.data());
     dst.capacity_bytes = nbytes;
     dst.used_bytes = 0;
 
@@ -326,7 +326,7 @@ int main() {
         run_f32_tests(f32_uri);
         run_roundtrip<std::int32_t>(i32_uri, AMIO_DTYPE_I32, "int32", "int32");
         run_roundtrip<double>(f64_uri, AMIO_DTYPE_F64, "float64", "float64");
-    } catch (const std::exception& e) {
+    } catch (const std::exception &e) {
         report_failure("zarr read path", __FILE__, __LINE__, e.what());
     }
 

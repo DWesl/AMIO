@@ -54,12 +54,12 @@ namespace {
 // a valid HDF5 parallel file and crash the test).
 class NoOpDriver : public Backend_Driver {
    public:
-    void open_write(const conf::Config& /*config*/) override {}
-    void open_read(const conf::Config& /*config*/) override {}
-    void write(const StagingBuffer& /*src*/, const VarMeta& /*meta*/) override {
+    void open_write(const conf::Config & /*config*/) override {}
+    void open_read(const conf::Config & /*config*/) override {}
+    void write(const StagingBuffer & /*src*/, const VarMeta & /*meta*/) override {
         // No-op: accepts the write without I/O.
     }
-    void read(StagingBuffer& /*dst*/, const VarMeta& /*meta*/, std::int64_t /*timestep*/, const std::optional<BoundingBox>& /*bbox*/) override {}
+    void read(StagingBuffer & /*dst*/, const VarMeta & /*meta*/, std::int64_t /*timestep*/, const std::optional<BoundingBox> & /*bbox*/) override {}
     void flush() override {}
     void close() override {}
 };
@@ -111,8 +111,8 @@ struct SnapshotTestContext {
         }
     }
 
-    SnapshotTestContext(const SnapshotTestContext&) = delete;
-    SnapshotTestContext& operator=(const SnapshotTestContext&) = delete;
+    SnapshotTestContext(const SnapshotTestContext &) = delete;
+    SnapshotTestContext &operator=(const SnapshotTestContext &) = delete;
 };
 
 }  // anonymous namespace
@@ -143,7 +143,7 @@ TEST_CASE("P21: Snapshot copy correctness - staging pool memcpy", "[pbt][p21][sn
 
         // Create a staging pool and acquire a buffer.
         StagingPool pool(4, 65536, 5000);
-        StagingBuffer* buf = pool.acquire(byte_count);
+        StagingBuffer *buf = pool.acquire(byte_count);
         RC_ASSERT(buf);
 
         // Perform the deep copy (same as amio_write does).
@@ -244,7 +244,7 @@ TEST_CASE("P21: Snapshot copy correctness - byte-exact verification", "[pbt][p21
 
         // Create staging pool and acquire buffer.
         StagingPool pool(2, 65536, 5000);
-        StagingBuffer* buf = pool.acquire(byte_count);
+        StagingBuffer *buf = pool.acquire(byte_count);
         RC_ASSERT(buf);
 
         // Perform deep copy.

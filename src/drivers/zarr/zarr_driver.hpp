@@ -91,10 +91,10 @@ class Zarr_Driver : public Backend_Driver {
     ~Zarr_Driver() override = default;
 
     // Non-copyable, non-movable.
-    Zarr_Driver(const Zarr_Driver&) = delete;
-    Zarr_Driver& operator=(const Zarr_Driver&) = delete;
-    Zarr_Driver(Zarr_Driver&&) = delete;
-    Zarr_Driver& operator=(Zarr_Driver&&) = delete;
+    Zarr_Driver(const Zarr_Driver &) = delete;
+    Zarr_Driver &operator=(const Zarr_Driver &) = delete;
+    Zarr_Driver(Zarr_Driver &&) = delete;
+    Zarr_Driver &operator=(Zarr_Driver &&) = delete;
 
     // open_write -- validate config and configure TensorStore spec.
     //
@@ -105,17 +105,17 @@ class Zarr_Driver : public Backend_Driver {
     //   - Cloud URIs route through TensorStore KvStore (R8.2)
     //
     // Throws on validation failure or if TensorStore is not available.
-    void open_write(const conf::Config& config) override;
+    void open_write(const conf::Config &config) override;
 
     // open_read -- validate config and open TensorStore for reading.
-    void open_read(const conf::Config& config) override;
+    void open_read(const conf::Config &config) override;
 
     // write -- serialize StagingBuffer through TensorStore with
     // sharding + compression.
-    void write(const StagingBuffer& src, const VarMeta& meta) override;
+    void write(const StagingBuffer &src, const VarMeta &meta) override;
 
     // read -- read from TensorStore into StagingBuffer.
-    void read(StagingBuffer& dst, const VarMeta& meta, std::int64_t timestep, const std::optional<BoundingBox>& bbox) override;
+    void read(StagingBuffer &dst, const VarMeta &meta, std::int64_t timestep, const std::optional<BoundingBox> &bbox) override;
 
     // flush -- ensure all async TensorStore operations complete.
     void flush() override;
@@ -130,15 +130,15 @@ class Zarr_Driver : public Backend_Driver {
     // reading or the store's element type has no AMIO dtype mapping.
     // In the NCZarr fallback build (no TensorStore) the default
     // found = false is returned.  (Req 4.1, 4.2, 4.5)
-    VariableInfo describe_variable(const std::string& name) override;
+    VariableInfo describe_variable(const std::string &name) override;
 
     // ----- Static utility methods (public for testability) -----
 
     // Determine if a URI is a cloud URI (s3://, gs://, https://).
-    static bool is_cloud_uri(const std::string& uri);
+    static bool is_cloud_uri(const std::string &uri);
 
     // Categorize a network/auth error for proper error reporting (R8.9).
-    static std::string categorize_error(const std::string& message);
+    static std::string categorize_error(const std::string &message);
 
     // Convert amio_dtype_t to TensorStore dtype string.
     static std::string dtype_to_string(amio_dtype_t dtype);
@@ -150,15 +150,15 @@ class Zarr_Driver : public Backend_Driver {
     // Parse and validate Zarr-specific configuration from conf::Config.
     // Returns the parsed ZarrConfig.
     // Throws on missing required fields (R8.10) or invalid values (R8.3).
-    ZarrConfig parse_zarr_config(const conf::Config& config);
+    ZarrConfig parse_zarr_config(const conf::Config &config);
 
     // Validate that chunk dims divide shard dims.
     // Throws on violation (R8.3).
-    void validate_sharding(const ZarrConfig& cfg);
+    void validate_sharding(const ZarrConfig &cfg);
 
     // Validate codec selection (must be blosc or zstandard).
     // Throws on invalid codec (R8.4).
-    void validate_codec(const ZarrConfig& cfg);
+    void validate_codec(const ZarrConfig &cfg);
 
     // State.
     bool is_open_ = false;

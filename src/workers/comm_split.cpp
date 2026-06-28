@@ -23,7 +23,7 @@
 
 namespace amio::detail {
 
-amio_err_t validate_comm_config(const CommConfig& config) {
+amio_err_t validate_comm_config(const CommConfig &config) {
     if (config.is_default()) {
         return AMIO_OK;
     }
@@ -54,7 +54,7 @@ amio_err_t validate_comm_config(const CommConfig& config) {
     return AMIO_OK;
 }
 
-amio_err_t split_communicator(const CommConfig& config, int my_rank, IOCommunicator& result) {
+amio_err_t split_communicator(const CommConfig &config, int my_rank, IOCommunicator &result) {
     // Default: no split requested.  All ranks participate in I/O.
     if (config.is_default()) {
         result.valid = true;
@@ -91,7 +91,7 @@ amio_err_t split_communicator(const CommConfig& config, int my_rank, IOCommunica
         result.is_io_rank = is_io;
         result.io_comm = std::move(split_comm);
         return AMIO_OK;
-    } catch (const std::runtime_error&) {
+    } catch (const std::runtime_error &) {
         // HALO split failed -- RAII guarantees no handle leak.
         return AMIO_ERR_COMM_SPLIT_FAILED;
     } catch (...) {

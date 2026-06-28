@@ -48,7 +48,7 @@ struct TestResult {
 
 TestResult g_result{};
 
-void report_failure(const char* expr, const char* file, int line, const std::string& context) {
+void report_failure(const char *expr, const char *file, int line, const std::string &context) {
     std::fprintf(stderr, "FAIL %s:%d: %s   (%s)\n", file, line, expr, context.c_str());
     ++g_result.failed;
 }
@@ -82,7 +82,7 @@ void test_construction_allocates_buffers() {
 void test_acquire_returns_valid_buffer() {
     StagingPool pool(4, 2048, 100);
 
-    StagingBuffer* buf = pool.acquire(512);
+    StagingBuffer *buf = pool.acquire(512);
     EXPECT_TRUE(buf != nullptr, "acquire returned nullptr for available pool");
     EXPECT_TRUE(buf->capacity_bytes >= 512, "acquired buffer capacity < requested");
     EXPECT_TRUE(buf->capacity_bytes == 2048, "acquired buffer should have pool's capacity");
@@ -100,7 +100,7 @@ void test_acquire_all_buffers_exhausts_pool() {
     constexpr std::size_t count = 3;
     StagingPool pool(count, 512, 50);
 
-    StagingBuffer* bufs[3];
+    StagingBuffer *bufs[3];
     for (std::size_t i = 0; i < count; ++i) {
         bufs[i] = pool.acquire(256);
         EXPECT_TRUE(bufs[i] != nullptr, "acquire failed before pool exhaustion");
@@ -122,11 +122,11 @@ void test_backpressure_timeout_returns_nullptr() {
     // Pool with 1 buffer and a short timeout.
     StagingPool pool(1, 1024, 10);  // 10ms timeout
 
-    StagingBuffer* buf = pool.acquire(512);
+    StagingBuffer *buf = pool.acquire(512);
     EXPECT_TRUE(buf != nullptr, "first acquire should succeed");
 
     auto start = std::chrono::steady_clock::now();
-    StagingBuffer* timeout_buf = pool.acquire(512);
+    StagingBuffer *timeout_buf = pool.acquire(512);
     auto elapsed = std::chrono::steady_clock::now() - start;
 
     EXPECT_TRUE(timeout_buf == nullptr, "acquire should return nullptr on timeout");
@@ -143,7 +143,7 @@ void test_backpressure_timeout_returns_nullptr() {
 void test_release_wakes_waiting_thread() {
     StagingPool pool(1, 1024, 5000);  // 5s timeout (long)
 
-    StagingBuffer* buf = pool.acquire(512);
+    StagingBuffer *buf = pool.acquire(512);
     EXPECT_TRUE(buf != nullptr, "first acquire should succeed");
 
     std::atomic<bool> acquired{false};
@@ -152,7 +152,7 @@ void test_release_wakes_waiting_thread() {
     // Spawn a thread that will block on acquire.
     std::thread waiter([&]() {
         started.store(true, std::memory_order_release);
-        StagingBuffer* b = pool.acquire(256);
+        StagingBuffer *b = pool.acquire(256);
         if (b != nullptr) {
             acquired.store(true, std::memory_order_release);
             pool.release(b);
@@ -179,7 +179,7 @@ void test_release_wakes_waiting_thread() {
 void test_ref_count_and_add_ref() {
     StagingPool pool(2, 512, 100);
 
-    StagingBuffer* buf = pool.acquire(256);
+    StagingBuffer *buf = pool.acquire(256);
     EXPECT_TRUE(buf != nullptr, "acquire should succeed");
     EXPECT_TRUE(buf->ref_count == 1, "initial ref_count should be 1");
 
@@ -202,7 +202,7 @@ void test_ref_count_and_add_ref() {
 void test_generation_counter_increments() {
     StagingPool pool(1, 1024, 100);
 
-    StagingBuffer* buf = pool.acquire(512);
+    StagingBuffer *buf = pool.acquire(512);
     EXPECT_TRUE(buf != nullptr, "first acquire");
     EXPECT_TRUE(buf->seq == 1, "seq should be 1 on first acquire");
 
@@ -226,7 +226,7 @@ void test_generation_counter_increments() {
 void test_buffer_data_is_writable() {
     StagingPool pool(2, 256, 100);
 
-    StagingBuffer* buf = pool.acquire(128);
+    StagingBuffer *buf = pool.acquire(128);
     EXPECT_TRUE(buf != nullptr, "acquire should succeed");
 
     // Write to the buffer (simulating a snapshot copy).
@@ -247,7 +247,7 @@ void test_acquire_oversized_request_times_out() {
     // All buffers are 512 bytes; requesting 1024 should never succeed.
     StagingPool pool(2, 512, 10);  // 10ms timeout
 
-    StagingBuffer* buf = pool.acquire(1024);
+    StagingBuffer *buf = pool.acquire(1024);
     EXPECT_TRUE(buf == nullptr, "acquire for oversized request should return nullptr");
 }
 
@@ -267,7 +267,7 @@ void test_concurrent_acquire_release() {
     for (int tid = 0; tid < kThreads; ++tid) {
         workers.emplace_back([&]() {
             for (int i = 0; i < kIterations; ++i) {
-                StagingBuffer* buf = pool.acquire(256);
+                StagingBuffer *buf = pool.acquire(256);
                 if (buf == nullptr) {
                     failures.fetch_add(1, std::memory_order_relaxed);
                     continue;
@@ -283,7 +283,7 @@ void test_concurrent_acquire_release() {
         });
     }
 
-    for (auto& w : workers) {
+    for (auto &w : workers) {
         w.join();
     }
 

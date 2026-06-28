@@ -52,7 +52,7 @@ rc::Gen<std::string> genAlphaString() {
 
 // Helper: generate a string that does NOT match any key in the given set.
 // Strategies: wrong case, appended char, empty, or completely random.
-rc::Gen<std::string> genNonMatchingKey(const std::vector<std::string>& registered_keys) {
+rc::Gen<std::string> genNonMatchingKey(const std::vector<std::string> &registered_keys) {
     return rc::gen::exec([registered_keys]() -> std::string {
         int strategy = *rc::gen::inRange(0, 4);
 
@@ -102,10 +102,10 @@ rc::Gen<std::string> genNonMatchingKey(const std::vector<std::string>& registere
 // RAII guard that registers mock drivers and clears the factory on destruction.
 class FactoryTestGuard {
    public:
-    explicit FactoryTestGuard(const std::vector<std::string>& keys) {
-        auto& factory = amio::detail::BackendFactory::instance();
+    explicit FactoryTestGuard(const std::vector<std::string> &keys) {
+        auto &factory = amio::detail::BackendFactory::instance();
         factory.clear();
-        for (const auto& key : keys) {
+        for (const auto &key : keys) {
             factory.register_driver(
                 key, []() -> std::unique_ptr<amio::detail::Backend_Driver> { return std::make_unique<amio::pbt::MockBackendDriver>(); });
         }
@@ -115,8 +115,8 @@ class FactoryTestGuard {
         amio::detail::BackendFactory::instance().clear();
     }
 
-    FactoryTestGuard(const FactoryTestGuard&) = delete;
-    FactoryTestGuard& operator=(const FactoryTestGuard&) = delete;
+    FactoryTestGuard(const FactoryTestGuard &) = delete;
+    FactoryTestGuard &operator=(const FactoryTestGuard &) = delete;
 };
 
 }  // namespace
@@ -140,11 +140,11 @@ TEST_CASE("P5: exact-match returns correct driver for registered keys", "[pbt][f
         }
 
         FactoryTestGuard guard(keys);
-        auto& factory = amio::detail::BackendFactory::instance();
+        auto &factory = amio::detail::BackendFactory::instance();
 
         // Pick a random registered key and verify build succeeds.
         std::size_t pick = *rc::gen::inRange<std::size_t>(0, keys.size());
-        const std::string& lookup_key = keys[pick];
+        const std::string &lookup_key = keys[pick];
 
         amio_err_t err = AMIO_ERR_UNKNOWN_BACKEND;
         auto driver = factory.build(lookup_key, err);
@@ -163,7 +163,7 @@ TEST_CASE("P5: non-match returns AMIO_ERR_UNKNOWN_BACKEND, zero state mutation",
         // Register known keys.
         std::vector<std::string> keys = {"netcdf4", "zarr3", "grib2"};
         FactoryTestGuard guard(keys);
-        auto& factory = amio::detail::BackendFactory::instance();
+        auto &factory = amio::detail::BackendFactory::instance();
 
         // Snapshot registry state before the failed lookup.
         auto keys_before = factory.registered_keys();
@@ -193,7 +193,7 @@ TEST_CASE("P5: wrong case is a non-match (case-sensitive)", "[pbt][factory]") {
         // Register lowercase keys.
         std::vector<std::string> keys = {"netcdf4", "zarr3", "grib2"};
         FactoryTestGuard guard(keys);
-        auto& factory = amio::detail::BackendFactory::instance();
+        auto &factory = amio::detail::BackendFactory::instance();
 
         // Pick a key and flip case of a random character.
         std::size_t pick = *rc::gen::inRange<std::size_t>(0, keys.size());
@@ -231,7 +231,7 @@ TEST_CASE("P5: empty string returns AMIO_ERR_UNKNOWN_BACKEND", "[pbt][factory]")
         // Register some keys.
         std::vector<std::string> keys = {"netcdf4", "zarr3", "grib2"};
         FactoryTestGuard guard(keys);
-        auto& factory = amio::detail::BackendFactory::instance();
+        auto &factory = amio::detail::BackendFactory::instance();
 
         amio_err_t err = AMIO_OK;
         auto driver = factory.build("", err);
@@ -262,7 +262,7 @@ TEST_CASE("P5: concurrent read+write datasets resolve independently", "[pbt][fac
         }
 
         FactoryTestGuard guard(keys);
-        auto& factory = amio::detail::BackendFactory::instance();
+        auto &factory = amio::detail::BackendFactory::instance();
 
         // Pick two (possibly same) keys.
         std::size_t idx1 = *rc::gen::inRange<std::size_t>(0, keys.size());

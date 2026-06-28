@@ -38,7 +38,7 @@ namespace {
 int g_passed = 0;
 int g_failed = 0;
 
-void report_failure(const char* expr, const char* file, int line, const std::string& ctx) {
+void report_failure(const char *expr, const char *file, int line, const std::string &ctx) {
     std::fprintf(stderr, "FAIL %s:%d: %s   (%s)\n", file, line, expr, ctx.c_str());
     ++g_failed;
 }
@@ -99,7 +99,7 @@ std::string expected_identity_name(int pdt_number) {
 }
 
 // Build YAML configuration for a given PDT number.
-std::string build_yaml(const char* path, int pdt_number, int gdt_number = 0) {
+std::string build_yaml(const char *path, int pdt_number, int gdt_number = 0) {
     std::string yaml = std::string("path: ") + path +
                        "\n"
                        "drt: jpeg2000\n"
@@ -195,7 +195,7 @@ bool test_pdt_roundtrip(int pdt_number) {
         writer.open_write(cfg);
 
         StagingBuffer buf{};
-        buf.data = reinterpret_cast<std::byte*>(source.data());
+        buf.data = reinterpret_cast<std::byte *>(source.data());
         buf.capacity_bytes = source.size() * sizeof(float);
         buf.used_bytes = source.size() * sizeof(float);
 
@@ -209,7 +209,7 @@ bool test_pdt_roundtrip(int pdt_number) {
         writer.write(buf, meta);
         writer.flush();
         writer.close();
-    } catch (const std::exception& e) {
+    } catch (const std::exception &e) {
         std::fprintf(stdout, "NOTE: %s write path unavailable (encoder not in this g2c build), skipping: %s\n", label.c_str(), e.what());
         std::remove(tmp_path.c_str());
         return false;
@@ -241,7 +241,7 @@ bool test_pdt_roundtrip(int pdt_number) {
 
         std::vector<float> out(NPOINTS, -1.0f);
         StagingBuffer dst{};
-        dst.data = reinterpret_cast<std::byte*>(out.data());
+        dst.data = reinterpret_cast<std::byte *>(out.data());
         dst.capacity_bytes = out.size() * sizeof(float);
         dst.used_bytes = 0;
 
@@ -260,7 +260,7 @@ bool test_pdt_roundtrip(int pdt_number) {
         EXPECT_TRUE(info.found, label + " Field_Identity_Name round-trip (Req 14.3)");
 
         reader.close();
-    } catch (const std::exception& e) {
+    } catch (const std::exception &e) {
         report_failure("read phase", __FILE__, __LINE__, label + ": " + e.what());
     }
 
@@ -271,7 +271,7 @@ bool test_pdt_roundtrip(int pdt_number) {
 // Test GDT 3.40 round-trip: encode on Gaussian grid, decode, verify Ni/Nj.
 bool test_gdt_3_40_roundtrip() {
     const std::string label = "GDT 3.40";
-    const char* tmp_path = "/tmp/amio_test_composition_gdt_40.grib2";
+    const char *tmp_path = "/tmp/amio_test_composition_gdt_40.grib2";
     std::remove(tmp_path);
 
     std::vector<float> source = build_source_data();
@@ -285,7 +285,7 @@ bool test_gdt_3_40_roundtrip() {
         writer.open_write(cfg);
 
         StagingBuffer buf{};
-        buf.data = reinterpret_cast<std::byte*>(source.data());
+        buf.data = reinterpret_cast<std::byte *>(source.data());
         buf.capacity_bytes = source.size() * sizeof(float);
         buf.used_bytes = source.size() * sizeof(float);
 
@@ -299,7 +299,7 @@ bool test_gdt_3_40_roundtrip() {
         writer.write(buf, meta);
         writer.flush();
         writer.close();
-    } catch (const std::exception& e) {
+    } catch (const std::exception &e) {
         std::fprintf(stdout, "NOTE: %s write path unavailable (encoder not in this g2c build), skipping: %s\n", label.c_str(), e.what());
         std::remove(tmp_path);
         return false;
@@ -329,7 +329,7 @@ bool test_gdt_3_40_roundtrip() {
 
         std::vector<float> out(NPOINTS, -1.0f);
         StagingBuffer dst{};
-        dst.data = reinterpret_cast<std::byte*>(out.data());
+        dst.data = reinterpret_cast<std::byte *>(out.data());
         dst.capacity_bytes = out.size() * sizeof(float);
         dst.used_bytes = 0;
 
@@ -341,7 +341,7 @@ bool test_gdt_3_40_roundtrip() {
         EXPECT_TRUE(eq, label + " byte-equal grid-point values");
 
         reader.close();
-    } catch (const std::exception& e) {
+    } catch (const std::exception &e) {
         report_failure("read phase", __FILE__, __LINE__, label + ": " + e.what());
     }
 
@@ -355,7 +355,7 @@ bool test_gdt_3_40_roundtrip() {
 // Validates: Requirements 15.1, 15.2, 15.3, 15.4
 bool test_backward_compatibility_pdt_4_0() {
     const std::string label = "BackwardCompat PDT 4.0 / GDT 3.0";
-    const char* tmp_path = "/tmp/amio_test_composition_backward_compat.grib2";
+    const char *tmp_path = "/tmp/amio_test_composition_backward_compat.grib2";
     std::remove(tmp_path);
 
     std::vector<float> source = build_source_data();
@@ -403,7 +403,7 @@ bool test_backward_compatibility_pdt_4_0() {
         writer.open_write(cfg);
 
         StagingBuffer buf{};
-        buf.data = reinterpret_cast<std::byte*>(source.data());
+        buf.data = reinterpret_cast<std::byte *>(source.data());
         buf.capacity_bytes = source.size() * sizeof(float);
         buf.used_bytes = source.size() * sizeof(float);
 
@@ -417,7 +417,7 @@ bool test_backward_compatibility_pdt_4_0() {
         writer.write(buf, meta);
         writer.flush();
         writer.close();
-    } catch (const std::exception& e) {
+    } catch (const std::exception &e) {
         std::fprintf(stdout, "NOTE: %s write path unavailable (encoder not in this g2c build), skipping: %s\n", label.c_str(), e.what());
         std::remove(tmp_path);
         return false;
@@ -448,7 +448,7 @@ bool test_backward_compatibility_pdt_4_0() {
 
         std::vector<float> out(NPOINTS, -1.0f);
         StagingBuffer dst{};
-        dst.data = reinterpret_cast<std::byte*>(out.data());
+        dst.data = reinterpret_cast<std::byte *>(out.data());
         dst.capacity_bytes = out.size() * sizeof(float);
         dst.used_bytes = 0;
 
@@ -462,7 +462,7 @@ bool test_backward_compatibility_pdt_4_0() {
         EXPECT_TRUE(eq, label + " byte-equal grid-point values (Req 15.3)");
 
         reader.close();
-    } catch (const std::exception& e) {
+    } catch (const std::exception &e) {
         report_failure("read phase", __FILE__, __LINE__, label + ": " + e.what());
     }
 

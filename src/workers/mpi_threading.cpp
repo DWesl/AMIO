@@ -30,7 +30,7 @@
 
 namespace amio::detail {
 
-amio_err_t validate_mpi_threading(const MpiThreadingConfig& config) {
+amio_err_t validate_mpi_threading(const MpiThreadingConfig &config) {
     // If no background MPI-IO is requested, any thread level is fine.
     if (!config.requires_background_mpi_io) {
         return AMIO_OK;

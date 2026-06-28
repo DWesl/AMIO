@@ -50,7 +50,7 @@ StagingPool::~StagingPool() {
     // the pool is being destroyed.
 }
 
-StagingBuffer* StagingPool::acquire(std::size_t required_bytes) {
+StagingBuffer *StagingPool::acquire(std::size_t required_bytes) {
     std::unique_lock<std::mutex> lock(mu_);
 
     auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(timeout_ms_);
@@ -79,7 +79,7 @@ StagingBuffer* StagingPool::acquire(std::size_t required_bytes) {
     }
 }
 
-void StagingPool::release(StagingBuffer* buf) {
+void StagingPool::release(StagingBuffer *buf) {
     assert(buf != nullptr);
 
     std::lock_guard<std::mutex> lock(mu_);
@@ -105,7 +105,7 @@ void StagingPool::release(StagingBuffer* buf) {
     }
 }
 
-void StagingPool::add_ref(StagingBuffer* buf) {
+void StagingPool::add_ref(StagingBuffer *buf) {
     assert(buf != nullptr);
 
     std::lock_guard<std::mutex> lock(mu_);
@@ -141,13 +141,13 @@ std::size_t StagingPool::find_best_fit(std::size_t required_bytes) const {
     return free_list_.size();  // sentinel: no suitable buffer found
 }
 
-StagingBuffer* StagingPool::remove_from_free_list(std::size_t free_idx) {
+StagingBuffer *StagingPool::remove_from_free_list(std::size_t free_idx) {
     assert(free_idx < free_list_.size());
 
     std::size_t buf_idx = free_list_[free_idx];
     free_list_.erase(free_list_.begin() + static_cast<std::ptrdiff_t>(free_idx));
 
-    StagingBuffer* buf = &buffers_[buf_idx];
+    StagingBuffer *buf = &buffers_[buf_idx];
     buf->ref_count = 1;
     buf->seq += 1;
     // used_bytes is set by the caller after acquire returns.

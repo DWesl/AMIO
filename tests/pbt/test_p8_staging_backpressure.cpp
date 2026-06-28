@@ -56,10 +56,10 @@ TEST_CASE("P8: exhausted StagingPool returns nullptr within timeout", "[pbt][p8]
             RC_ASSERT(pool.free_buffer_count() == buffer_count);
 
             // Exhaust all buffers.
-            std::vector<amio::detail::StagingBuffer*> acquired;
+            std::vector<amio::detail::StagingBuffer *> acquired;
             acquired.reserve(buffer_count);
             for (std::size_t i = 0; i < buffer_count; ++i) {
-                auto* buf = pool.acquire(1);  // request minimal size
+                auto *buf = pool.acquire(1);  // request minimal size
                 RC_ASSERT(buf != nullptr);
                 acquired.push_back(buf);
             }
@@ -72,7 +72,7 @@ TEST_CASE("P8: exhausted StagingPool returns nullptr within timeout", "[pbt][p8]
 
             // Attempt to acquire one more -- should timeout.
             auto t_start = std::chrono::steady_clock::now();
-            auto* result_buf = pool.acquire(1);
+            auto *result_buf = pool.acquire(1);
             auto t_end = std::chrono::steady_clock::now();
 
             // Must return nullptr (backpressure).
@@ -95,7 +95,7 @@ TEST_CASE("P8: exhausted StagingPool returns nullptr within timeout", "[pbt][p8]
             RC_ASSERT(pool.free_buffer_count() == 0);
 
             // Clean up: release all acquired buffers.
-            for (auto* buf : acquired) {
+            for (auto *buf : acquired) {
                 pool.release(buf);
             }
 
@@ -133,15 +133,15 @@ TEST_CASE("P8: source data unmodified after backpressure rejection", "[pbt][p8][
         // Create pool and exhaust it.
         amio::detail::StagingPool pool(buffer_count, buffer_capacity, timeout_ms);
 
-        std::vector<amio::detail::StagingBuffer*> acquired;
+        std::vector<amio::detail::StagingBuffer *> acquired;
         for (std::size_t i = 0; i < buffer_count; ++i) {
-            auto* buf = pool.acquire(1);
+            auto *buf = pool.acquire(1);
             RC_ASSERT(buf != nullptr);
             acquired.push_back(buf);
         }
 
         // Attempt acquire -- will timeout (backpressure).
-        auto* result_buf = pool.acquire(data_size);
+        auto *result_buf = pool.acquire(data_size);
         RC_ASSERT(result_buf == nullptr);
 
         // Source data must be completely unmodified.
@@ -149,7 +149,7 @@ TEST_CASE("P8: source data unmodified after backpressure rejection", "[pbt][p8][
         RC_ASSERT(std::memcmp(source_data.data(), original_data.data(), source_data.size()) == 0);
 
         // Clean up.
-        for (auto* buf : acquired) {
+        for (auto *buf : acquired) {
             pool.release(buf);
         }
     });
@@ -175,7 +175,7 @@ TEST_CASE("P8: acquire succeeds when buffer released during wait", "[pbt][p8][st
         amio::detail::StagingPool pool(1, buffer_capacity, timeout_ms);
 
         // Exhaust the single buffer.
-        auto* held_buf = pool.acquire(1);
+        auto *held_buf = pool.acquire(1);
         RC_ASSERT(held_buf != nullptr);
         RC_ASSERT(pool.free_buffer_count() == 0);
 
@@ -190,7 +190,7 @@ TEST_CASE("P8: acquire succeeds when buffer released during wait", "[pbt][p8][st
 
         // Attempt to acquire -- should succeed after the release.
         auto t_start = std::chrono::steady_clock::now();
-        auto* new_buf = pool.acquire(1);
+        auto *new_buf = pool.acquire(1);
         auto t_end = std::chrono::steady_clock::now();
 
         // The acquire should succeed (buffer was released).

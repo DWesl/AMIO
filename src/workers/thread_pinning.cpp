@@ -39,7 +39,7 @@ namespace {
 
 // Validate that all requested core IDs are within the set of CPUs
 // available to this process.
-bool validate_cpu_cores(const std::vector<int>& cores) {
+bool validate_cpu_cores(const std::vector<int> &cores) {
     if (cores.empty()) {
         return true;
     }
@@ -103,7 +103,7 @@ std::vector<int> get_numa_domain_cpus(int domain) {
     return cpus;
 }
 
-amio_err_t pin_to_cores(const std::vector<int>& cores) {
+amio_err_t pin_to_cores(const std::vector<int> &cores) {
     if (!validate_cpu_cores(cores)) {
         return AMIO_ERR_INVALID_BINDING;
     }
@@ -127,7 +127,7 @@ amio_err_t pin_to_cores(const std::vector<int>& cores) {
 
 }  // anonymous namespace
 
-amio_err_t apply_thread_pinning(const ThreadConfig& config) {
+amio_err_t apply_thread_pinning(const ThreadConfig &config) {
     // No pinning requested -- no-op, leave host affinity unchanged.
     if (config.is_default()) {
         return AMIO_OK;
@@ -170,7 +170,7 @@ int query_available_cpus() {
 #endif
 }
 
-amio_err_t validate_thread_config(const ThreadConfig& config) {
+amio_err_t validate_thread_config(const ThreadConfig &config) {
     // No pinning requested -- always valid.
     if (config.is_default()) {
         return AMIO_OK;

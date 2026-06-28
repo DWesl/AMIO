@@ -71,7 +71,7 @@ TEST_CASE("P17: Error code totality - strerror always returns non-null", "[pbt][
         // Generate arbitrary int values across a wide range.
         auto code = *rc::gen::inRange(-1000, 1000);
 
-        const char* desc = amio_strerror(code);
+        const char *desc = amio_strerror(code);
 
         // Must be non-null.
         RC_ASSERT(desc != nullptr);
@@ -99,8 +99,8 @@ TEST_CASE("P17: Error code totality - defined codes byte-equal across calls", "[
         auto code = *rc::gen::elementOf(kDefinedCodes);
 
         // Call amio_strerror twice.
-        const char* desc1 = amio_strerror(code);
-        const char* desc2 = amio_strerror(code);
+        const char *desc1 = amio_strerror(code);
+        const char *desc2 = amio_strerror(code);
 
         // Both must be non-null.
         RC_ASSERT(desc1 != nullptr);
@@ -132,7 +132,7 @@ TEST_CASE("P17: Error code totality - undefined codes return unknown description
         // Strategy: generate from ranges that don't overlap with [0, 17].
         auto code = *rc::gen::suchThat<int>(rc::gen::inRange(-500, 500), [](int c) { return !is_defined_code(c); });
 
-        const char* desc = amio_strerror(code);
+        const char *desc = amio_strerror(code);
 
         // Must be non-null.
         RC_ASSERT(desc != nullptr);
@@ -173,20 +173,20 @@ TEST_CASE("P17: Error code totality - undefined codes do not mutate table", "[pb
         auto num_undefined = *rc::gen::inRange<int>(5, 20);
         for (int i = 0; i < num_undefined; ++i) {
             int bad_code = -100 - i;  // guaranteed undefined
-            const char* desc = amio_strerror(bad_code);
+            const char *desc = amio_strerror(bad_code);
             RC_ASSERT(desc != nullptr);
         }
 
         // Also try large positive undefined codes.
         for (int i = 0; i < num_undefined; ++i) {
             int bad_code = 100 + i;  // guaranteed undefined
-            const char* desc = amio_strerror(bad_code);
+            const char *desc = amio_strerror(bad_code);
             RC_ASSERT(desc != nullptr);
         }
 
         // Verify: all defined-code descriptions are unchanged.
         for (std::size_t i = 0; i < kDefinedCodes.size(); ++i) {
-            const char* after = amio_strerror(kDefinedCodes[i]);
+            const char *after = amio_strerror(kDefinedCodes[i]);
             RC_ASSERT(after != nullptr);
             RC_ASSERT(std::string(after) == before[i]);
         }

@@ -13,15 +13,14 @@
 #include "drivers/zarr/zarr_driver.hpp"
 
 #include <algorithm>
+#include <conf/config.hpp>
+#include <conf/error.hpp>
 #include <cstdint>
 #include <cstring>
 #include <sstream>
 #include <stdexcept>
 #include <string>
 #include <vector>
-
-#include <conf/config.hpp>
-#include <conf/error.hpp>
 
 #include "drivers/common/var_attributes.hpp"
 #include "factory/backend_factory.hpp"
@@ -53,7 +52,7 @@ BackendRegistrar<Zarr_Driver> reg_zarr3("zarr3");
 // Helper: determine if a URI is a cloud URI.
 // ===================================================================
 
-bool Zarr_Driver::is_cloud_uri(const std::string& uri) {
+bool Zarr_Driver::is_cloud_uri(const std::string &uri) {
     return uri.rfind("s3://", 0) == 0 || uri.rfind("gs://", 0) == 0 || uri.rfind("https://", 0) == 0;
 }
 
@@ -61,7 +60,7 @@ bool Zarr_Driver::is_cloud_uri(const std::string& uri) {
 // Helper: categorize network/auth errors (R8.9).
 // ===================================================================
 
-std::string Zarr_Driver::categorize_error(const std::string& message) {
+std::string Zarr_Driver::categorize_error(const std::string &message) {
     // Heuristic categorization based on error message content.
     std::string lower_msg = message;
     std::transform(lower_msg.begin(), lower_msg.end(), lower_msg.begin(), [](unsigned char c) { return std::tolower(c); });
@@ -129,7 +128,7 @@ std::size_t Zarr_Driver::dtype_size(amio_dtype_t dtype) {
 // parse_zarr_config -- extract and validate Zarr config from CONF.
 // ===================================================================
 
-ZarrConfig Zarr_Driver::parse_zarr_config(const conf::Config& config) {
+ZarrConfig Zarr_Driver::parse_zarr_config(const conf::Config &config) {
     ZarrConfig cfg;
 
     // Collect missing required fields (R8.10).
@@ -197,7 +196,7 @@ ZarrConfig Zarr_Driver::parse_zarr_config(const conf::Config& config) {
 // All dimensions must be positive integers.
 // ===================================================================
 
-void Zarr_Driver::validate_sharding(const ZarrConfig& cfg) {
+void Zarr_Driver::validate_sharding(const ZarrConfig &cfg) {
     if (cfg.chunk_shape.size() != cfg.shard_shape.size()) {
         std::string msg =
             "Zarr_Driver: chunk_shape and shard_shape must have the same "
@@ -229,7 +228,7 @@ void Zarr_Driver::validate_sharding(const ZarrConfig& cfg) {
 // validate_codec -- must be one of {blosc, zstandard} (R8.4).
 // ===================================================================
 
-void Zarr_Driver::validate_codec(const ZarrConfig& cfg) {
+void Zarr_Driver::validate_codec(const ZarrConfig &cfg) {
     if (cfg.codec != "blosc" && cfg.codec != "zstandard") {
         std::string msg = "Zarr_Driver: codec must be one of {blosc, zstandard} (got '" + cfg.codec + "')";
         throw std::runtime_error(msg);
@@ -247,7 +246,7 @@ namespace {
 // Build the KvStore spec JSON for a given URI (R8.2).
 // Cloud URIs (s3://, gs://, https://) route through TensorStore
 // KvStore HTTP REST transport.
-nlohmann::json build_kvstore_spec(const std::string& uri) {
+nlohmann::json build_kvstore_spec(const std::string &uri) {
     nlohmann::json kvstore;
 
     if (uri.rfind("s3://", 0) == 0) {
@@ -329,7 +328,7 @@ tensorstore::DataType to_ts_dtype(amio_dtype_t dtype) {
 // on success; returns false for an element type with no AMIO dtype
 // mapping (e.g. bool, complex, string), in which case the variable
 // cannot be described robustly (describe_variable -> found = false).
-bool to_amio_dtype(tensorstore::DataType dt, amio_dtype_t& out) {
+bool to_amio_dtype(tensorstore::DataType dt, amio_dtype_t &out) {
     if (dt == tensorstore::dtype_v<float>) {
         out = AMIO_DTYPE_F32;
         return true;
@@ -387,7 +386,7 @@ bool to_amio_dtype(tensorstore::DataType dt, amio_dtype_t& out) {
 
 #ifndef AMIO_NCZARR_FALLBACK
 
-void Zarr_Driver::open_write(const conf::Config& config) {
+void Zarr_Driver::open_write(const conf::Config &config) {
     if (is_open_) {
         throw std::runtime_error("Zarr_Driver: already open");
     }
@@ -409,7 +408,7 @@ void Zarr_Driver::open_write(const conf::Config& config) {
     spec["kvstore"] = build_kvstore_spec(config_.uri);
 
     // Configure metadata: dtype, shape, codecs.
-    auto& metadata = spec["metadata"];
+    auto &metadata = spec["metadata"];
     metadata["shape"] = config_.array_shape;
     metadata["data_type"] = config_.dtype_str.empty() ? "float32" : config_.dtype_str;
 
@@ -422,7 +421,7 @@ void Zarr_Driver::open_write(const conf::Config& config) {
     {
         nlohmann::json attrs_json = nlohmann::json::object();
         attrs_json["Conventions"] = attributes_.conventions;
-        for (const auto& kv : attributes_.global.items) {
+        for (const auto &kv : attributes_.global.items) {
             if (kv.second.is_numeric) {
                 attrs_json[kv.first] = kv.second.number;
             } else {
@@ -446,7 +445,7 @@ void Zarr_Driver::open_write(const conf::Config& config) {
     // Sharding codec with inner codecs (R8.3).
     nlohmann::json sharding;
     sharding["name"] = "sharding_indexed";
-    auto& shard_cfg = sharding["configuration"];
+    auto &shard_cfg = sharding["configuration"];
     shard_cfg["chunk_shape"] = config_.chunk_shape;
 
     // Inner codecs: bytes → byte-shuffle → compression.
@@ -528,7 +527,7 @@ void Zarr_Driver::open_write(const conf::Config& config) {
 // open_read -- validate config, open TensorStore for reading.
 // ===================================================================
 
-void Zarr_Driver::open_read(const conf::Config& config) {
+void Zarr_Driver::open_read(const conf::Config &config) {
     if (is_open_) {
         throw std::runtime_error("Zarr_Driver: already open");
     }
@@ -583,7 +582,7 @@ void Zarr_Driver::open_read(const conf::Config& config) {
 // target unchanged (R8.9).
 // ===================================================================
 
-void Zarr_Driver::write(const StagingBuffer& src, const VarMeta& meta) {
+void Zarr_Driver::write(const StagingBuffer &src, const VarMeta &meta) {
     if (!is_open_ || !is_write_mode_) {
         std::string msg = "Zarr_Driver: write called on driver not open for writing";
         throw std::runtime_error(msg);
@@ -641,7 +640,7 @@ void Zarr_Driver::write(const StagingBuffer& src, const VarMeta& meta) {
 // read -- read from TensorStore into StagingBuffer (R8.1, R8.5).
 // ===================================================================
 
-void Zarr_Driver::read(StagingBuffer& dst, const VarMeta& meta, std::int64_t timestep, const std::optional<BoundingBox>& bbox) {
+void Zarr_Driver::read(StagingBuffer &dst, const VarMeta &meta, std::int64_t timestep, const std::optional<BoundingBox> &bbox) {
     if (!is_open_ || is_write_mode_) {
         std::string msg = "Zarr_Driver: read called on driver not open for reading";
         throw std::runtime_error(msg);
@@ -709,7 +708,7 @@ void Zarr_Driver::read(StagingBuffer& dst, const VarMeta& meta, std::int64_t tim
     // full domain is read (Req 10.4).
     tensorstore::TensorStore<> source = ts_store_;
     if (bbox.has_value()) {
-        const auto& b = *bbox;
+        const auto &b = *bbox;
         for (int d = 0; d < b.rank; ++d) {
             auto sliced = source | tensorstore::Dims(d).TranslateSizedInterval(b.offsets[d], b.extents[d], b.strides[d]);
             if (!sliced.ok()) {
@@ -813,7 +812,7 @@ void Zarr_Driver::close() {
 // the read path to fail the read with AMIO_ERR_BACKEND_FAILURE.
 // ===================================================================
 
-VariableInfo Zarr_Driver::describe_variable(const std::string& name) {
+VariableInfo Zarr_Driver::describe_variable(const std::string &name) {
     VariableInfo info{};  // found == false by default.
 
     if (!is_open_ || is_write_mode_) {

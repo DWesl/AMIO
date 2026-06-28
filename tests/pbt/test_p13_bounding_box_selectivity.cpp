@@ -53,23 +53,23 @@ class InstrumentedBBoxDriver : public Backend_Driver {
     InstrumentedBBoxDriver() = default;
     ~InstrumentedBBoxDriver() override = default;
 
-    void open_write(const conf::Config& /*config*/) override {}
-    void open_read(const conf::Config& /*config*/) override {}
+    void open_write(const conf::Config & /*config*/) override {}
+    void open_read(const conf::Config & /*config*/) override {}
     void flush() override {}
     void close() override {}
 
-    void write(const StagingBuffer& /*src*/, const VarMeta& /*meta*/) override {}
+    void write(const StagingBuffer & /*src*/, const VarMeta & /*meta*/) override {}
 
     // Set the variable shape and dtype for this driver instance.
     // Must be called before reads so the driver knows the full
     // variable dimensions.
-    void set_var_info(const amio_shape_t& shape, amio_dtype_t dtype) {
+    void set_var_info(const amio_shape_t &shape, amio_dtype_t dtype) {
         std::lock_guard<std::mutex> lock(mu_);
         var_shape_ = shape;
         var_dtype_ = dtype;
     }
 
-    void read(StagingBuffer& dst, const VarMeta& /*meta*/, std::int64_t timestep, const std::optional<BoundingBox>& bbox) override {
+    void read(StagingBuffer &dst, const VarMeta & /*meta*/, std::int64_t timestep, const std::optional<BoundingBox> &bbox) override {
         std::lock_guard<std::mutex> lock(mu_);
 
         BBoxReadRecord rec;
@@ -218,7 +218,7 @@ TEST_CASE("P13: Bounding-box read selectivity - only intersecting bytes transfer
         // Since PrefetchQueue::schedule_initial doesn't pass bbox,
         // we call get_buffer directly which will trigger a fetch
         // for the requested timestep with the bbox.
-        StagingBuffer* buf = nullptr;
+        StagingBuffer *buf = nullptr;
         amio_status_t status = pq.get_buffer(0, &bbox, &buf);
         RC_ASSERT(status == AMIO_OK);
         RC_ASSERT(buf != nullptr);
@@ -229,7 +229,7 @@ TEST_CASE("P13: Bounding-box read selectivity - only intersecting bytes transfer
 
         // Find the record for our read (with bbox).
         bool found_bbox_read = false;
-        for (const auto& rec : records) {
+        for (const auto &rec : records) {
             if (rec.has_bbox && rec.timestep == 0) {
                 found_bbox_read = true;
 
@@ -298,7 +298,7 @@ TEST_CASE("P13: Bounding-box read selectivity - full read without bbox", "[pbt][
         PrefetchQueue pq(1, 60, &pool, nullptr, driver.get(), 1, "test_var", info, 1);
 
         // Read without bbox.
-        StagingBuffer* buf = nullptr;
+        StagingBuffer *buf = nullptr;
         amio_status_t status = pq.get_buffer(0, nullptr, &buf);
         RC_ASSERT(status == AMIO_OK);
         RC_ASSERT(buf != nullptr);
@@ -308,7 +308,7 @@ TEST_CASE("P13: Bounding-box read selectivity - full read without bbox", "[pbt][
         RC_ASSERT(!records.empty());
 
         bool found_full_read = false;
-        for (const auto& rec : records) {
+        for (const auto &rec : records) {
             if (!rec.has_bbox && rec.timestep == 0) {
                 found_full_read = true;
                 // Full read: bytes written should equal full variable size

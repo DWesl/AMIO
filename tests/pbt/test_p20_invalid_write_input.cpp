@@ -69,8 +69,8 @@ struct WriteTestContext {
         }
     }
 
-    WriteTestContext(const WriteTestContext&) = delete;
-    WriteTestContext& operator=(const WriteTestContext&) = delete;
+    WriteTestContext(const WriteTestContext &) = delete;
+    WriteTestContext &operator=(const WriteTestContext &) = delete;
 };
 
 }  // anonymous namespace

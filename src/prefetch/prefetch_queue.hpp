@@ -86,16 +86,16 @@ class PrefetchQueue {
     //   info           - variable metadata (dtype + shape) used to
     //                    build VarMeta and size the staging buffer
     //   total_timesteps - total number of timesteps in the dataset
-    PrefetchQueue(std::size_t depth, std::int64_t read_timeout_s, StagingPool* pool, WorkerPool* workers, Backend_Driver* driver,
-                  std::uint64_t dataset_id, const std::string& var_name, const VariableInfo& info, std::int64_t total_timesteps);
+    PrefetchQueue(std::size_t depth, std::int64_t read_timeout_s, StagingPool *pool, WorkerPool *workers, Backend_Driver *driver,
+                  std::uint64_t dataset_id, const std::string &var_name, const VariableInfo &info, std::int64_t total_timesteps);
 
     ~PrefetchQueue();
 
     // Non-copyable, non-movable.
-    PrefetchQueue(const PrefetchQueue&) = delete;
-    PrefetchQueue& operator=(const PrefetchQueue&) = delete;
-    PrefetchQueue(PrefetchQueue&&) = delete;
-    PrefetchQueue& operator=(PrefetchQueue&&) = delete;
+    PrefetchQueue(const PrefetchQueue &) = delete;
+    PrefetchQueue &operator=(const PrefetchQueue &) = delete;
+    PrefetchQueue(PrefetchQueue &&) = delete;
+    PrefetchQueue &operator=(PrefetchQueue &&) = delete;
 
     // schedule_initial -- schedule the initial min(N, M) fetches.
     //
@@ -114,7 +114,7 @@ class PrefetchQueue {
     //   AMIO_ERR_TIMEOUT if the read timeout expires.
     //   AMIO_ERR_BACKEND_FAILURE (or other AMIO_ERR_*) if the
     //     background fetch failed.
-    amio_status_t get_buffer(std::int64_t timestep, const amio_bbox_t* bbox, StagingBuffer** out_buf);
+    amio_status_t get_buffer(std::int64_t timestep, const amio_bbox_t *bbox, StagingBuffer **out_buf);
 
     // schedule_next -- schedule fetch for timestep T+N if within bounds.
     //
@@ -126,7 +126,7 @@ class PrefetchQueue {
     //
     // Called by the worker thread (or synchronous fallback) when
     // the fetch completes.
-    void mark_complete(std::int64_t timestep, StagingBuffer* buf);
+    void mark_complete(std::int64_t timestep, StagingBuffer *buf);
 
     // mark_failed -- record a fetch failure for a timestep.
     //
@@ -155,11 +155,11 @@ class PrefetchQueue {
    private:
     // Schedule a single fetch for the given timestep.
     // Caller must NOT hold mu_.
-    void schedule_fetch(std::int64_t timestep, const amio_bbox_t* bbox);
+    void schedule_fetch(std::int64_t timestep, const amio_bbox_t *bbox);
 
     // Perform a synchronous fetch (used when worker_pool is null).
     // Caller must NOT hold mu_.
-    void sync_fetch(std::int64_t timestep, const amio_bbox_t* bbox);
+    void sync_fetch(std::int64_t timestep, const amio_bbox_t *bbox);
 
     // ---- Members ----
 
@@ -175,14 +175,14 @@ class PrefetchQueue {
     VariableInfo info_;  // dtype + shape for VarMeta / buffer sizing
 
     // External references (not owned).
-    StagingPool* pool_;
-    WorkerPool* workers_;
-    Backend_Driver* driver_;
+    StagingPool *pool_;
+    WorkerPool *workers_;
+    Backend_Driver *driver_;
 
     // State tracking.
-    std::map<std::int64_t, StagingBuffer*> completed_;  // timestep -> buffer
-    std::set<std::int64_t> pending_;                    // timesteps being fetched
-    std::map<std::int64_t, amio_err_t> failed_;         // timestep -> error code
+    std::map<std::int64_t, StagingBuffer *> completed_;  // timestep -> buffer
+    std::set<std::int64_t> pending_;                     // timesteps being fetched
+    std::map<std::int64_t, amio_err_t> failed_;          // timestep -> error code
 
     // Cancellation flag.
     bool cancelled_ = false;

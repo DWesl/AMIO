@@ -35,7 +35,7 @@ using namespace amio::pbt;
 namespace {
 
 // Row-major strides (in elements) for a shape's extents.
-std::vector<std::size_t> row_major_strides(const amio_shape_t& shape) {
+std::vector<std::size_t> row_major_strides(const amio_shape_t &shape) {
     std::vector<std::size_t> strides(static_cast<std::size_t>(shape.rank), 1);
     for (int d = shape.rank - 2; d >= 0; --d) {
         strides[static_cast<std::size_t>(d)] = strides[static_cast<std::size_t>(d + 1)] * static_cast<std::size_t>(shape.extents[d + 1]);
@@ -51,20 +51,20 @@ std::vector<std::size_t> row_major_strides(const amio_shape_t& shape) {
 // the read path delivers exactly this gather.
 class SliceDriver : public Backend_Driver {
    public:
-    void open_write(const conf::Config&) override {}
-    void open_read(const conf::Config&) override {}
+    void open_write(const conf::Config &) override {}
+    void open_read(const conf::Config &) override {}
     void flush() override {}
     void close() override {}
-    void write(const StagingBuffer&, const VarMeta&) override {}
+    void write(const StagingBuffer &, const VarMeta &) override {}
 
-    void set_array(const amio_shape_t& shape, amio_dtype_t dtype, std::vector<std::byte> bytes) {
+    void set_array(const amio_shape_t &shape, amio_dtype_t dtype, std::vector<std::byte> bytes) {
         std::lock_guard<std::mutex> lock(mu_);
         shape_ = shape;
         dtype_ = dtype;
         full_ = std::move(bytes);
     }
 
-    void read(StagingBuffer& dst, const VarMeta&, std::int64_t, const std::optional<BoundingBox>& bbox) override {
+    void read(StagingBuffer &dst, const VarMeta &, std::int64_t, const std::optional<BoundingBox> &bbox) override {
         std::lock_guard<std::mutex> lock(mu_);
         const std::size_t elem = dtype_size(dtype_);
         const auto strides = row_major_strides(shape_);
@@ -76,14 +76,14 @@ class SliceDriver : public Backend_Driver {
             return;
         }
 
-        const BoundingBox& b = bbox.value();
+        const BoundingBox &b = bbox.value();
         // Number of selected elements = product(extents).
         std::size_t sel_elems = 1;
         for (int d = 0; d < b.rank; ++d) {
             sel_elems *= static_cast<std::size_t>(b.extents[d]);
         }
 
-        auto* out = dst.data;
+        auto *out = dst.data;
         std::size_t out_off = 0;
 
         // Iterate the selected index space in row-major order, mapping
@@ -203,7 +203,7 @@ TEST_CASE("RP2: subset equals slice - bbox read returns exactly full[offset + k*
         auto info = make_var_info(dtype, shape, 1);
         PrefetchQueue pq(1, 60, &pool, nullptr, driver.get(), 1, "test_var", info, 1);
 
-        StagingBuffer* buf = nullptr;
+        StagingBuffer *buf = nullptr;
         amio_status_t status = pq.get_buffer(0, &bbox, &buf);
         RC_ASSERT(status == AMIO_OK);
         RC_ASSERT(buf != nullptr);

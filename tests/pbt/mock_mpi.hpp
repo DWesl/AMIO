@@ -51,10 +51,10 @@ class MockMpi {
     ~MockMpi() = default;
 
     // Non-copyable, non-movable (singleton-like usage in tests).
-    MockMpi(const MockMpi&) = delete;
-    MockMpi& operator=(const MockMpi&) = delete;
-    MockMpi(MockMpi&&) = delete;
-    MockMpi& operator=(MockMpi&&) = delete;
+    MockMpi(const MockMpi &) = delete;
+    MockMpi &operator=(const MockMpi &) = delete;
+    MockMpi(MockMpi &&) = delete;
+    MockMpi &operator=(MockMpi &&) = delete;
 
     // ----- Configuration -----
 
@@ -72,7 +72,7 @@ class MockMpi {
     }
 
     // Inject a communicator split failure.
-    void inject_split_failure(const std::string& message = "CommSplit failed") {
+    void inject_split_failure(const std::string &message = "CommSplit failed") {
         std::lock_guard<std::mutex> lock(mu_);
         split_failure_message_ = message;
         split_should_fail_ = true;
@@ -151,7 +151,7 @@ class MockMpi {
     std::vector<MpiCallRecord> get_calls(MpiCallRecord::Operation op) const {
         std::lock_guard<std::mutex> lock(mu_);
         std::vector<MpiCallRecord> filtered;
-        for (const auto& c : calls_) {
+        for (const auto &c : calls_) {
             if (c.operation == op) {
                 filtered.push_back(c);
             }
@@ -174,7 +174,7 @@ class MockMpi {
     // Check if split was attempted.
     bool split_was_attempted() const {
         std::lock_guard<std::mutex> lock(mu_);
-        for (const auto& c : calls_) {
+        for (const auto &c : calls_) {
             if (c.operation == MpiCallRecord::Operation::CommSplit) {
                 return true;
             }

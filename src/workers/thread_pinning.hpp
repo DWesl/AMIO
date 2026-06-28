@@ -77,7 +77,7 @@ struct ThreadConfig {
 //   AMIO_OK on success.
 //   AMIO_ERR_INVALID_BINDING if the requested binding is invalid
 //   or cannot be applied.
-amio_err_t apply_thread_pinning(const ThreadConfig& config);
+amio_err_t apply_thread_pinning(const ThreadConfig &config);
 
 // validate_thread_config -- pre-validate a ThreadConfig without
 // actually applying it.
@@ -97,7 +97,7 @@ amio_err_t apply_thread_pinning(const ThreadConfig& config);
 // Returns:
 //   AMIO_OK if the config is valid.
 //   AMIO_ERR_INVALID_BINDING if any binding is invalid.
-amio_err_t validate_thread_config(const ThreadConfig& config);
+amio_err_t validate_thread_config(const ThreadConfig &config);
 
 // query_available_cpus -- return the number of CPUs available to
 // the calling process.

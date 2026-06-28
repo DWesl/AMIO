@@ -39,20 +39,20 @@ class InstrumentedDriver : public amio::detail::Backend_Driver {
     InstrumentedDriver() = default;
     ~InstrumentedDriver() override = default;
 
-    void open_write(const conf::Config& /*config*/) override {
+    void open_write(const conf::Config & /*config*/) override {
         record_thread();
     }
 
-    void open_read(const conf::Config& /*config*/) override {
+    void open_read(const conf::Config & /*config*/) override {
         record_thread();
     }
 
-    void write(const amio::detail::StagingBuffer& /*src*/, const amio::detail::VarMeta& /*meta*/) override {
+    void write(const amio::detail::StagingBuffer & /*src*/, const amio::detail::VarMeta & /*meta*/) override {
         record_thread();
     }
 
-    void read(amio::detail::StagingBuffer& dst, const amio::detail::VarMeta& /*meta*/, std::int64_t /*timestep*/,
-              const std::optional<amio::detail::BoundingBox>& /*bbox*/) override {
+    void read(amio::detail::StagingBuffer &dst, const amio::detail::VarMeta & /*meta*/, std::int64_t /*timestep*/,
+              const std::optional<amio::detail::BoundingBox> & /*bbox*/) override {
         record_thread();
         // Fill with dummy data so the read "succeeds".
         if (dst.capacity_bytes > 0) {
@@ -163,7 +163,7 @@ TEST_CASE("P15: Driver-thread invariant - write path", "[pbt][p15][driver_thread
 
         // Verify: all driver invocations happened on worker threads
         // (i.e., threads different from the calling thread).
-        for (const auto& tid : driver_threads) {
+        for (const auto &tid : driver_threads) {
             RC_ASSERT(tid != calling_thread);
         }
     });

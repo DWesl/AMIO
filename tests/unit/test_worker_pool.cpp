@@ -49,7 +49,7 @@ struct TestResult {
 
 TestResult g_result{};
 
-void report_failure(const char* expr, const char* file, int line, const std::string& context) {
+void report_failure(const char *expr, const char *file, int line, const std::string &context) {
     std::fprintf(stderr, "FAIL %s:%d: %s   (%s)\n", file, line, expr, context.c_str());
     ++g_result.failed;
 }
@@ -234,7 +234,7 @@ void test_prefetch_priority_by_distance() {
     std::this_thread::sleep_for(std::chrono::milliseconds(10));
 
     // Now submit prefetch tasks -- they'll queue up.
-    for (const auto& spec : specs) {
+    for (const auto &spec : specs) {
         pool.submit_prefetch(spec.timestep, spec.distance,
                              /*dataset_id=*/1, [&, ts = spec.timestep]() {
                                  std::lock_guard<std::mutex> lock(mu);
@@ -402,7 +402,7 @@ void test_concurrent_writes_multiple_keys() {
     // Verify ordering per key.
     bool all_ordered = true;
     for (int k = 0; k < kKeys; ++k) {
-        auto& order = orders[static_cast<std::uint64_t>(k)];
+        auto &order = orders[static_cast<std::uint64_t>(k)];
         if (static_cast<int>(order.size()) != kTasksPerKey) {
             all_ordered = false;
             break;
@@ -566,7 +566,7 @@ void test_backend_driver_uses_io_comm() {
         // In a real Backend_Driver, this is where MPI calls would
         // use pool.io_communicator().handle() instead of
         // MPI_COMM_WORLD.
-        const auto& comm = pool.io_communicator();
+        const auto &comm = pool.io_communicator();
         observed_valid.store(comm.valid, std::memory_order_relaxed);
         observed_is_io.store(comm.is_io_rank, std::memory_order_relaxed);
     });
@@ -692,7 +692,7 @@ void test_all_backend_calls_use_io_comm_only() {
     for (int i = 0; i < kTasks; ++i) {
         DatasetVariableKey key{static_cast<uint64_t>(i), 0};
         pool.submit_write(key, [&]() {
-            const auto& comm = pool.io_communicator();
+            const auto &comm = pool.io_communicator();
             if (comm.valid && comm.is_io_rank) {
                 correct_comm_count.fetch_add(1, std::memory_order_relaxed);
             }

@@ -7,10 +7,9 @@
 #include "drivers/common/var_attributes.hpp"
 
 #include <cctype>
+#include <conf/config.hpp>
 #include <cstdlib>
 #include <string>
-
-#include <conf/config.hpp>
 
 namespace amio::detail {
 
@@ -18,7 +17,7 @@ namespace amio::detail {
 // parse_attr_value -- detect numeric literals; keep original text.
 // ---------------------------------------------------------------
 
-AttrValue parse_attr_value(const std::string& raw) {
+AttrValue parse_attr_value(const std::string &raw) {
     AttrValue v;
     v.text = raw;
     v.is_numeric = false;
@@ -30,8 +29,8 @@ AttrValue parse_attr_value(const std::string& raw) {
 
     // Attempt a full-string numeric parse via std::strtod.  Only treat
     // the value as numeric when the entire (trimmed) string is consumed.
-    const char* begin = raw.c_str();
-    char* end = nullptr;
+    const char *begin = raw.c_str();
+    char *end = nullptr;
     errno = 0;
     double d = std::strtod(begin, &end);
 
@@ -53,8 +52,8 @@ AttrValue parse_attr_value(const std::string& raw) {
 namespace {
 
 // Detect a UGRID role in a variable's attribute set.
-bool has_ugrid_role(const VarAttributes& attrs) {
-    for (const auto& kv : attrs.items) {
+bool has_ugrid_role(const VarAttributes &attrs) {
+    for (const auto &kv : attrs.items) {
         if (kv.first == "cf_role" || kv.first == "topology_dimension" || kv.first == "mesh_topology") {
             return true;
         }
@@ -64,7 +63,7 @@ bool has_ugrid_role(const VarAttributes& attrs) {
 
 }  // namespace
 
-DatasetAttributes parse_dataset_attributes(const conf::Config& config) {
+DatasetAttributes parse_dataset_attributes(const conf::Config &config) {
     DatasetAttributes out;
 
     // Global extra attributes: read known attribute keys under
@@ -78,11 +77,9 @@ DatasetAttributes parse_dataset_attributes(const conf::Config& config) {
     // common CF global attributes via try_string.
     if (config.has("global_attributes")) {
         // Read known global attribute keys that CF mandates or commonly uses.
-        static const char* known_global_keys[] = {
-            "title", "institution", "source", "history", "references",
-            "comment", "Conventions", "contact", "project"
-        };
-        for (const char* key : known_global_keys) {
+        static const char *known_global_keys[] = {"title",   "institution", "source",  "history", "references",
+                                                  "comment", "Conventions", "contact", "project"};
+        for (const char *key : known_global_keys) {
             std::string dotted = std::string("global_attributes.") + key;
             auto val = config.try_string(dotted);
             if (val.has_value()) {
@@ -99,20 +96,17 @@ DatasetAttributes parse_dataset_attributes(const conf::Config& config) {
     if (config.has("variable_names")) {
         try {
             auto var_names = config.get_string_list("variable_names");
-            for (const std::string& var_name : var_names) {
+            for (const std::string &var_name : var_names) {
                 std::string prefix = "variables." + var_name + ".attributes";
                 if (!config.has(prefix)) {
                     continue;
                 }
                 VarAttributes attrs;
                 // Read known CF/UGRID per-variable attribute keys.
-                static const char* known_var_keys[] = {
-                    "units", "long_name", "standard_name", "_FillValue",
-                    "coordinates", "cell_methods", "cf_role", "mesh",
-                    "location", "topology_dimension", "scale_factor",
-                    "add_offset", "valid_min", "valid_max", "valid_range"
-                };
-                for (const char* key : known_var_keys) {
+                static const char *known_var_keys[] = {"units",        "long_name",  "standard_name", "_FillValue", "coordinates",
+                                                       "cell_methods", "cf_role",    "mesh",          "location",   "topology_dimension",
+                                                       "scale_factor", "add_offset", "valid_min",     "valid_max",  "valid_range"};
+                for (const char *key : known_var_keys) {
                     std::string dotted = prefix + "." + key;
                     auto val = config.try_string(dotted);
                     if (val.has_value()) {

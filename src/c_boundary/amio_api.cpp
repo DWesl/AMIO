@@ -216,8 +216,7 @@ AMIO_API amio_status_t amio_view_shape(amio_view_handle view, amio_shape_t *out_
         return AMIO_ERR_INVALID_INPUT;
     }
     std::memset(out_shape, 0, sizeof(amio_shape_t));
-    return kind_dispatch(view, HandleKind::View,
-                         [&](void *payload) -> amio_status_t { return amio::detail::view_shape(payload, out_shape); });
+    return kind_dispatch(view, HandleKind::View, [&](void *payload) -> amio_status_t { return amio::detail::view_shape(payload, out_shape); });
 }
 
 // amio_strerror is intentionally NOT defined in this translation

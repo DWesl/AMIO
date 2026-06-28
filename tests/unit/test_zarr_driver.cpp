@@ -21,14 +21,12 @@
 // Validates: R8.1, R8.2, R8.3, R8.4, R8.5, R8.9, R8.10
 
 // Standard headers.
-#include <string>
-#include <vector>
-
-#include <conf/config.hpp>
-
 #include <cassert>
+#include <conf/config.hpp>
 #include <cstdio>
 #include <stdexcept>
+#include <string>
+#include <vector>
 
 #include "drivers/zarr/zarr_driver.hpp"
 #include "factory/backend_factory.hpp"
@@ -54,7 +52,7 @@ struct TestResult {
 
 TestResult g_result{};
 
-void report_failure(const char* expr, const char* file, int line, const std::string& context) {
+void report_failure(const char *expr, const char *file, int line, const std::string &context) {
     std::fprintf(stderr, "FAIL %s:%d: %s   (%s)\n", file, line, expr, context.c_str());
     ++g_result.failed;
 }
@@ -89,7 +87,7 @@ void report_failure(const char* expr, const char* file, int line, const std::str
         std::string msg;                                                                 \
         try {                                                                            \
             expr;                                                                        \
-        } catch (const std::exception& e) {                                              \
+        } catch (const std::exception &e) {                                              \
             threw = true;                                                                \
             msg = e.what();                                                              \
         } catch (...) {                                                                  \
@@ -112,7 +110,7 @@ void report_failure(const char* expr, const char* file, int line, const std::str
 
 // A simple key-value configuration helper that builds a conf::Config
 // from YAML strings for Zarr_Driver testing.
-conf::Config make_config_from_yaml(const std::string& yaml) {
+conf::Config make_config_from_yaml(const std::string &yaml) {
     return conf::Config::from_string(yaml);
 }
 
@@ -184,7 +182,7 @@ void test_missing_multiple_fields() {
     try {
         driver.open_write(cfg);
         report_failure("should throw", __FILE__, __LINE__, "missing multiple fields should throw");
-    } catch (const std::runtime_error& e) {
+    } catch (const std::runtime_error &e) {
         std::string msg = e.what();
         // Should name all missing fields in a single error.
         EXPECT_TRUE(msg.find("chunk_shape") != std::string::npos, "error should name 'chunk_shape'");

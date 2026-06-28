@@ -45,7 +45,7 @@ namespace {
 int g_passed = 0;
 int g_failed = 0;
 
-void report_failure(const char* expr, const char* file, int line, const std::string& ctx) {
+void report_failure(const char *expr, const char *file, int line, const std::string &ctx) {
     std::fprintf(stderr, "FAIL %s:%d: %s   (%s)\n", file, line, expr, ctx.c_str());
     ++g_failed;
 }
@@ -60,7 +60,7 @@ void report_failure(const char* expr, const char* file, int line, const std::str
     } while (0)
 
 // Read a text attribute from a netCDF variable/group; "" if absent.
-std::string read_text_att(int ncid, int varid, const char* name) {
+std::string read_text_att(int ncid, int varid, const char *name) {
     size_t len = 0;
     if (nc_inq_attlen(ncid, varid, name, &len) != NC_NOERR) {
         return "";
@@ -113,7 +113,7 @@ int main() {
         StagingBuffer buf{};
         float data[20];
         for (int i = 0; i < 20; ++i) data[i] = static_cast<float>(i);
-        buf.data = reinterpret_cast<std::byte*>(data);
+        buf.data = reinterpret_cast<std::byte *>(data);
         buf.capacity_bytes = sizeof(data);
         buf.used_bytes = sizeof(data);
 
@@ -130,7 +130,7 @@ int main() {
         int mesh_data[20];
         for (int i = 0; i < 20; ++i) mesh_data[i] = i;
         StagingBuffer mbuf{};
-        mbuf.data = reinterpret_cast<std::byte*>(mesh_data);
+        mbuf.data = reinterpret_cast<std::byte *>(mesh_data);
         mbuf.capacity_bytes = sizeof(mesh_data);
         mbuf.used_bytes = sizeof(mesh_data);
 
@@ -145,7 +145,7 @@ int main() {
         driver.flush();
         driver.close();
         ++g_passed;
-    } catch (const std::exception& e) {
+    } catch (const std::exception &e) {
         report_failure("driver end-to-end", __FILE__, __LINE__, e.what());
         std::fprintf(stdout, "test_cf_attributes: passed=%d failed=%d\n", g_passed, g_failed);
         return 1;

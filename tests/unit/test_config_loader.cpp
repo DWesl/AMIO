@@ -21,11 +21,11 @@ using namespace amio::detail;
 // Helper: write a temporary file and return its path.
 // ===================================================================
 
-static std::string write_temp_file(const std::string& content, const std::string& suffix = ".yaml") {
+static std::string write_temp_file(const std::string &content, const std::string &suffix = ".yaml") {
     std::string path = "/tmp/amio_test_config_XXXXXX" + suffix;
     // Use a simple unique name based on address.
     char buf[256];
-    std::snprintf(buf, sizeof(buf), "/tmp/amio_test_config_%p%s", static_cast<const void*>(content.c_str()), suffix.c_str());
+    std::snprintf(buf, sizeof(buf), "/tmp/amio_test_config_%p%s", static_cast<const void *>(content.c_str()), suffix.c_str());
     path = buf;
 
     std::ofstream f(path);
@@ -802,7 +802,7 @@ static void test_validate_standalone() {
 // ===================================================================
 
 static void test_valid_codecs() {
-    const auto& codecs = ConfigLoader::valid_codecs();
+    const auto &codecs = ConfigLoader::valid_codecs();
     assert(codecs.size() == 4);
     assert(codecs[0] == "blosc");
     assert(codecs[1] == "zstandard");

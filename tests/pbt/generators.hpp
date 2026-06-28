@@ -348,7 +348,7 @@ inline rc::Gen<amio::detail::Config> genInvalidManifest() {
 }
 
 // Generate a payload (random bytes) sized for a given shape + dtype.
-inline rc::Gen<std::vector<std::byte>> genPayload(const amio_shape_t& shape, amio_dtype_t dtype) {
+inline rc::Gen<std::vector<std::byte>> genPayload(const amio_shape_t &shape, amio_dtype_t dtype) {
     std::size_t byte_count = payload_byte_size(shape, dtype);
     return rc::gen::exec([byte_count]() {
         std::vector<std::byte> payload(byte_count);

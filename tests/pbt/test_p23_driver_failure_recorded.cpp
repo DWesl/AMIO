@@ -42,21 +42,21 @@ std::atomic<int> g_write_call_count{0};
 
 class FailingDriver : public Backend_Driver {
    public:
-    explicit FailingDriver(const std::string& failure_msg = "injected serialization failure") : failure_msg_(failure_msg) {}
+    explicit FailingDriver(const std::string &failure_msg = "injected serialization failure") : failure_msg_(failure_msg) {}
 
-    void open_write(const conf::Config& /*config*/) override {
+    void open_write(const conf::Config & /*config*/) override {
         // No-op: driver is "open" immediately.
     }
 
-    void open_read(const conf::Config& /*config*/) override {}
+    void open_read(const conf::Config & /*config*/) override {}
 
-    void write(const StagingBuffer& /*src*/, const VarMeta& /*meta*/) override {
+    void write(const StagingBuffer & /*src*/, const VarMeta & /*meta*/) override {
         g_write_call_count.fetch_add(1);
         // Simulate a serialization failure by throwing.
         throw std::runtime_error(failure_msg_);
     }
 
-    void read(StagingBuffer& /*dst*/, const VarMeta& /*meta*/, std::int64_t /*timestep*/, const std::optional<BoundingBox>& /*bbox*/) override {
+    void read(StagingBuffer & /*dst*/, const VarMeta & /*meta*/, std::int64_t /*timestep*/, const std::optional<BoundingBox> & /*bbox*/) override {
         throw std::runtime_error("FailingDriver: read not supported");
     }
 
@@ -80,12 +80,12 @@ class FailingDriver : public Backend_Driver {
 
 class SucceedingDriver : public Backend_Driver {
    public:
-    void open_write(const conf::Config& /*config*/) override {}
-    void open_read(const conf::Config& /*config*/) override {}
-    void write(const StagingBuffer& /*src*/, const VarMeta& /*meta*/) override {
+    void open_write(const conf::Config & /*config*/) override {}
+    void open_read(const conf::Config & /*config*/) override {}
+    void write(const StagingBuffer & /*src*/, const VarMeta & /*meta*/) override {
         // No-op: driver succeeds.
     }
-    void read(StagingBuffer& /*dst*/, const VarMeta& /*meta*/, std::int64_t /*timestep*/, const std::optional<BoundingBox>& /*bbox*/) override {}
+    void read(StagingBuffer & /*dst*/, const VarMeta & /*meta*/, std::int64_t /*timestep*/, const std::optional<BoundingBox> & /*bbox*/) override {}
     void flush() override {}
     void close() override {}
 };
@@ -146,8 +146,8 @@ struct FailureTestContext {
         }
     }
 
-    FailureTestContext(const FailureTestContext&) = delete;
-    FailureTestContext& operator=(const FailureTestContext&) = delete;
+    FailureTestContext(const FailureTestContext &) = delete;
+    FailureTestContext &operator=(const FailureTestContext &) = delete;
 };
 
 // ===================================================================
@@ -200,8 +200,8 @@ struct SuccessTestContext {
         }
     }
 
-    SuccessTestContext(const SuccessTestContext&) = delete;
-    SuccessTestContext& operator=(const SuccessTestContext&) = delete;
+    SuccessTestContext(const SuccessTestContext &) = delete;
+    SuccessTestContext &operator=(const SuccessTestContext &) = delete;
 };
 
 }  // anonymous namespace
@@ -226,14 +226,14 @@ TEST_CASE("P23: Driver failure recorded - failure surfaces on flush", "[pbt][p23
         // Look up the DatasetRecord to inject a failure.
         // This simulates what the worker pool does when a driver
         // throws during serialization.
-        auto& table = process_handle_table();
-        void* payload = nullptr;
+        auto &table = process_handle_table();
+        void *payload = nullptr;
         amio_status_t lookup_rc = table.lookup(HandleTable::from_ptr(ctx.dataset), HandleKind::Dataset, &payload);
         if (lookup_rc != AMIO_OK || !payload) {
             RC_DISCARD("invalid handle");
         }
 
-        auto* record = static_cast<DatasetRecord*>(payload);
+        auto *record = static_cast<DatasetRecord *>(payload);
 
         // Simulate a driver failure being recorded by the worker.
         // In the real implementation, the worker catches the
@@ -261,14 +261,14 @@ TEST_CASE("P23: Driver failure recorded - failure retained until flush", "[pbt][
         FailureTestContext ctx;
         RC_PRE(ctx.valid);
 
-        auto& table = process_handle_table();
-        void* payload = nullptr;
+        auto &table = process_handle_table();
+        void *payload = nullptr;
         amio_status_t lookup_rc = table.lookup(HandleTable::from_ptr(ctx.dataset), HandleKind::Dataset, &payload);
         if (lookup_rc != AMIO_OK || !payload) {
             RC_DISCARD("invalid handle");
         }
 
-        auto* record = static_cast<DatasetRecord*>(payload);
+        auto *record = static_cast<DatasetRecord *>(payload);
 
         // Generate a random error code from the valid set.
         auto err_code = AMIO_ERR_BACKEND_FAILURE;
@@ -335,14 +335,14 @@ TEST_CASE("P23: Driver failure recorded - error code preserved", "[pbt][p23][dri
         FailureTestContext ctx;
         RC_PRE(ctx.valid);
 
-        auto& table = process_handle_table();
-        void* payload = nullptr;
+        auto &table = process_handle_table();
+        void *payload = nullptr;
         amio_status_t lookup_rc = table.lookup(HandleTable::from_ptr(ctx.dataset), HandleKind::Dataset, &payload);
         if (lookup_rc != AMIO_OK || !payload) {
             RC_DISCARD("invalid handle");
         }
 
-        auto* record = static_cast<DatasetRecord*>(payload);
+        auto *record = static_cast<DatasetRecord *>(payload);
 
         // The worker pool records AMIO_ERR_BACKEND_FAILURE when
         // a driver throws.  Verify this specific code surfaces.

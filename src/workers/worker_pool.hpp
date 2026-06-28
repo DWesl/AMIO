@@ -67,11 +67,11 @@ struct DatasetVariableKey {
     std::uint64_t dataset_id = 0;
     std::uint64_t variable_id = 0;
 
-    bool operator==(const DatasetVariableKey& other) const noexcept {
+    bool operator==(const DatasetVariableKey &other) const noexcept {
         return dataset_id == other.dataset_id && variable_id == other.variable_id;
     }
 
-    bool operator<(const DatasetVariableKey& other) const noexcept {
+    bool operator<(const DatasetVariableKey &other) const noexcept {
         if (dataset_id != other.dataset_id) return dataset_id < other.dataset_id;
         return variable_id < other.variable_id;
     }
@@ -107,7 +107,7 @@ struct PrefetchTask {
     std::function<void()> callback;  // backend read functor
 
     // Higher priority = smaller distance (min-heap).
-    bool operator>(const PrefetchTask& other) const noexcept {
+    bool operator>(const PrefetchTask &other) const noexcept {
         return distance > other.distance;
     }
 };
@@ -187,13 +187,13 @@ class WorkerPool {
     // The IOCommunicator is stored and exposed via io_communicator()
     // so that Backend_Driver callbacks can route MPI calls through
     // the I/O communicator only (R3.5).
-    explicit WorkerPool(const WorkerPoolConfig& config);
+    explicit WorkerPool(const WorkerPoolConfig &config);
 
     // Non-copyable, non-movable (owns threads).
-    WorkerPool(const WorkerPool&) = delete;
-    WorkerPool& operator=(const WorkerPool&) = delete;
-    WorkerPool(WorkerPool&&) = delete;
-    WorkerPool& operator=(WorkerPool&&) = delete;
+    WorkerPool(const WorkerPool &) = delete;
+    WorkerPool &operator=(const WorkerPool &) = delete;
+    WorkerPool(WorkerPool &&) = delete;
+    WorkerPool &operator=(WorkerPool &&) = delete;
 
     // Destructor: signals shutdown, drains queues, joins threads.
     ~WorkerPool();
@@ -215,7 +215,7 @@ class WorkerPool {
     // parameter `seq_out`).  Returns AMIO_OK on success, or
     // AMIO_ERR_QUEUE_FULL if the queue is at capacity and no
     // backpressure is configured.
-    amio_err_t submit_write(DatasetVariableKey dv_key, std::function<void()> callback, std::uint64_t* seq_out);
+    amio_err_t submit_write(DatasetVariableKey dv_key, std::function<void()> callback, std::uint64_t *seq_out);
 
     // submit_write -- convenience overload (legacy interface).
     //
@@ -299,7 +299,7 @@ class WorkerPool {
     // If no communicator split was configured (default mode), the
     // returned IOCommunicator has valid=true and is_io_rank=true,
     // meaning all ranks participate in I/O on the world communicator.
-    const IOCommunicator& io_communicator() const noexcept;
+    const IOCommunicator &io_communicator() const noexcept;
 
     // pinning_errors -- returns the number of threads that failed
     // to apply their CPU/NUMA pinning configuration at start.
@@ -311,8 +311,8 @@ class WorkerPool {
     // Worker threads record task outcomes here after exception cordon
     // processing (R12.1, R12.2).  The C-boundary layer queries
     // outcomes on flush/close/wait to surface failures (R12.9).
-    OutcomeRegistry& outcome_registry() noexcept;
-    const OutcomeRegistry& outcome_registry() const noexcept;
+    OutcomeRegistry &outcome_registry() noexcept;
+    const OutcomeRegistry &outcome_registry() const noexcept;
 
    private:
     // Worker thread main loop (no pinning).
@@ -324,7 +324,7 @@ class WorkerPool {
     // Try to dequeue and execute one task.  Returns true if a task
     // was executed, false if no task was available (caller should
     // wait on CV).
-    bool try_execute_one(std::unique_lock<std::mutex>& lock);
+    bool try_execute_one(std::unique_lock<std::mutex> &lock);
 
     // Get or create the per-(dataset, variable) ordering state.
     struct DvOrderState {
@@ -333,7 +333,7 @@ class WorkerPool {
         std::uint64_t exec_seq = 0;  // next sequence number to execute
     };
 
-    DvOrderState& get_dv_state(const DatasetVariableKey& key);
+    DvOrderState &get_dv_state(const DatasetVariableKey &key);
 
     // ---- Members ----
 

@@ -87,7 +87,7 @@ TEST_CASE("P12: Prefetch look-ahead replenishment - T+N within bounds", "[pbt][p
         pq.schedule_initial();
 
         // Read timestep T.
-        StagingBuffer* buf = nullptr;
+        StagingBuffer *buf = nullptr;
         amio_status_t status = pq.get_buffer(timestep_t, nullptr, &buf);
         RC_ASSERT(status == AMIO_OK);
         RC_ASSERT(buf != nullptr);
@@ -109,7 +109,7 @@ TEST_CASE("P12: Prefetch look-ahead replenishment - T+N within bounds", "[pbt][p
         RC_ASSERT(all_reads.back().timestep == next_t);
 
         // Verify the buffer for T+N is now completed.
-        StagingBuffer* next_buf = nullptr;
+        StagingBuffer *next_buf = nullptr;
         status = pq.get_buffer(next_t, nullptr, &next_buf);
         RC_ASSERT(status == AMIO_OK);
         RC_ASSERT(next_buf != nullptr);
@@ -175,7 +175,7 @@ TEST_CASE("P12: Prefetch look-ahead replenishment - T+N out of bounds", "[pbt][p
         pq.schedule_initial();
 
         // Read timestep T.
-        StagingBuffer* buf = nullptr;
+        StagingBuffer *buf = nullptr;
         amio_status_t status = pq.get_buffer(timestep_t, nullptr, &buf);
         RC_ASSERT(status == AMIO_OK);
         RC_ASSERT(buf != nullptr);
@@ -247,7 +247,7 @@ TEST_CASE("P12: Prefetch look-ahead replenishment - sliding window", "[pbt][p12]
         std::int64_t reads_to_do = std::min(static_cast<std::int64_t>(depth), total_timesteps);
 
         for (std::int64_t t = 0; t < reads_to_do; ++t) {
-            StagingBuffer* buf = nullptr;
+            StagingBuffer *buf = nullptr;
             amio_status_t status = pq.get_buffer(t, nullptr, &buf);
             RC_ASSERT(status == AMIO_OK);
             RC_ASSERT(buf != nullptr);
@@ -261,7 +261,7 @@ TEST_CASE("P12: Prefetch look-ahead replenishment - sliding window", "[pbt][p12]
             if (next_t < total_timesteps) {
                 // The fetch for next_t should now be completed
                 // (synchronous mode).
-                StagingBuffer* next_buf = nullptr;
+                StagingBuffer *next_buf = nullptr;
                 status = pq.get_buffer(next_t, nullptr, &next_buf);
                 RC_ASSERT(status == AMIO_OK);
                 RC_ASSERT(next_buf != nullptr);

@@ -100,7 +100,7 @@ TEST_CASE("RP6: VarMeta completeness - every read carries the variable name, dty
         auto reads = driver->get_calls(CallRecord::Method::Read);
         RC_ASSERT(!reads.empty());
 
-        for (const auto& rec : reads) {
+        for (const auto &rec : reads) {
             // Non-empty name equal to the caller-supplied variable name.
             RC_ASSERT(!rec.name.empty());
             RC_ASSERT(rec.name == var_name);
@@ -117,7 +117,7 @@ TEST_CASE("RP6: VarMeta completeness - every read carries the variable name, dty
 
         // Drain any completed buffers back to the pool.
         for (std::int64_t t = 0; t < total_timesteps; ++t) {
-            StagingBuffer* buf = nullptr;
+            StagingBuffer *buf = nullptr;
             if (pq.get_buffer(t, nullptr, &buf) == AMIO_OK && buf != nullptr) {
                 pool.release(buf);
             }
