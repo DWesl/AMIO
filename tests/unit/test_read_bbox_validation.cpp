@@ -2,7 +2,7 @@
 // bounding-box validation helper (task 9, design §9).
 //
 // The validate_bbox helper is file-local (static) to
-// amio_core_stubs.cpp, so it is exercised here through the real
+// amio_core.cpp, so it is exercised here through the real
 // amio::detail::read coordinator: a mock read driver reports a known
 // variable shape via describe_variable, and read() validates the
 // caller-supplied bounding box against that shape before scheduling a

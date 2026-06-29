@@ -347,7 +347,7 @@ endif()
 add_library(
     amio_core SHARED
     src/c_boundary/amio_api.cpp
-    src/c_boundary/amio_core_stubs.cpp
+    src/c_boundary/amio_core.cpp
     src/c_boundary/handle_table.cpp
     src/c_boundary/amio_strerror.cpp
     src/staging/staging_pool.cpp

@@ -39,6 +39,10 @@
 
 #include <halo/communicator.hpp>
 #include <optional>
+
+extern MPI_Comm g_amio_parent_comm;
+#else
+extern int g_amio_parent_comm;
 #endif
 
 #include "amio/amio_errors.h"
@@ -116,11 +120,11 @@ struct IOCommunicator {
     // Accessors (inline, header-only)
 
     /// Returns the raw MPI_Comm handle for use in MPI C APIs.
-    /// When no split was performed (io_comm is nullopt), returns MPI_COMM_WORLD.
+    /// When no split was performed (io_comm is nullopt), returns g_amio_parent_comm.
     /// When MPI is not available at build time, returns 0 (sentinel).
 #ifdef AMIO_HAS_MPI
     MPI_Comm handle() const noexcept {
-        return io_comm.has_value() ? io_comm->handle() : MPI_COMM_WORLD;
+        return io_comm.has_value() ? io_comm->handle() : g_amio_parent_comm;
     }
 #else
     int handle() const noexcept {

@@ -12,6 +12,22 @@
 #include <algorithm>
 #include <set>
 
+#ifdef AMIO_HAS_MPI
+MPI_Comm g_amio_parent_comm = MPI_COMM_WORLD;
+#else
+int g_amio_parent_comm = 0;
+#endif
+
+extern "C" {
+AMIO_API void amio_set_parent_communicator(int comm_f) {
+#ifdef AMIO_HAS_MPI
+    g_amio_parent_comm = MPI_Comm_f2c(static_cast<MPI_Fint>(comm_f));
+#else
+    g_amio_parent_comm = comm_f;
+#endif
+}
+}
+
 // MPI availability detection.
 // In a full build, AMIO_HAS_MPI would be set by CMake when MPI is found.
 // For standalone compilation without MPI, the functions degrade gracefully.
@@ -82,8 +98,12 @@ amio_err_t split_communicator(const CommConfig &config, int my_rank, IOCommunica
     // Color: 0 = I/O ranks, 1 = compute ranks.
     int color = is_io ? 0 : 1;
     try {
-        // Wrap MPI_COMM_WORLD non-owning (predefined comms are never freed).
-        halo::Communicator world(MPI_COMM_WORLD);
+        // Wrap parent communicator safely (duplicating to prevent RAII destruction of externally owned custom communicator)
+        MPI_Comm comm_to_wrap = g_amio_parent_comm;
+        if (g_amio_parent_comm != MPI_COMM_NULL && g_amio_parent_comm != MPI_COMM_WORLD && g_amio_parent_comm != MPI_COMM_SELF) {
+            MPI_Comm_dup(g_amio_parent_comm, &comm_to_wrap);
+        }
+        halo::Communicator world(comm_to_wrap);
         // split() returns a new RAII-owned Communicator.
         halo::Communicator split_comm = world.split(color, my_rank);
 

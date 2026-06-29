@@ -129,6 +129,7 @@ class NetCDF_Driver : public Backend_Driver {
     std::vector<std::string> codec_allow_list_;
     bool is_open_ = false;
     bool is_write_mode_ = false;
+    bool use_parallel_ = false;
 
     // CF/UGRID convention metadata + per-variable attributes parsed
     // from the dataset manifest (R7.x convention compliance).

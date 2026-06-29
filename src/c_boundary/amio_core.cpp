@@ -1,18 +1,12 @@
-// amio_core_stubs.cpp -- Placeholder bodies for the private C++ entry
+// amio_core.cpp -- Production C++ implementation for the private C++ entry
 // points declared in `amio_core.hpp`.
 //
-// Every function returns `AMIO_ERR_BACKEND_FAILURE` until the real
-// implementations land:
-//
-//   init / finalize           -> task 9.4
-//   write                     -> task 9.1
-//   read / release_view       -> task 9.2 / 9.3
-//   wait                      -> task 9.3
+// Coordinates the complete C-API boundary, handle tables, Worker_Pool,
+// Staging_Pool, and NetCDF/NCZarr backends.
 //
 // The handle-validation + exception-translation cordon in
 // `amio_api.cpp` is fully functional and does NOT depend on any of
-// the bodies below.  Replacing these stubs is therefore an additive
-// change that does not perturb the public ABI.
+// the bodies below.
 //
 // `process_handle_table()` returns a function-local static so that
 // the table is constructed on first use and destroyed at process
@@ -35,6 +29,7 @@
 #include "factory/backend_factory.hpp"
 #include "staging/staging_pool.hpp"
 #include "workers/worker_pool.hpp"
+#include "workers/comm_split.hpp"
 
 // Open-time dataset configuration source.
 //
@@ -119,7 +114,7 @@ amio_status_t init(const char *manifest_path, amio_core_handle *out_core) {
     if (core->worker_pool) {
         core->logger.configure_communicator(core->worker_pool->io_communicator().handle());
     } else {
-        core->logger.configure_communicator(MPI_COMM_WORLD);
+        core->logger.configure_communicator(g_amio_parent_comm);
     }
 #else
     // Without MPI the Logger receives MPI_COMM_NULL (a no-op

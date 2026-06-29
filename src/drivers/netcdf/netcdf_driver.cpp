@@ -26,6 +26,8 @@
 #include <netcdf.h>
 #include <netcdf_meta.h>
 #include <netcdf_par.h>
+
+extern MPI_Comm g_amio_parent_comm;
 #endif
 
 #include <algorithm>
@@ -268,6 +270,12 @@ static std::string resolve_dataset_path(const conf::Config &config) {
     return std::string{};
 }
 
+#if defined(AMIO_HAS_MPI) && defined(AMIO_HAS_NETCDF)
+void NetCDF_Driver::set_communicator(MPI_Comm comm_handle) {
+    comm_ = comm_handle;
+}
+#endif
+
 // ===================================================================
 // open_write -- prepare for parallel write operations (R7.1, R7.4).
 // ===================================================================
@@ -314,8 +322,8 @@ void NetCDF_Driver::open_write(const conf::Config &config) {
     attributes_ = parse_dataset_attributes(config);
 
     // Determine the MPI communicator for parallel I/O.
-    // Default to MPI_COMM_WORLD if not specified.
-    comm_ = MPI_COMM_WORLD;
+    // Default to g_amio_parent_comm if not specified.
+    comm_ = g_amio_parent_comm;
     info_ = MPI_INFO_NULL;
 
     // Determine NetCDF creation mode flags.
@@ -325,9 +333,27 @@ void NetCDF_Driver::open_write(const conf::Config &config) {
     }
     // Enhanced mode: just NC_NETCDF4 (no classic flag).
 
-    // Create the file in parallel mode with MPI-IO (R7.4).
-    int status = nc_create_par(path.c_str(), cmode, comm_, info_, &ncid_);
-    nc_check(status, "nc_create_par('" + path + "')");
+    // Determine if parallel I/O is required (only if MPI is initialized and rank size > 1)
+    use_parallel_ = false;
+#ifdef AMIO_HAS_MPI
+    if (comm_ != MPI_COMM_NULL) {
+        int comm_size = 1;
+        MPI_Comm_size(comm_, &comm_size);
+        if (comm_size > 1) {
+            use_parallel_ = true;
+        }
+    }
+#endif
+
+    // Create the file (R7.4 parallel mode or fallback sequential).
+    int status;
+    if (use_parallel_) {
+        status = nc_create_par(path.c_str(), cmode, comm_, info_, &ncid_);
+        nc_check(status, "nc_create_par('" + path + "')");
+    } else {
+        status = nc_create(path.c_str(), cmode, &ncid_);
+        nc_check(status, "nc_create('" + path + "')");
+    }
 
     // Write the global CF/UGRID `Conventions` attribute plus any extra
     // global attributes declared in the manifest.  The file is in
@@ -370,12 +396,29 @@ void NetCDF_Driver::open_read(const conf::Config &config) {
     data_model_ = parse_data_model(model_str);
 
     // MPI communicator for parallel reads.
-    comm_ = MPI_COMM_WORLD;
+    comm_ = g_amio_parent_comm;
     info_ = MPI_INFO_NULL;
 
-    // Open the file in parallel read mode.
-    int status = nc_open_par(path.c_str(), NC_NOWRITE, comm_, info_, &ncid_);
-    nc_check(status, "nc_open_par('" + path + "')");
+    int comm_size = 1;
+    use_parallel_ = false;
+#ifdef AMIO_HAS_MPI
+    if (comm_ != MPI_COMM_NULL) {
+        MPI_Comm_size(comm_, &comm_size);
+        if (comm_size > 1) {
+            use_parallel_ = true;
+        }
+    }
+#endif
+
+    // Open the file in parallel read mode or fallback sequential.
+    int status;
+    if (use_parallel_) {
+        status = nc_open_par(path.c_str(), NC_NOWRITE, comm_, info_, &ncid_);
+        nc_check(status, "nc_open_par('" + path + "')");
+    } else {
+        status = nc_open(path.c_str(), NC_NOWRITE, &ncid_);
+        nc_check(status, "nc_open('" + path + "')");
+    }
 
     is_open_ = true;
     is_write_mode_ = false;
@@ -476,8 +519,10 @@ void NetCDF_Driver::write(const StagingBuffer &src, const VarMeta &meta) {
     }
 
     // Set collective access mode for parallel MPI-IO writes (R7.4).
-    status = nc_var_par_access(ncid_, varid, NC_COLLECTIVE);
-    nc_check(status, "nc_var_par_access('" + meta.name + "', NC_COLLECTIVE)");
+    if (use_parallel_) {
+        status = nc_var_par_access(ncid_, varid, NC_COLLECTIVE);
+        nc_check(status, "nc_var_par_access('" + meta.name + "', NC_COLLECTIVE)");
+    }
 
     // Compute start/count arrays for the write.
     std::vector<std::size_t> start(meta.shape.rank, 0);
@@ -513,8 +558,10 @@ void NetCDF_Driver::read(StagingBuffer &dst, const VarMeta &meta, std::int64_t t
     nc_check(status, "nc_inq_varid('" + meta.name + "') for read");
 
     // Set collective access mode for parallel MPI-IO reads (R7.4).
-    status = nc_var_par_access(ncid_, varid, NC_COLLECTIVE);
-    nc_check(status, "nc_var_par_access('" + meta.name + "', NC_COLLECTIVE) for read");
+    if (use_parallel_) {
+        status = nc_var_par_access(ncid_, varid, NC_COLLECTIVE);
+        nc_check(status, "nc_var_par_access('" + meta.name + "', NC_COLLECTIVE) for read");
+    }
 
     // Compute start/count arrays.
     std::vector<std::size_t> start(meta.shape.rank);

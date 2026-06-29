@@ -440,7 +440,7 @@ add_executable(
     mpi_test_listener.cpp
     ${CMAKE_SOURCE_DIR}/src/c_boundary/amio_api.cpp
     ${CMAKE_SOURCE_DIR}/src/c_boundary/handle_table.cpp
-    ${CMAKE_SOURCE_DIR}/src/c_boundary/amio_core_stubs.cpp
+    ${CMAKE_SOURCE_DIR}/src/c_boundary/amio_core.cpp
     ${CMAKE_SOURCE_DIR}/src/c_boundary/amio_strerror.cpp
     ${CMAKE_SOURCE_DIR}/src/factory/backend_factory.cpp
     ${CMAKE_SOURCE_DIR}/src/config/config_loader.cpp
@@ -475,7 +475,7 @@ add_executable(
     mpi_test_listener.cpp
     ${CMAKE_SOURCE_DIR}/src/c_boundary/amio_api.cpp
     ${CMAKE_SOURCE_DIR}/src/c_boundary/handle_table.cpp
-    ${CMAKE_SOURCE_DIR}/src/c_boundary/amio_core_stubs.cpp
+    ${CMAKE_SOURCE_DIR}/src/c_boundary/amio_core.cpp
     ${CMAKE_SOURCE_DIR}/src/c_boundary/amio_strerror.cpp
     ${CMAKE_SOURCE_DIR}/src/factory/backend_factory.cpp
     ${CMAKE_SOURCE_DIR}/src/config/config_loader.cpp
@@ -509,7 +509,7 @@ add_executable(
     mpi_test_listener.cpp
     ${CMAKE_SOURCE_DIR}/src/c_boundary/amio_api.cpp
     ${CMAKE_SOURCE_DIR}/src/c_boundary/handle_table.cpp
-    ${CMAKE_SOURCE_DIR}/src/c_boundary/amio_core_stubs.cpp
+    ${CMAKE_SOURCE_DIR}/src/c_boundary/amio_core.cpp
     ${CMAKE_SOURCE_DIR}/src/c_boundary/amio_strerror.cpp
     ${CMAKE_SOURCE_DIR}/src/factory/backend_factory.cpp
     ${CMAKE_SOURCE_DIR}/src/config/config_loader.cpp

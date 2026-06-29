@@ -312,7 +312,7 @@ add_executable(
     ${CMAKE_SOURCE_DIR}/src/factory/backend_factory.cpp
     ${CMAKE_SOURCE_DIR}/src/config/config_loader.cpp
     ${CMAKE_SOURCE_DIR}/src/c_boundary/handle_table.cpp
-    ${CMAKE_SOURCE_DIR}/src/c_boundary/amio_core_stubs.cpp
+    ${CMAKE_SOURCE_DIR}/src/c_boundary/amio_core.cpp
     ${CMAKE_SOURCE_DIR}/src/c_boundary/amio_strerror.cpp
     ${CMAKE_SOURCE_DIR}/src/staging/staging_pool.cpp
     ${CMAKE_SOURCE_DIR}/src/workers/worker_pool.cpp
@@ -374,7 +374,7 @@ set_tests_properties(unit.read_prefetch PROPERTIES LABELS "unit;prefetch;read" T
 add_executable(
     test_read_bbox_validation
     test_read_bbox_validation.cpp
-    ${CMAKE_SOURCE_DIR}/src/c_boundary/amio_core_stubs.cpp
+    ${CMAKE_SOURCE_DIR}/src/c_boundary/amio_core.cpp
     ${CMAKE_SOURCE_DIR}/src/c_boundary/handle_table.cpp
     ${CMAKE_SOURCE_DIR}/src/c_boundary/amio_strerror.cpp
     ${CMAKE_SOURCE_DIR}/src/config/config_loader.cpp
@@ -411,7 +411,7 @@ set_tests_properties(unit.read_bbox_validation PROPERTIES LABELS "unit;read;bbox
 add_executable(
     test_read_capacity_guard
     test_read_capacity_guard.cpp
-    ${CMAKE_SOURCE_DIR}/src/c_boundary/amio_core_stubs.cpp
+    ${CMAKE_SOURCE_DIR}/src/c_boundary/amio_core.cpp
     ${CMAKE_SOURCE_DIR}/src/c_boundary/handle_table.cpp
     ${CMAKE_SOURCE_DIR}/src/c_boundary/amio_strerror.cpp
     ${CMAKE_SOURCE_DIR}/src/config/config_loader.cpp
@@ -448,7 +448,7 @@ set_tests_properties(unit.read_capacity_guard PROPERTIES LABELS "unit;read;capac
 add_executable(
     test_read_close_guard
     test_read_close_guard.cpp
-    ${CMAKE_SOURCE_DIR}/src/c_boundary/amio_core_stubs.cpp
+    ${CMAKE_SOURCE_DIR}/src/c_boundary/amio_core.cpp
     ${CMAKE_SOURCE_DIR}/src/c_boundary/handle_table.cpp
     ${CMAKE_SOURCE_DIR}/src/c_boundary/amio_strerror.cpp
     ${CMAKE_SOURCE_DIR}/src/config/config_loader.cpp
@@ -487,7 +487,7 @@ add_executable(
     test_read_release_view
     test_read_release_view.cpp
     ${CMAKE_SOURCE_DIR}/src/c_boundary/amio_api.cpp
-    ${CMAKE_SOURCE_DIR}/src/c_boundary/amio_core_stubs.cpp
+    ${CMAKE_SOURCE_DIR}/src/c_boundary/amio_core.cpp
     ${CMAKE_SOURCE_DIR}/src/c_boundary/handle_table.cpp
     ${CMAKE_SOURCE_DIR}/src/c_boundary/amio_strerror.cpp
     ${CMAKE_SOURCE_DIR}/src/config/config_loader.cpp
@@ -527,7 +527,7 @@ add_executable(
     test_read_e2e_smoke
     test_read_e2e_smoke.cpp
     ${CMAKE_SOURCE_DIR}/src/c_boundary/amio_api.cpp
-    ${CMAKE_SOURCE_DIR}/src/c_boundary/amio_core_stubs.cpp
+    ${CMAKE_SOURCE_DIR}/src/c_boundary/amio_core.cpp
     ${CMAKE_SOURCE_DIR}/src/c_boundary/handle_table.cpp
     ${CMAKE_SOURCE_DIR}/src/c_boundary/amio_strerror.cpp
     ${CMAKE_SOURCE_DIR}/src/config/config_loader.cpp
