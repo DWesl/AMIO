@@ -1634,3 +1634,5 @@ std::size_t GRIB2_Driver::dtype_size(amio_dtype_t dtype) {
 }
 
 }  // namespace amio::detail
+
+extern "C" void amio_register_grib2_driver() {}

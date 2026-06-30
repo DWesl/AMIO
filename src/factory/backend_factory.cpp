@@ -19,10 +19,29 @@
 #include <algorithm>
 #include <mutex>
 
+// Declarations of force-link driver functions to guarantee the linker pulls
+// in all backend driver translation units containing static initializers.
+extern "C" {
+void amio_register_netcdf_driver();
+void amio_register_zarr_driver();
+void amio_register_grib2_driver();
+}
+
 namespace amio::detail {
 
 // Singleton instance -- Meyers' singleton, thread-safe per C++11.
 BackendFactory &BackendFactory::instance() {
+    // Explicitly reference the driver registration functions to force the linker
+    // to include the static initializers of all driver translation units,
+    // preventing optimization stripping under aggressive compiler flags (e.g. IPO on Intel).
+    static bool forced = false;
+    if (!forced) {
+        amio_register_netcdf_driver();
+        amio_register_zarr_driver();
+        amio_register_grib2_driver();
+        forced = true;
+    }
+
     static BackendFactory factory;
     return factory;
 }

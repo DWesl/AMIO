@@ -1005,3 +1005,5 @@ BackendRegistrar<NetCDF_Driver> reg_netcdf4("netcdf4");
 }  // anonymous namespace
 
 }  // namespace amio::detail
+
+extern "C" void amio_register_netcdf_driver() {}

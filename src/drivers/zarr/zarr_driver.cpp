@@ -873,3 +873,5 @@ VariableInfo Zarr_Driver::describe_variable(const std::string &name) {
 }
 
 }  // namespace amio::detail
+
+extern "C" void amio_register_zarr_driver() {}
