@@ -863,3 +863,36 @@ if(netCDF_FOUND AND MPI_C_FOUND)
     add_test(NAME unit.e2e_netcdf_roundtrip COMMAND test_e2e_netcdf_roundtrip)
     set_tests_properties(unit.e2e_netcdf_roundtrip PROPERTIES LABELS "unit;e2e;netcdf4;roundtrip" TIMEOUT 120)
 endif()
+
+# ####################################################################################################################################################
+# HELM Dependencies for worker-pool & exception-bridge test targets
+#
+# These targets compile `exception_bridge.cpp` and other private files directly into themselves. When MPI/HELM is found, these implementation files
+# include <logs/logger.hpp> and <halo/environment.hpp> and thus require HELM::LOGS and HELM::HALO to resolve headers and link options.
+# ####################################################################################################################################################
+set(_amio_worker_test_targets
+    test_worker_pool
+    test_exception_bridge
+    test_write_snapshot
+    test_read_prefetch
+    test_read_bbox_validation
+    test_read_capacity_guard
+    test_read_close_guard
+    test_read_release_view
+    test_read_e2e_smoke
+    test_config_loader
+)
+foreach(_target IN LISTS _amio_worker_test_targets)
+    if(TARGET ${_target})
+        if(LOGS_FOUND)
+            target_link_libraries(${_target} PRIVATE HELM::LOGS)
+        endif()
+        if(HALO_FOUND)
+            target_link_libraries(${_target} PRIVATE HELM::HALO)
+        endif()
+        if(CONF_FOUND)
+            target_link_libraries(${_target} PRIVATE HELM::CONF)
+        endif()
+    endif()
+endforeach()
+

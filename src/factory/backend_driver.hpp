@@ -295,6 +295,11 @@ class Backend_Driver {
     virtual void set_communicator(MPI_Comm comm_handle) {
         (void)comm_handle;
     }
+#else
+    // Keep vtable layout identical in standalone / non-MPI builds to prevent vtable misalignment and segfaults.
+    virtual void set_communicator(int comm_handle) {
+        (void)comm_handle;
+    }
 #endif
 
     // describe_variable -- report a variable's element type, shape, and

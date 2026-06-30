@@ -325,7 +325,9 @@ void NetCDF_Driver::open_write(const conf::Config &config) {
 
     // Determine the MPI communicator for parallel I/O.
     // Default to g_amio_parent_comm if not specified.
-    comm_ = g_amio_parent_comm;
+    if (comm_ == MPI_COMM_NULL) {
+        comm_ = g_amio_parent_comm;
+    }
     info_ = MPI_INFO_NULL;
 
     // Determine NetCDF creation mode flags.

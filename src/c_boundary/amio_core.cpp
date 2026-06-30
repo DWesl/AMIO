@@ -257,6 +257,16 @@ amio_status_t open_dataset(void *core_payload, const char *config_path, std::int
     // by each driver directly from this Config.
     conf::Config manifest_cfg = conf::Config::from_file(std::string(config_path));
 
+#ifdef AMIO_HAS_MPI
+    if (core != nullptr) {
+        if (core->worker_pool) {
+            driver->set_communicator(core->worker_pool->io_communicator().handle());
+        } else {
+            driver->set_communicator(g_amio_parent_comm);
+        }
+    }
+#endif
+
     // Attempt to open the driver in the requested mode (Req 2.1).
     // On any open failure the driver throws; the catch below translates
     // to AMIO_ERR_BACKEND_FAILURE and returns no dataset handle

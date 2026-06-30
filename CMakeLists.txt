@@ -388,6 +388,11 @@ target_link_libraries(amio_core PUBLIC amio_public_headers PRIVATE driver_netcdf
 # HELM micro-libraries — PRIVATE so no header/symbol leaks to consumers (R7.2, R7.3, R7.4, R7.5, R7.6).
 target_link_libraries(amio_core PRIVATE HELM::CONF HELM::HALO HELM::LOGS)
 
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    target_link_options(amio_core PRIVATE "-Wl,--exclude-libs,ALL")
+endif()
+
+
 if(TARGET std::mdspan)
     target_link_libraries(amio_core PRIVATE std::mdspan)
 elseif(TARGET mdspan::mdspan)

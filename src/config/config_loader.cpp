@@ -51,10 +51,10 @@ amio_err_t ConfigLoader::validate(const Config &config, ValidationError &error_o
         return AMIO_ERR_MANIFEST_INVALID;
     }
 
-    // worker_pool.threads [0, 256]
+    // worker_pool.threads [1, 256]
     if (config.worker_pool.threads < kMinThreads || config.worker_pool.threads > kMaxThreads) {
         error_out.field_path = "worker_pool.threads";
-        error_out.message = "threads must be in [0, 256], got " + std::to_string(config.worker_pool.threads);
+        error_out.message = "threads must be in [1, 256], got " + std::to_string(config.worker_pool.threads);
         return AMIO_ERR_MANIFEST_INVALID;
     }
 

@@ -17,6 +17,9 @@
 #include <logs/logger.hpp>
 #include <logs/severity.hpp>
 #include <string>
+#include <unistd.h>
+#include <sys/types.h>
+#include <sys/wait.h>
 
 #include "workers/exception_bridge.hpp"
 
@@ -174,7 +177,33 @@ int main() {
     test_logs_initialized_transition();
     test_pre_init_fallback_stderr();
     test_post_init_routes_through_logger();
-    test_logger_fatal_for_unrecoverable();
+
+    // Unrecoverable FATAL logs trigger std::exit(70). We run this in a child process
+    // and verify the child exits with code 70.
+    pid_t pid = fork();
+    if (pid < 0) {
+        std::fprintf(stderr, "fork failed\n");
+        return 1;
+    } else if (pid == 0) {
+        // Child process: execute the FATAL log test (which will exit with 70).
+        test_logger_fatal_for_unrecoverable();
+        // If it somehow reached here, it failed.
+        std::_Exit(1);
+    } else {
+        // Parent process: wait for child to exit and check exit status.
+        int status = 0;
+        if (waitpid(pid, &status, 0) < 0) {
+            std::fprintf(stderr, "waitpid failed\n");
+            return 1;
+        }
+        if (WIFEXITED(status)) {
+            int exit_code = WEXITSTATUS(status);
+            EXPECT_TRUE(exit_code == 70, "FATAL unrecoverable test should exit with 70");
+        } else {
+            report_failure("child exited normally", __FILE__, __LINE__, "child process terminated abnormally");
+        }
+    }
+
     test_logger_error_for_recoverable();
 
     std::fprintf(stdout, "test_logs_integration: passed=%d failed=%d\n", g_result.passed, g_result.failed);
