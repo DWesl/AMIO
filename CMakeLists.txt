@@ -400,7 +400,7 @@ endif()
 
 # Force the linker to include all object files from the static driver archives so their static-init factory registrations (task 6.2) fire at libamio
 # load time.  Without --whole-archive (or equivalent), unused-from-amio_core objects would be stripped.
-if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU" OR CMAKE_CXX_COMPILER_ID STREQUAL "Clang" OR CMAKE_CXX_COMPILER_ID STREQUAL "AppleClang")
+if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU" OR CMAKE_CXX_COMPILER_ID STREQUAL "Clang" OR CMAKE_CXX_COMPILER_ID STREQUAL "AppleClang" OR CMAKE_CXX_COMPILER_ID STREQUAL "Intel" OR CMAKE_CXX_COMPILER_ID STREQUAL "IntelLLVM")
     target_link_options(
         amio_core
         PRIVATE
