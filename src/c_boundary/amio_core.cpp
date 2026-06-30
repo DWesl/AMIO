@@ -15,6 +15,8 @@
 //
 // Task 6.3 implements: open_dataset, close_dataset, flush, close.
 
+#include "c_boundary/amio_core.hpp"
+
 #include <chrono>
 #include <condition_variable>
 #include <cstring>
@@ -23,13 +25,12 @@
 #include <string>
 #include <thread>
 
-#include "c_boundary/amio_core.hpp"
 #include "config/config_loader.hpp"
 #include "factory/backend_driver.hpp"
 #include "factory/backend_factory.hpp"
 #include "staging/staging_pool.hpp"
-#include "workers/worker_pool.hpp"
 #include "workers/comm_split.hpp"
+#include "workers/worker_pool.hpp"
 
 // Open-time dataset configuration source.
 //
