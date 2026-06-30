@@ -472,41 +472,45 @@ void NetCDF_Driver::write(const StagingBuffer &src, const VarMeta &meta) {
         for (int32_t d = 0; d < meta.shape.rank; ++d) {
             std::size_t target_len = static_cast<std::size_t>(meta.shape.extents[d]);
             std::string dim_name = meta.name + "_dim" + std::to_string(d);
+            if ((meta.name == "lon" || meta.name == "lat" || meta.name == "lev" || meta.name == "time") && meta.shape.rank == 1) {
+                dim_name = meta.name;
+            }
+
             int existing_dimid = -1;
             bool found_shared = false;
 
             if (meta.name != "lon" && meta.name != "lat" && meta.name != "lev" && meta.name != "time") {
                 if (meta.shape.rank == 3) {
                     if (d == 0) {
-                        if (target_len == 1 && find_matching_dim("time_dim0", target_len, existing_dimid)) {
+                        if (target_len == 1 && (find_matching_dim("time", target_len, existing_dimid) || find_matching_dim("time_dim0", target_len, existing_dimid))) {
                             found_shared = true;
-                        } else if (find_matching_dim("lev_dim0", target_len, existing_dimid)) {
+                        } else if (find_matching_dim("lev", target_len, existing_dimid) || find_matching_dim("lev_dim0", target_len, existing_dimid)) {
                             found_shared = true;
                         }
                     } else if (d == 1) {
-                        if (find_matching_dim("lat_dim0", target_len, existing_dimid)) {
+                        if (find_matching_dim("lat", target_len, existing_dimid) || find_matching_dim("lat_dim0", target_len, existing_dimid)) {
                             found_shared = true;
                         }
                     } else if (d == 2) {
-                        if (find_matching_dim("lon_dim0", target_len, existing_dimid)) {
+                        if (find_matching_dim("lon", target_len, existing_dimid) || find_matching_dim("lon_dim0", target_len, existing_dimid)) {
                             found_shared = true;
                         }
                     }
                 } else if (meta.shape.rank == 4) {
                     if (d == 0) {
-                        if (find_matching_dim("time_dim0", target_len, existing_dimid)) {
+                        if (find_matching_dim("time", target_len, existing_dimid) || find_matching_dim("time_dim0", target_len, existing_dimid)) {
                             found_shared = true;
                         }
                     } else if (d == 1) {
-                        if (find_matching_dim("lev_dim0", target_len, existing_dimid)) {
+                        if (find_matching_dim("lev", target_len, existing_dimid) || find_matching_dim("lev_dim0", target_len, existing_dimid)) {
                             found_shared = true;
                         }
                     } else if (d == 2) {
-                        if (find_matching_dim("lat_dim0", target_len, existing_dimid)) {
+                        if (find_matching_dim("lat", target_len, existing_dimid) || find_matching_dim("lat_dim0", target_len, existing_dimid)) {
                             found_shared = true;
                         }
                     } else if (d == 3) {
-                        if (find_matching_dim("lon_dim0", target_len, existing_dimid)) {
+                        if (find_matching_dim("lon", target_len, existing_dimid) || find_matching_dim("lon_dim0", target_len, existing_dimid)) {
                             found_shared = true;
                         }
                     }
