@@ -455,17 +455,75 @@ void NetCDF_Driver::write(const StagingBuffer &src, const VarMeta &meta) {
             nc_check(redef_status, "nc_redef");
         }
 
+        auto find_matching_dim = [&](const std::string& candidate_name, std::size_t target_len, int& out_dimid) -> bool {
+            int dimid = -1;
+            if (nc_inq_dimid(ncid_, candidate_name.c_str(), &dimid) == NC_NOERR) {
+                size_t dim_len = 0;
+                if (nc_inq_dimlen(ncid_, dimid, &dim_len) == NC_NOERR) {
+                    if (dim_len == target_len) {
+                        out_dimid = dimid;
+                        return true;
+                    }
+                }
+            }
+            return false;
+        };
+
         for (int32_t d = 0; d < meta.shape.rank; ++d) {
+            std::size_t target_len = static_cast<std::size_t>(meta.shape.extents[d]);
             std::string dim_name = meta.name + "_dim" + std::to_string(d);
-            // Check if dimension already exists.
             int existing_dimid = -1;
-            int dim_status = nc_inq_dimid(ncid_, dim_name.c_str(), &existing_dimid);
-            if (dim_status == NC_NOERR) {
+            bool found_shared = false;
+
+            if (meta.name != "lon" && meta.name != "lat" && meta.name != "lev" && meta.name != "time") {
+                if (meta.shape.rank == 3) {
+                    if (d == 0) {
+                        if (target_len == 1 && find_matching_dim("time_dim0", target_len, existing_dimid)) {
+                            found_shared = true;
+                        } else if (find_matching_dim("lev_dim0", target_len, existing_dimid)) {
+                            found_shared = true;
+                        }
+                    } else if (d == 1) {
+                        if (find_matching_dim("lat_dim0", target_len, existing_dimid)) {
+                            found_shared = true;
+                        }
+                    } else if (d == 2) {
+                        if (find_matching_dim("lon_dim0", target_len, existing_dimid)) {
+                            found_shared = true;
+                        }
+                    }
+                } else if (meta.shape.rank == 4) {
+                    if (d == 0) {
+                        if (find_matching_dim("time_dim0", target_len, existing_dimid)) {
+                            found_shared = true;
+                        }
+                    } else if (d == 1) {
+                        if (find_matching_dim("lev_dim0", target_len, existing_dimid)) {
+                            found_shared = true;
+                        }
+                    } else if (d == 2) {
+                        if (find_matching_dim("lat_dim0", target_len, existing_dimid)) {
+                            found_shared = true;
+                        }
+                    } else if (d == 3) {
+                        if (find_matching_dim("lon_dim0", target_len, existing_dimid)) {
+                            found_shared = true;
+                        }
+                    }
+                }
+            }
+
+            if (found_shared) {
                 dimids[d] = existing_dimid;
             } else {
-                std::size_t dim_len = static_cast<std::size_t>(meta.shape.extents[d]);
-                status = nc_def_dim(ncid_, dim_name.c_str(), dim_len, &dimids[d]);
-                nc_check(status, "nc_def_dim('" + dim_name + "')");
+                // Check if default dimension already exists.
+                int dim_status = nc_inq_dimid(ncid_, dim_name.c_str(), &existing_dimid);
+                if (dim_status == NC_NOERR) {
+                    dimids[d] = existing_dimid;
+                } else {
+                    status = nc_def_dim(ncid_, dim_name.c_str(), target_len, &dimids[d]);
+                    nc_check(status, "nc_def_dim('" + dim_name + "')");
+                }
             }
         }
 
