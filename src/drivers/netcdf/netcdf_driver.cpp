@@ -480,37 +480,70 @@ void NetCDF_Driver::write(const StagingBuffer &src, const VarMeta &meta) {
             bool found_shared = false;
 
             if (meta.name != "lon" && meta.name != "lat" && meta.name != "lev" && meta.name != "time") {
-                if (meta.shape.rank == 3) {
-                    if (d == 0) {
-                        if (target_len == 1 && (find_matching_dim("time", target_len, existing_dimid) || find_matching_dim("time_dim0", target_len, existing_dimid))) {
-                            found_shared = true;
-                        } else if (find_matching_dim("lev", target_len, existing_dimid) || find_matching_dim("lev_dim0", target_len, existing_dimid)) {
-                            found_shared = true;
-                        }
-                    } else if (d == 1) {
-                        if (find_matching_dim("lat", target_len, existing_dimid) || find_matching_dim("lat_dim0", target_len, existing_dimid)) {
-                            found_shared = true;
-                        }
-                    } else if (d == 2) {
-                        if (find_matching_dim("lon", target_len, existing_dimid) || find_matching_dim("lon_dim0", target_len, existing_dimid)) {
-                            found_shared = true;
+                // Find all existing dimensions with matching length.
+                int num_dims = 0;
+                if (nc_inq_ndims(ncid_, &num_dims) == NC_NOERR) {
+                    std::vector<int> matching_dimids;
+                    std::vector<std::string> matching_names;
+                    for (int i = 0; i < num_dims; ++i) {
+                        size_t dim_len = 0;
+                        char name_buf[NC_MAX_NAME + 1];
+                        if (nc_inq_dim(ncid_, i, name_buf, &dim_len) == NC_NOERR) {
+                            if (dim_len == target_len) {
+                                matching_dimids.push_back(i);
+                                matching_names.push_back(std::string(name_buf));
+                            }
                         }
                     }
-                } else if (meta.shape.rank == 4) {
-                    if (d == 0) {
-                        if (find_matching_dim("time", target_len, existing_dimid) || find_matching_dim("time_dim0", target_len, existing_dimid)) {
-                            found_shared = true;
+
+                    if (matching_dimids.size() == 1) {
+                        // Exactly one matching dimension exists -- reuse it!
+                        existing_dimid = matching_dimids[0];
+                        found_shared = true;
+                    } else if (matching_dimids.size() > 1) {
+                        // Multiple exist -- choose the best match based on axis type.
+                        // Determine standard axis role for dimension d:
+                        // d = Rank - 1: X axis (longitude/x)
+                        // d = Rank - 2: Y axis (latitude/y)
+                        // d = Rank - 3: Z axis (vertical/level)
+                        // d = Rank - 4: T axis (time/t)
+                        int axis_role = -1; // 0=X, 1=Y, 2=Z, 3=T
+                        if (d == meta.shape.rank - 1) axis_role = 0;
+                        else if (d == meta.shape.rank - 2) axis_role = 1;
+                        else if (d == meta.shape.rank - 3) axis_role = 2;
+                        else if (d == meta.shape.rank - 4) axis_role = 3;
+
+                        int best_score = -1;
+                        int best_dimid = -1;
+                        for (size_t i = 0; i < matching_dimids.size(); ++i) {
+                            const std::string& name = matching_names[i];
+                            int score = 0;
+                            if (axis_role == 0) { // X axis
+                                if (name == "lon" || name == "x") score = 3;
+                                else if (name.find("lon") != std::string::npos || name.find("x") != std::string::npos) score = 2;
+                                else if (name.find("dim") != std::string::npos) score = 1;
+                            } else if (axis_role == 1) { // Y axis
+                                if (name == "lat" || name == "y") score = 3;
+                                else if (name.find("lat") != std::string::npos || name.find("y") != std::string::npos) score = 2;
+                                else if (name.find("dim") != std::string::npos) score = 1;
+                            } else if (axis_role == 2) { // Z axis
+                                if (name == "lev" || name == "z" || name == "level") score = 3;
+                                else if (name.find("lev") != std::string::npos || name.find("z") != std::string::npos) score = 2;
+                                else if (name.find("dim") != std::string::npos) score = 1;
+                            } else if (axis_role == 3) { // Time axis
+                                if (name == "time" || name == "t") score = 3;
+                                else if (name.find("time") != std::string::npos || name.find("t") != std::string::npos) score = 2;
+                                else if (name.find("dim") != std::string::npos) score = 1;
+                            }
+
+                            if (score > best_score) {
+                                best_score = score;
+                                best_dimid = matching_dimids[i];
+                            }
                         }
-                    } else if (d == 1) {
-                        if (find_matching_dim("lev", target_len, existing_dimid) || find_matching_dim("lev_dim0", target_len, existing_dimid)) {
-                            found_shared = true;
-                        }
-                    } else if (d == 2) {
-                        if (find_matching_dim("lat", target_len, existing_dimid) || find_matching_dim("lat_dim0", target_len, existing_dimid)) {
-                            found_shared = true;
-                        }
-                    } else if (d == 3) {
-                        if (find_matching_dim("lon", target_len, existing_dimid) || find_matching_dim("lon_dim0", target_len, existing_dimid)) {
+
+                        if (best_dimid != -1) {
+                            existing_dimid = best_dimid;
                             found_shared = true;
                         }
                     }
