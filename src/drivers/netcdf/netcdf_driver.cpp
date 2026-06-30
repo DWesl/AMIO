@@ -563,30 +563,62 @@ void NetCDF_Driver::read(StagingBuffer &dst, const VarMeta &meta, std::int64_t t
         nc_check(status, "nc_var_par_access('" + meta.name + "', NC_COLLECTIVE) for read");
     }
 
-    // Compute start/count arrays.
-    std::vector<std::size_t> start(meta.shape.rank);
-    std::vector<std::size_t> count(meta.shape.rank);
+    // Query variable rank from file to check if it's time-varying
+    int ndims = 0;
+    status = nc_inq_varndims(ncid_, varid, &ndims);
+    nc_check(status, "nc_inq_varndims('" + meta.name + "')");
 
-    if (bbox.has_value()) {
-        // Selective read using bounding box (R5.7).
-        const auto &box = bbox.value();
-        for (int32_t d = 0; d < box.rank; ++d) {
-            start[d] = static_cast<std::size_t>(box.offsets[d]);
-            count[d] = static_cast<std::size_t>(box.extents[d]);
+    bool is_time_varying = (ndims == meta.shape.rank + 1);
+
+    // Compute start/count arrays.
+    std::vector<std::size_t> start(ndims);
+    std::vector<std::size_t> count(ndims);
+
+    if (is_time_varying) {
+        start[0] = static_cast<std::size_t>(timestep);
+        count[0] = 1;
+        if (bbox.has_value()) {
+            // Selective read using bounding box (R5.7).
+            const auto &box = bbox.value();
+            for (int32_t d = 0; d < box.rank; ++d) {
+                start[d + 1] = static_cast<std::size_t>(box.offsets[d]);
+                count[d + 1] = static_cast<std::size_t>(box.extents[d]);
+            }
+        } else {
+            // Full variable read.
+            for (int32_t d = 0; d < meta.shape.rank; ++d) {
+                start[d + 1] = 0;
+                count[d + 1] = static_cast<std::size_t>(meta.shape.extents[d]);
+            }
         }
     } else {
-        // Full variable read.
-        for (int32_t d = 0; d < meta.shape.rank; ++d) {
-            start[d] = 0;
-            count[d] = static_cast<std::size_t>(meta.shape.extents[d]);
+        if (bbox.has_value()) {
+            // Selective read using bounding box (R5.7).
+            const auto &box = bbox.value();
+            for (int32_t d = 0; d < box.rank; ++d) {
+                start[d] = static_cast<std::size_t>(box.offsets[d]);
+                count[d] = static_cast<std::size_t>(box.extents[d]);
+            }
+        } else {
+            // Full variable read.
+            for (int32_t d = 0; d < meta.shape.rank; ++d) {
+                start[d] = 0;
+                count[d] = static_cast<std::size_t>(meta.shape.extents[d]);
+            }
         }
     }
 
     // Calculate total bytes to read.
     std::size_t elem_size = dtype_byte_size(meta.dtype);
     std::size_t total_elems = 1;
-    for (int32_t d = 0; d < meta.shape.rank; ++d) {
-        total_elems *= count[d];
+    if (is_time_varying) {
+        for (int32_t d = 0; d < meta.shape.rank; ++d) {
+            total_elems *= static_cast<std::size_t>(count[d + 1]);
+        }
+    } else {
+        for (int32_t d = 0; d < meta.shape.rank; ++d) {
+            total_elems *= static_cast<std::size_t>(count[d]);
+        }
     }
     std::size_t total_bytes = total_elems * elem_size;
 
@@ -596,24 +628,22 @@ void NetCDF_Driver::read(StagingBuffer &dst, const VarMeta &meta, std::int64_t t
     }
 
     // Handle strided reads if bounding box has strides.
+    bool has_strides = false;
+    std::vector<ptrdiff_t> strides(ndims, 1);
     if (bbox.has_value()) {
         const auto &box = bbox.value();
-        bool has_strides = false;
-        std::vector<ptrdiff_t> strides(meta.shape.rank, 1);
+        int offset = is_time_varying ? 1 : 0;
         for (int32_t d = 0; d < box.rank; ++d) {
             if (box.strides[d] > 1) {
                 has_strides = true;
-                strides[d] = static_cast<ptrdiff_t>(box.strides[d]);
+                strides[d + offset] = static_cast<ptrdiff_t>(box.strides[d]);
             }
         }
+    }
 
-        if (has_strides) {
-            status = nc_get_vars(ncid_, varid, start.data(), count.data(), strides.data(), dst.data);
-            nc_check(status, "nc_get_vars('" + meta.name + "')");
-        } else {
-            status = nc_get_vara(ncid_, varid, start.data(), count.data(), dst.data);
-            nc_check(status, "nc_get_vara('" + meta.name + "')");
-        }
+    if (has_strides) {
+        status = nc_get_vars(ncid_, varid, start.data(), count.data(), strides.data(), dst.data);
+        nc_check(status, "nc_get_vars('" + meta.name + "')");
     } else {
         status = nc_get_vara(ncid_, varid, start.data(), count.data(), dst.data);
         nc_check(status, "nc_get_vara('" + meta.name + "')");
