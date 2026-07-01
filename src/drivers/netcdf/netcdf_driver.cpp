@@ -46,7 +46,7 @@ namespace amio::detail {
 // Check a netCDF return code and throw std::runtime_error on failure.
 static void nc_check(int status, const std::string &context) {
     if (status != NC_NOERR) {
-        std::cerr << "[AMIO NetCDF ERROR] in " << context << ": " << nc_strerror(status) 
+        std::cerr << "[AMIO ERROR] in " << context << ": " << nc_strerror(status) 
                   << " (nc_errno=" << status << ")" << std::endl;
         std::string msg = "NetCDF error in " + context + ": " + nc_strerror(status) + " (nc_errno=" + std::to_string(status) + ")";
         throw std::runtime_error(msg);

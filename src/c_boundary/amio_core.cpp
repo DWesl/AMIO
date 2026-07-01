@@ -75,6 +75,7 @@ amio_status_t init(const char *manifest_path, amio_core_handle *out_core) {
     ValidationError verr{};
     amio_err_t parse_rc = ConfigLoader::parse(std::string(manifest_path), cfg, verr);
     if (parse_rc != AMIO_OK) {
+        std::cerr << "[AMIO ERROR] in manifest '" << manifest_path << "' (field: " << verr.field_path << "): " << verr.message << std::endl;
         // MANIFEST_NOT_FOUND / MANIFEST_INVALID -- no handle minted.
         return static_cast<amio_status_t>(parse_rc);
     }
@@ -784,23 +785,23 @@ static amio_status_t validate_bbox(const amio_bbox_t *b, const amio_shape_t &sha
 static VariableReadState *resolve_variable(DatasetRecord *record, const std::string &var_name) {
     std::lock_guard<std::mutex> lock(record->variables_mu);
 
-    std::cerr << "[AMIO STUBS DEBUG] resolve_variable: var_name = '" << var_name << "'" << std::endl;
+    // std::cerr << "[AMIO STUBS DEBUG] resolve_variable: var_name = '" << var_name << "'" << std::endl;
 
     // Reuse existing state if the variable has already been resolved.
     auto it = record->variables.find(var_name);
     if (it != record->variables.end()) {
-        std::cerr << "[AMIO STUBS DEBUG] resolve_variable: found cached state for '" << var_name << "'" << std::endl;
+        // std::cerr << "[AMIO STUBS DEBUG] resolve_variable: found cached state for '" << var_name << "'" << std::endl;
         return it->second.get();
     }
 
     // First use of this variable: probe the backend for its metadata.
     if (!record->driver) {
-        std::cerr << "[AMIO STUBS DEBUG] resolve_variable error: record->driver is NULL" << std::endl;
+        // std::cerr << "[AMIO STUBS DEBUG] resolve_variable error: record->driver is NULL" << std::endl;
         return nullptr;
     }
     VariableInfo info = record->driver->describe_variable(var_name);
-    std::cerr << "[AMIO STUBS DEBUG] resolve_variable: record->driver->describe_variable returned found = " << (info.found ? "true" : "false")
-              << std::endl;
+    // std::cerr << "[AMIO STUBS DEBUG] resolve_variable: record->driver->describe_variable returned found = " << (info.found ? "true" : "false")
+    //          << std::endl;
     if (!info.found) {
         // Variable absent or driver cannot introspect it (Req 4.5).
         return nullptr;
