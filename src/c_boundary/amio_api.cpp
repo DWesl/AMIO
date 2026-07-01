@@ -36,6 +36,7 @@
 #include <cstdint>
 #include <cstring>
 #include <exception>
+#include <iostream>
 #include <new>  // std::bad_alloc
 #include <type_traits>
 
@@ -94,10 +95,13 @@ amio_status_t kind_dispatch(void *handle, HandleKind expected, Op &&op) noexcept
         // Out-of-memory in the C++ core surfaces as a backend
         // failure; AMIO_Core does not currently differentiate
         // OOM from other backend errors at the FFI seam.
+        std::cerr << "[AMIO ERROR] C-boundary caught std::bad_alloc while dispatching API call" << std::endl;
         return AMIO_ERR_BACKEND_FAILURE;
-    } catch (const std::exception &) {
+    } catch (const std::exception &e) {
+        std::cerr << "[AMIO ERROR] C-boundary caught std::exception while dispatching API call: " << e.what() << std::endl;
         return AMIO_ERR_BACKEND_FAILURE;
     } catch (...) {
+        std::cerr << "[AMIO ERROR] C-boundary caught unknown exception while dispatching API call" << std::endl;
         return translate_unknown();
     }
 }

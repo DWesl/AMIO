@@ -259,12 +259,22 @@ amio_status_t open_dataset(void *core_payload, const char *config_path, std::int
     conf::Config manifest_cfg = conf::Config::from_file(std::string(config_path));
 
 #ifdef AMIO_HAS_MPI
-    if (core != nullptr) {
-        if (core->worker_pool) {
-            driver->set_communicator(core->worker_pool->io_communicator().handle());
-        } else {
-            driver->set_communicator(g_amio_parent_comm);
+    try {
+        if (core != nullptr) {
+            if (core->worker_pool) {
+                driver->set_communicator(core->worker_pool->io_communicator().handle());
+            } else {
+                driver->set_communicator(g_amio_parent_comm);
+            }
         }
+    } catch (const std::exception &e) {
+        std::cerr << "[AMIO ERROR] open_dataset failed while setting communicator for manifest '" << config_path << "': " << e.what()
+                  << std::endl;
+        return AMIO_ERR_BACKEND_FAILURE;
+    } catch (...) {
+        std::cerr << "[AMIO ERROR] open_dataset failed while setting communicator for manifest '" << config_path
+                  << "': unknown exception" << std::endl;
+        return AMIO_ERR_BACKEND_FAILURE;
     }
 #endif
 

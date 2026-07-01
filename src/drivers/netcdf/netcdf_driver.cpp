@@ -32,6 +32,7 @@ extern MPI_Comm g_amio_parent_comm;
 
 #include <algorithm>
 #include <cstring>
+#include <iostream>
 #include <stdexcept>
 #include <string>
 
@@ -46,7 +47,7 @@ namespace amio::detail {
 // Check a netCDF return code and throw std::runtime_error on failure.
 static void nc_check(int status, const std::string &context) {
     if (status != NC_NOERR) {
-        std::cerr << "[AMIO ERROR] in " << context << ": " << nc_strerror(status) 
+        std::cerr << "[AMIO ERROR] in " << context << ": " << nc_strerror(status)
                   << " (nc_errno=" << status << ")" << std::endl;
         std::string msg = "NetCDF error in " + context + ": " + nc_strerror(status) + " (nc_errno=" + std::to_string(status) + ")";
         throw std::runtime_error(msg);
@@ -418,7 +419,13 @@ void NetCDF_Driver::open_read(const conf::Config &config) {
     int status;
     if (use_parallel_) {
         status = nc_open_par(path.c_str(), NC_NOWRITE, comm_, info_, &ncid_);
-        nc_check(status, "nc_open_par('" + path + "')");
+        if (status != NC_NOERR) {
+            std::cerr << "[AMIO WARN] nc_open_par failed for '" << path << "' with " << nc_strerror(status)
+                      << " (nc_errno=" << status << "); retrying serial nc_open." << std::endl;
+            use_parallel_ = false;
+            status = nc_open(path.c_str(), NC_NOWRITE, &ncid_);
+            nc_check(status, "nc_open('" + path + "')");
+        }
     } else {
         status = nc_open(path.c_str(), NC_NOWRITE, &ncid_);
         nc_check(status, "nc_open('" + path + "')");

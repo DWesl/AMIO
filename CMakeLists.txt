@@ -97,6 +97,47 @@ find_package(MPI QUIET COMPONENTS C CXX Fortran)
 find_package(netCDF CONFIG QUIET)
 find_package(netCDFCxx CONFIG QUIET)
 
+# Fallback discovery via nc-config.
+#
+# Many HPC deployments (e.g. spack-stack on Cray) install netCDF-c WITHOUT a
+# CMake package-config file, so the CONFIG-mode find_package above fails even
+# though a fully functional netCDF is on PATH.  In that case, fall back to the
+# `nc-config` helper that every netCDF-c install ships.  We query it for the
+# include directory and link libraries, build the canonical `netCDF::netcdf`
+# imported target, and set `netCDF_FOUND` so the rest of this file (including
+# the driver_netcdf target that defines AMIO_HAS_NETCDF) works unchanged.
+if(NOT netCDF_FOUND AND NOT netCDFCxx_FOUND)
+    find_program(AMIO_NC_CONFIG NAMES nc-config)
+    if(AMIO_NC_CONFIG)
+        execute_process(COMMAND ${AMIO_NC_CONFIG} --includedir
+                        OUTPUT_VARIABLE _amio_nc_incdir OUTPUT_STRIP_TRAILING_WHITESPACE ERROR_QUIET)
+        execute_process(COMMAND ${AMIO_NC_CONFIG} --prefix
+                        OUTPUT_VARIABLE _amio_nc_prefix OUTPUT_STRIP_TRAILING_WHITESPACE ERROR_QUIET)
+        execute_process(COMMAND ${AMIO_NC_CONFIG} --libs
+                        OUTPUT_VARIABLE _amio_nc_libs OUTPUT_STRIP_TRAILING_WHITESPACE ERROR_QUIET)
+
+        find_path(AMIO_NETCDF_INCLUDE_DIR netcdf.h HINTS ${_amio_nc_incdir} ${_amio_nc_prefix}/include)
+        find_library(AMIO_NETCDF_LIBRARY NAMES netcdf HINTS ${_amio_nc_prefix}/lib ${_amio_nc_prefix}/lib64)
+
+        if(AMIO_NETCDF_INCLUDE_DIR AND AMIO_NETCDF_LIBRARY)
+            if(NOT TARGET netCDF::netcdf)
+                add_library(netCDF::netcdf UNKNOWN IMPORTED)
+                set_target_properties(netCDF::netcdf PROPERTIES
+                    IMPORTED_LOCATION "${AMIO_NETCDF_LIBRARY}"
+                    INTERFACE_INCLUDE_DIRECTORIES "${AMIO_NETCDF_INCLUDE_DIR}")
+            endif()
+            set(netCDF_FOUND TRUE)
+            set(netCDF_INCLUDE_DIRS "${AMIO_NETCDF_INCLUDE_DIR}")
+            message(STATUS "AMIO: netCDF located via nc-config: ${AMIO_NETCDF_LIBRARY}")
+        else()
+            message(STATUS "AMIO: nc-config found but netCDF headers/library could not be resolved")
+        endif()
+        unset(_amio_nc_incdir)
+        unset(_amio_nc_prefix)
+        unset(_amio_nc_libs)
+    endif()
+endif()
+
 # Locate the parallel netCDF runtime for the NetCDF_Driver.
 #
 # On Debian/Ubuntu two netCDF builds ship side by side: a serial build (libnetcdf.so, "NC-4 Parallel Support: no") and an MPI/parallel build
