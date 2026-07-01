@@ -569,7 +569,11 @@ void NetCDF_Driver::write(const StagingBuffer &src, const VarMeta &meta) {
                 if (dim_status == NC_NOERR) {
                     dimids[d] = existing_dimid;
                 } else {
-                    status = nc_def_dim(ncid_, dim_name.c_str(), target_len, &dimids[d]);
+                    // A dimension named "time" is the CF record dimension: define
+                    // it as NC_UNLIMITED so downstream tools (ncview, ncrcat, ...)
+                    // can concatenate per-timestep files into a single series.
+                    const std::size_t def_len = (dim_name == "time") ? static_cast<std::size_t>(NC_UNLIMITED) : target_len;
+                    status = nc_def_dim(ncid_, dim_name.c_str(), def_len, &dimids[d]);
                     nc_check(status, "nc_def_dim('" + dim_name + "')");
                 }
             }
