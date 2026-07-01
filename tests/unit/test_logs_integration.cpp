@@ -12,14 +12,15 @@
 //
 // Validates: R6.7, R6.8, R12.1
 
+#include <sys/types.h>
+#include <sys/wait.h>
+#include <unistd.h>
+
 #include <atomic>
 #include <cstdio>
 #include <logs/logger.hpp>
 #include <logs/severity.hpp>
 #include <string>
-#include <unistd.h>
-#include <sys/types.h>
-#include <sys/wait.h>
 
 #include "workers/exception_bridge.hpp"
 

@@ -47,8 +47,7 @@ namespace amio::detail {
 // Check a netCDF return code and throw std::runtime_error on failure.
 static void nc_check(int status, const std::string &context) {
     if (status != NC_NOERR) {
-        std::cerr << "[AMIO ERROR] in " << context << ": " << nc_strerror(status)
-                  << " (nc_errno=" << status << ")" << std::endl;
+        std::cerr << "[AMIO ERROR] in " << context << ": " << nc_strerror(status) << " (nc_errno=" << status << ")" << std::endl;
         std::string msg = "NetCDF error in " + context + ": " + nc_strerror(status) + " (nc_errno=" + std::to_string(status) + ")";
         throw std::runtime_error(msg);
     }
@@ -420,8 +419,8 @@ void NetCDF_Driver::open_read(const conf::Config &config) {
     if (use_parallel_) {
         status = nc_open_par(path.c_str(), NC_NOWRITE, comm_, info_, &ncid_);
         if (status != NC_NOERR) {
-            std::cerr << "[AMIO WARN] nc_open_par failed for '" << path << "' with " << nc_strerror(status)
-                      << " (nc_errno=" << status << "); retrying serial nc_open." << std::endl;
+            std::cerr << "[AMIO WARN] nc_open_par failed for '" << path << "' with " << nc_strerror(status) << " (nc_errno=" << status
+                      << "); retrying serial nc_open." << std::endl;
             use_parallel_ = false;
             status = nc_open(path.c_str(), NC_NOWRITE, &ncid_);
             nc_check(status, "nc_open('" + path + "')");
@@ -466,7 +465,7 @@ void NetCDF_Driver::write(const StagingBuffer &src, const VarMeta &meta) {
             nc_check(redef_status, "nc_redef");
         }
 
-        auto find_matching_dim = [&](const std::string& candidate_name, std::size_t target_len, int& out_dimid) -> bool {
+        auto find_matching_dim = [&](const std::string &candidate_name, std::size_t target_len, int &out_dimid) -> bool {
             int dimid = -1;
             if (nc_inq_dimid(ncid_, candidate_name.c_str(), &dimid) == NC_NOERR) {
                 size_t dim_len = 0;
@@ -518,33 +517,49 @@ void NetCDF_Driver::write(const StagingBuffer &src, const VarMeta &meta) {
                         // d = Rank - 2: Y axis (latitude/y)
                         // d = Rank - 3: Z axis (vertical/level)
                         // d = Rank - 4: T axis (time/t)
-                        int axis_role = -1; // 0=X, 1=Y, 2=Z, 3=T
-                        if (d == meta.shape.rank - 1) axis_role = 0;
-                        else if (d == meta.shape.rank - 2) axis_role = 1;
-                        else if (d == meta.shape.rank - 3) axis_role = 2;
-                        else if (d == meta.shape.rank - 4) axis_role = 3;
+                        int axis_role = -1;  // 0=X, 1=Y, 2=Z, 3=T
+                        if (d == meta.shape.rank - 1)
+                            axis_role = 0;
+                        else if (d == meta.shape.rank - 2)
+                            axis_role = 1;
+                        else if (d == meta.shape.rank - 3)
+                            axis_role = 2;
+                        else if (d == meta.shape.rank - 4)
+                            axis_role = 3;
 
                         int best_score = -1;
                         int best_dimid = -1;
                         for (size_t i = 0; i < matching_dimids.size(); ++i) {
-                            const std::string& name = matching_names[i];
+                            const std::string &name = matching_names[i];
                             int score = 0;
-                            if (axis_role == 0) { // X axis
-                                if (name == "lon" || name == "x") score = 3;
-                                else if (name.find("lon") != std::string::npos || name.find("x") != std::string::npos) score = 2;
-                                else if (name.find("dim") != std::string::npos) score = 1;
-                            } else if (axis_role == 1) { // Y axis
-                                if (name == "lat" || name == "y") score = 3;
-                                else if (name.find("lat") != std::string::npos || name.find("y") != std::string::npos) score = 2;
-                                else if (name.find("dim") != std::string::npos) score = 1;
-                            } else if (axis_role == 2) { // Z axis
-                                if (name == "lev" || name == "z" || name == "level") score = 3;
-                                else if (name.find("lev") != std::string::npos || name.find("z") != std::string::npos) score = 2;
-                                else if (name.find("dim") != std::string::npos) score = 1;
-                            } else if (axis_role == 3) { // Time axis
-                                if (name == "time" || name == "t") score = 3;
-                                else if (name.find("time") != std::string::npos || name.find("t") != std::string::npos) score = 2;
-                                else if (name.find("dim") != std::string::npos) score = 1;
+                            if (axis_role == 0) {  // X axis
+                                if (name == "lon" || name == "x")
+                                    score = 3;
+                                else if (name.find("lon") != std::string::npos || name.find("x") != std::string::npos)
+                                    score = 2;
+                                else if (name.find("dim") != std::string::npos)
+                                    score = 1;
+                            } else if (axis_role == 1) {  // Y axis
+                                if (name == "lat" || name == "y")
+                                    score = 3;
+                                else if (name.find("lat") != std::string::npos || name.find("y") != std::string::npos)
+                                    score = 2;
+                                else if (name.find("dim") != std::string::npos)
+                                    score = 1;
+                            } else if (axis_role == 2) {  // Z axis
+                                if (name == "lev" || name == "z" || name == "level")
+                                    score = 3;
+                                else if (name.find("lev") != std::string::npos || name.find("z") != std::string::npos)
+                                    score = 2;
+                                else if (name.find("dim") != std::string::npos)
+                                    score = 1;
+                            } else if (axis_role == 3) {  // Time axis
+                                if (name == "time" || name == "t")
+                                    score = 3;
+                                else if (name.find("time") != std::string::npos || name.find("t") != std::string::npos)
+                                    score = 2;
+                                else if (name.find("dim") != std::string::npos)
+                                    score = 1;
                             }
 
                             if (score > best_score) {

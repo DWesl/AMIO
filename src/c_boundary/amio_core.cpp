@@ -268,12 +268,11 @@ amio_status_t open_dataset(void *core_payload, const char *config_path, std::int
             }
         }
     } catch (const std::exception &e) {
-        std::cerr << "[AMIO ERROR] open_dataset failed while setting communicator for manifest '" << config_path << "': " << e.what()
-                  << std::endl;
+        std::cerr << "[AMIO ERROR] open_dataset failed while setting communicator for manifest '" << config_path << "': " << e.what() << std::endl;
         return AMIO_ERR_BACKEND_FAILURE;
     } catch (...) {
-        std::cerr << "[AMIO ERROR] open_dataset failed while setting communicator for manifest '" << config_path
-                  << "': unknown exception" << std::endl;
+        std::cerr << "[AMIO ERROR] open_dataset failed while setting communicator for manifest '" << config_path << "': unknown exception"
+                  << std::endl;
         return AMIO_ERR_BACKEND_FAILURE;
     }
 #endif
