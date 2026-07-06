@@ -34,10 +34,13 @@ extern MPI_Comm g_amio_parent_comm;
 #include <cctype>
 #include <cstring>
 #include <iostream>
+#include <mutex>
 #include <stdexcept>
 #include <string>
 
 namespace amio::detail {
+
+static std::mutex g_nc_driver_mutex;
 
 // ===================================================================
 // Helper: wrap NetCDF error codes in exceptions.
@@ -284,6 +287,7 @@ void NetCDF_Driver::set_communicator(MPI_Comm comm_handle) {
 // ===================================================================
 
 void NetCDF_Driver::open_write(const conf::Config &config) {
+    std::lock_guard<std::mutex> lock(g_nc_driver_mutex);
     if (is_open_) {
         throw std::runtime_error("NetCDF_Driver::open_write: driver is already open");
     }
@@ -384,6 +388,7 @@ void NetCDF_Driver::open_write(const conf::Config &config) {
 // ===================================================================
 
 void NetCDF_Driver::open_read(const conf::Config &config) {
+    std::lock_guard<std::mutex> lock(g_nc_driver_mutex);
     if (is_open_) {
         throw std::runtime_error("NetCDF_Driver::open_read: driver is already open");
     }
@@ -445,6 +450,7 @@ void NetCDF_Driver::open_read(const conf::Config &config) {
 // ===================================================================
 
 void NetCDF_Driver::write(const StagingBuffer &src, const VarMeta &meta) {
+    std::lock_guard<std::mutex> lock(g_nc_driver_mutex);
     if (!is_open_ || !is_write_mode_) {
         throw std::runtime_error("NetCDF_Driver::write: driver not open for writing");
     }
@@ -673,6 +679,7 @@ void NetCDF_Driver::write(const StagingBuffer &src, const VarMeta &meta) {
 // ===================================================================
 
 void NetCDF_Driver::read(StagingBuffer &dst, const VarMeta &meta, std::int64_t timestep, const std::optional<BoundingBox> &bbox) {
+    std::lock_guard<std::mutex> lock(g_nc_driver_mutex);
     if (!is_open_ || is_write_mode_) {
         throw std::runtime_error("NetCDF_Driver::read: driver not open for reading");
     }
@@ -794,6 +801,7 @@ void NetCDF_Driver::read(StagingBuffer &dst, const VarMeta &meta, std::int64_t t
 // ===================================================================
 
 void NetCDF_Driver::flush() {
+    std::lock_guard<std::mutex> lock(g_nc_driver_mutex);
     if (!is_open_) {
         throw std::runtime_error("NetCDF_Driver::flush: driver is not open");
     }
@@ -811,6 +819,7 @@ void NetCDF_Driver::flush() {
 // ===================================================================
 
 void NetCDF_Driver::close() {
+    std::lock_guard<std::mutex> lock(g_nc_driver_mutex);
     if (!is_open_) {
         return;  // Already closed -- idempotent.
     }
