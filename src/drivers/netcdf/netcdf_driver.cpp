@@ -31,6 +31,7 @@ extern MPI_Comm g_amio_parent_comm;
 #endif
 
 #include <algorithm>
+#include <cctype>
 #include <cstring>
 #include <iostream>
 #include <stdexcept>
@@ -975,6 +976,61 @@ VariableInfo NetCDF_Driver::describe_variable(const std::string &name) {
         return false;
     };
 
+    // Identify a CF-style time/record dimension even when it is NOT declared
+    // NC_UNLIMITED (common for climatologies and pre-processed inputs such as
+    // CAMS-TEMPO, where `time` is a fixed-length dimension). Without this,
+    // describe_variable would report the whole [time, ...] array as a single
+    // record and read() would ingest every timestep at once. A dimension is
+    // treated as the time axis when its name matches a common convention, or
+    // its same-named coordinate variable carries CF metadata (axis="T",
+    // standard_name="time", or units containing "since").
+    auto is_cf_time_dim = [&](int dimid) {
+        char dname[NC_MAX_NAME + 1] = {0};
+        if (nc_inq_dimname(ncid_, dimid, dname) != NC_NOERR) {
+            return false;
+        }
+        std::string dim_name(dname);
+        std::string lower = dim_name;
+        std::transform(lower.begin(), lower.end(), lower.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+        if (lower == "time" || lower == "t" || lower == "valid_time" || lower == "forecast_time" || lower == "record" || lower == "hour_index") {
+            return true;
+        }
+
+        // Inspect a same-named coordinate variable's CF attributes.
+        int coord_varid = -1;
+        if (nc_inq_varid(ncid_, dim_name.c_str(), &coord_varid) != NC_NOERR) {
+            return false;
+        }
+        auto att_equals = [&](const char *att, const char *expected) {
+            std::size_t len = 0;
+            if (nc_inq_attlen(ncid_, coord_varid, att, &len) != NC_NOERR || len == 0) {
+                return false;
+            }
+            std::string val(len, '\0');
+            if (nc_get_att_text(ncid_, coord_varid, att, val.data()) != NC_NOERR) {
+                return false;
+            }
+            val.resize(std::strlen(val.c_str()));  // trim any trailing NUL
+            std::transform(val.begin(), val.end(), val.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+            return val == expected;
+        };
+        auto att_contains = [&](const char *att, const char *needle) {
+            std::size_t len = 0;
+            if (nc_inq_attlen(ncid_, coord_varid, att, &len) != NC_NOERR || len == 0) {
+                return false;
+            }
+            std::string val(len, '\0');
+            if (nc_get_att_text(ncid_, coord_varid, att, val.data()) != NC_NOERR) {
+                return false;
+            }
+            std::transform(val.begin(), val.end(), val.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+            return val.find(needle) != std::string::npos;
+        };
+        return att_equals("axis", "t") || att_equals("standard_name", "time") || att_contains("units", "since");
+    };
+
+    auto is_time_axis = [&](int dimid) { return is_unlimited(dimid) || is_cf_time_dim(dimid); };
+
     // Read per-dimension extents.
     std::vector<std::size_t> extents(static_cast<std::size_t>(ndims), 0);
     for (int d = 0; d < ndims; ++d) {
@@ -993,7 +1049,7 @@ VariableInfo NetCDF_Driver::describe_variable(const std::string &name) {
     // reported as-is.
     std::int64_t total_timesteps = 1;
     int shape_start = 0;
-    if (ndims >= 1 && is_unlimited(dimids[0])) {
+    if (ndims >= 1 && is_time_axis(dimids[0])) {
         total_timesteps = static_cast<std::int64_t>(extents[0]);
         shape_start = 1;
     }
