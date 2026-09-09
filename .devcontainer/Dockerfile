@@ -174,6 +174,7 @@ RUN git clone --depth 1 https://github.com/bbakerNOAA/HELM-Project.git /tmp/helm
          -DCMAKE_INSTALL_PREFIX=/opt/helm \
          -DCMAKE_BUILD_TYPE=Release \
          -DKokkos_DIR=/opt/kokkos \
+         -DBUILD_SHARED_LIBS=ON \
       && cmake --build /tmp/helm-${project}-build \
       && cmake --install /tmp/helm-${project}-build --prefix /opt/helm \
       && rm -rf /tmp/helm-${project}-build ; \
