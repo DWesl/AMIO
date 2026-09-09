@@ -147,7 +147,7 @@ RUN git clone --depth 1 https://github.com/bbakerNOAA/HELM-Project.git /tmp/helm
          -DCMAKE_INSTALL_PREFIX=/opt/helm \
          -DCMAKE_BUILD_TYPE=Release \
       && cmake --build /tmp/helm-${project}-build \
-      && cmake --install /tmp/helm-${project}-build --install-prefix /opt/helm \
+      && cmake --install /tmp/helm-${project}-build --prefix /opt/helm \
       && rm -rf /tmp/helm-${project}-build ; \
     done \
     && rm -rf /tmp/helm-src \
