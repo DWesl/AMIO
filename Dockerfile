@@ -141,7 +141,8 @@ RUN git clone --depth 1 https://github.com/emil-e/rapidcheck.git /tmp/rc-src \
 # HELM Micro-libraries (configuration and MPI and logging)
 RUN git clone --depth 1 https://github.com/bbakerNOAA/HELM-Project.git /tmp/helm-src \
     && for project in conf logs halo; do \
-      mkdir /tmp/helm-${project}-build \
+      echo ${project} \
+      && mkdir /tmp/helm-${project}-build \
       && cmake -S /tmp/helm-src/libs/${project} -B /tmp/helm-${project}-build -GNinja \
          -DCMAKE_INSTALL_PREFIX=/opt/helm \
          -DCMAKE_BUILD_TYPE=Release \
@@ -149,7 +150,8 @@ RUN git clone --depth 1 https://github.com/bbakerNOAA/HELM-Project.git /tmp/helm
       && cmake --install /tmp/helm-${project}-build --install-prefix /opt/helm \
       && rm -rf /tmp/helm-${project}-build \
     done \
-    && rm -rf /tmp/helm-src
+    && rm -rf /tmp/helm-src \
+    && ls -R /opt/helm
 
 ENV CMAKE_PREFIX_PATH="/opt/ecbuild;/opt/eckit;/opt/mdspan;/opt/jasper;/opt/g2c;/opt/catch2;/opt/rapidcheck;/opt/helm"
 ENV LD_LIBRARY_PATH="/opt/eckit/lib:/opt/jasper/lib:/opt/g2c/lib:/opt/helm/lib"
