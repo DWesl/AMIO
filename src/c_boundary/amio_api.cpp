@@ -129,6 +129,23 @@ AMIO_API amio_status_t amio_open_dataset(amio_core_handle core, const char *conf
                          [&](void *payload) -> amio_status_t { return amio::detail::open_dataset(payload, config_path, mode, out_dataset); });
 }
 
+AMIO_API amio_status_t amio_open_dataset_from_string(amio_core_handle core, const char *config_content, const char *format, int32_t mode,
+                                                     amio_dataset_handle *out_dataset) {
+    if (out_dataset == nullptr) {
+        return AMIO_ERR_INVALID_INPUT;
+    }
+    *out_dataset = nullptr;
+    if (config_content == nullptr || format == nullptr) {
+        return AMIO_ERR_INVALID_INPUT;
+    }
+    if (mode != AMIO_MODE_WRITE && mode != AMIO_MODE_READ) {
+        return AMIO_ERR_INVALID_INPUT;
+    }
+    return kind_dispatch(core, HandleKind::Core, [&](void *payload) -> amio_status_t {
+        return amio::detail::open_dataset_from_string(payload, config_content, format, mode, out_dataset);
+    });
+}
+
 AMIO_API amio_status_t amio_close_dataset(amio_dataset_handle dataset) {
     return kind_dispatch(dataset, HandleKind::Dataset, [](void *payload) -> amio_status_t { return amio::detail::close_dataset(payload); });
 }
@@ -147,6 +164,29 @@ AMIO_API amio_status_t amio_init(const char *manifest_path, amio_core_handle *ou
     // host never observes a C++ throw.
     try {
         return amio::detail::init(manifest_path, out_core);
+    } catch (const std::bad_alloc &) {
+        return AMIO_ERR_BACKEND_FAILURE;
+    } catch (const std::exception &) {
+        return AMIO_ERR_BACKEND_FAILURE;
+    } catch (...) {
+        return translate_unknown();
+    }
+}
+
+AMIO_API amio_status_t amio_init_from_string(const char *manifest_content, const char *format, amio_core_handle *out_core) {
+    if (out_core == nullptr) {
+        return AMIO_ERR_INVALID_INPUT;
+    }
+    *out_core = nullptr;
+    if (manifest_content == nullptr || format == nullptr) {
+        return AMIO_ERR_INVALID_INPUT;
+    }
+    // Like amio_init, this entry point does NOT consume an existing
+    // handle, so it lives outside the kind_dispatch scaffolding --
+    // there is nothing to look up.  We still apply the same exception
+    // cordon so the host never observes a C++ throw.
+    try {
+        return amio::detail::init_from_string(manifest_content, format, out_core);
     } catch (const std::bad_alloc &) {
         return AMIO_ERR_BACKEND_FAILURE;
     } catch (const std::exception &) {
@@ -176,6 +216,19 @@ AMIO_API amio_status_t amio_write(amio_dataset_handle dataset, const char *var_n
                          [&](void *payload) -> amio_status_t { return amio::detail::write(payload, var_name, host_data, dtype, shape, out_io); });
 }
 
+AMIO_API amio_status_t amio_describe(amio_dataset_handle dataset, const char *var_name, amio_shape_t *out_shape, int64_t *out_total_timesteps) {
+    if (out_shape == nullptr || out_total_timesteps == nullptr) {
+        return AMIO_ERR_INVALID_INPUT;
+    }
+    *out_shape = amio_shape_t{};
+    *out_total_timesteps = 0;
+    if (var_name == nullptr) {
+        return AMIO_ERR_INVALID_INPUT;
+    }
+    return kind_dispatch(dataset, HandleKind::Dataset,
+                         [&](void *payload) -> amio_status_t { return amio::detail::describe(payload, var_name, out_shape, out_total_timesteps); });
+}
+
 AMIO_API amio_status_t amio_read(amio_dataset_handle dataset, const char *var_name, int64_t timestep, const amio_bbox_t *bbox,
                                  amio_view_handle *out_view) {
     if (out_view == nullptr) {
@@ -187,6 +240,27 @@ AMIO_API amio_status_t amio_read(amio_dataset_handle dataset, const char *var_na
     }
     return kind_dispatch(dataset, HandleKind::Dataset,
                          [&](void *payload) -> amio_status_t { return amio::detail::read(payload, var_name, timestep, bbox, out_view); });
+}
+
+AMIO_API amio_status_t amio_get_var_attribute_text(amio_dataset_handle dataset, const char *var_name, const char *attr_name, char *out_buf,
+                                                   size_t buf_cap, size_t *out_len) {
+    if (attr_name == nullptr || out_len == nullptr) {
+        return AMIO_ERR_INVALID_INPUT;
+    }
+    *out_len = 0;
+    return kind_dispatch(dataset, HandleKind::Dataset, [&](void *payload) -> amio_status_t {
+        return amio::detail::get_var_attribute_text(payload, var_name, attr_name, out_buf, buf_cap, out_len);
+    });
+}
+
+AMIO_API amio_status_t amio_get_var_attribute_double(amio_dataset_handle dataset, const char *var_name, const char *attr_name, double *out_value) {
+    if (attr_name == nullptr || out_value == nullptr) {
+        return AMIO_ERR_INVALID_INPUT;
+    }
+    *out_value = 0.0;
+    return kind_dispatch(dataset, HandleKind::Dataset, [&](void *payload) -> amio_status_t {
+        return amio::detail::get_var_attribute_double(payload, var_name, attr_name, out_value);
+    });
 }
 
 AMIO_API amio_status_t amio_flush(amio_dataset_handle dataset, int64_t timeout_ms) {
@@ -221,6 +295,14 @@ AMIO_API amio_status_t amio_view_shape(amio_view_handle view, amio_shape_t *out_
     }
     std::memset(out_shape, 0, sizeof(amio_shape_t));
     return kind_dispatch(view, HandleKind::View, [&](void *payload) -> amio_status_t { return amio::detail::view_shape(payload, out_shape); });
+}
+
+AMIO_API amio_status_t amio_view_dtype(amio_view_handle view, amio_dtype_t *out_dtype) {
+    if (out_dtype == nullptr) {
+        return AMIO_ERR_INVALID_INPUT;
+    }
+    *out_dtype = AMIO_DTYPE_F32;
+    return kind_dispatch(view, HandleKind::View, [&](void *payload) -> amio_status_t { return amio::detail::view_dtype(payload, out_dtype); });
 }
 
 // amio_strerror is intentionally NOT defined in this translation
