@@ -455,8 +455,6 @@ if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU"
         $<TARGET_FILE:driver_zarr>
         $<TARGET_FILE:driver_grib2>
         "LINKER:--no-whole-archive")
-else()
-    target_link_libraries(amio_core driver_netcdf driver_zarr driver_grib2)
 endif()
 
 # ####################################################################################################################################################
