@@ -246,7 +246,7 @@ add_executable(test_backend_factory test_backend_factory.cpp ${CMAKE_SOURCE_DIR}
 
 target_include_directories(test_backend_factory PRIVATE ${CMAKE_SOURCE_DIR}/src)
 
-target_link_libraries(test_backend_factory PRIVATE AMIO::public_headers HELM::conf driver_netcdf driver_zarr driver_grib2 amio_core)
+target_link_libraries(test_backend_factory PRIVATE AMIO::public_headers HELM::conf amio_core amio_core)
 if(Threads_FOUND)
     target_link_libraries(test_backend_factory PRIVATE Threads::Threads)
 endif()
