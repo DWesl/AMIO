@@ -246,7 +246,7 @@ add_executable(test_backend_factory test_backend_factory.cpp ${CMAKE_SOURCE_DIR}
 
 target_include_directories(test_backend_factory PRIVATE ${CMAKE_SOURCE_DIR}/src)
 
-target_link_libraries(test_backend_factory PRIVATE AMIO::public_headers HELM::conf amio_core amio_core)
+target_link_libraries(test_backend_factory PRIVATE AMIO::public_headers)
 if(Threads_FOUND)
     target_link_libraries(test_backend_factory PRIVATE Threads::Threads)
 endif()
@@ -873,6 +873,7 @@ endif()
 set(_amio_worker_test_targets
     test_worker_pool
     test_exception_bridge
+    test_backend_factory
     test_write_snapshot
     test_read_prefetch
     test_read_bbox_validation
