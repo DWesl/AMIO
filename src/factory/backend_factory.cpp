@@ -57,16 +57,17 @@ BackendFactory &BackendFactory::instance() {
     //
     // Each reference is guarded by a null-check: the symbols are declared weak
     // above, so a binary that does not link a driver archive resolves that symbol
-    // to null and the call is skipped (see the comment on the declarations).
+    // to null and the `!= nullptr` check below skips the call (see the comment
+    // on the declarations).
     static bool forced = false;
     if (!forced) {
-        if (amio_register_netcdf_driver) {
+        if (amio_register_netcdf_driver != nullptr) {
             amio_register_netcdf_driver();
         }
-        if (amio_register_zarr_driver) {
+        if (amio_register_zarr_driver != nullptr) {
             amio_register_zarr_driver();
         }
-        if (amio_register_grib2_driver) {
+        if (amio_register_grib2_driver != nullptr) {
             amio_register_grib2_driver();
         }
         forced = true;
